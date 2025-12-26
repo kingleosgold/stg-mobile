@@ -507,3 +507,5 @@ setInterval(fetchLiveSpotPrices, 5 * 60 * 1000);
 setInterval(loadHistoricalData, 24 * 60 * 60 * 1000);
 
 module.exports = app;
+
+// Force redeploy
