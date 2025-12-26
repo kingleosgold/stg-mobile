@@ -72,6 +72,10 @@ let historicalData = {
   loaded: false,
 };
 
+// Load historical prices from JSON file
+const fs = require('fs');
+const path = require('path');
+
 // ============================================
 // FETCH LIVE SPOT PRICES
 // ============================================
@@ -110,82 +114,51 @@ async function fetchLiveSpotPrices() {
 // LOAD HISTORICAL DATA
 // ============================================
 
-async function loadHistoricalData() {
+function loadHistoricalData() {
   try {
-    console.log('📊 Loading historical price data...');
+    console.log('📊 Loading historical price data from JSON...');
 
-    // Fetch historical gold prices from freegoldapi
-    console.log('🔍 Fetching gold history from freegoldapi.com...');
-    const historyResponse = await fetch('https://freegoldapi.com/api/XAU/USD/history?days=1095'); // ~3 years
-    console.log('📥 Gold history response status:', historyResponse.status);
+    // Load historical prices from JSON file
+    const dataPath = path.join(__dirname, 'data', 'historical-prices.json');
+    const rawData = fs.readFileSync(dataPath, 'utf8');
+    const monthlyPrices = JSON.parse(rawData);
 
-    if (historyResponse.ok) {
-      const historyData = await historyResponse.json();
-      console.log('📄 Gold history data structure:', {
-        hasHistory: !!historyData.history,
-        isArray: Array.isArray(historyData.history),
-        length: historyData.history?.length,
-        sampleItem: historyData.history?.[0]
-      });
+    console.log(`📄 Loaded ${Object.keys(monthlyPrices).length} months of historical data`);
 
-      if (historyData.history && Array.isArray(historyData.history)) {
-        historyData.history.forEach(item => {
-          const date = item.date?.split('T')[0]; // YYYY-MM-DD
-          if (date && item.price) {
-            historicalData.gold[date] = item.price;
-          }
-        });
-        console.log(`✅ Loaded ${Object.keys(historicalData.gold).length} historical gold prices`);
+    // Process monthly data into daily lookups
+    Object.entries(monthlyPrices).forEach(([month, prices]) => {
+      // Store monthly price
+      historicalData.gold[month] = prices.gold;
+      historicalData.silver[month] = prices.silver;
 
-        // Log sample prices to verify
-        const sampleDates = ['2023-09-01', '2023-09-15', '2023-09-30'];
-        sampleDates.forEach(d => {
-          if (historicalData.gold[d]) {
-            console.log(`   ${d}: $${historicalData.gold[d]}`);
-          }
-        });
-      } else {
-        console.log('⚠️ Invalid gold history data structure, using fallback');
-        loadFallbackHistoricalData();
-        return;
+      // Expand to daily prices for the month (copy monthly price to all days)
+      const [year, monthNum] = month.split('-');
+      const daysInMonth = new Date(parseInt(year), parseInt(monthNum), 0).getDate();
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        const date = `${year}-${monthNum}-${day.toString().padStart(2, '0')}`;
+        historicalData.gold[date] = prices.gold;
+        historicalData.silver[date] = prices.silver;
       }
-    } else {
-      console.log('❌ Failed to fetch gold history, using fallback');
-      loadFallbackHistoricalData();
-      return;
-    }
+    });
 
-    // Fetch gold/silver ratio history for silver prices
-    console.log('🔍 Fetching gold/silver ratio history...');
-    const ratioResponse = await fetch('https://freegoldapi.com/api/XAU/XAG/history?days=1095');
-    console.log('📥 Ratio history response status:', ratioResponse.status);
+    console.log(`✅ Loaded ${Object.keys(historicalData.gold).length} historical gold prices (daily granularity)`);
+    console.log(`✅ Loaded ${Object.keys(historicalData.silver).length} historical silver prices (daily granularity)`);
 
-    if (ratioResponse.ok) {
-      const ratioData = await ratioResponse.json();
-
-      if (ratioData.history && Array.isArray(ratioData.history)) {
-        ratioData.history.forEach(item => {
-          const date = item.date?.split('T')[0];
-          if (date && item.price) {
-            historicalData.goldSilverRatio[date] = item.price;
-            // Calculate silver price from gold and ratio
-            const goldPrice = historicalData.gold[date];
-            if (goldPrice) {
-              historicalData.silver[date] = goldPrice / item.price;
-            }
-          }
-        });
-        console.log(`✅ Loaded ${Object.keys(historicalData.silver).length} historical silver prices`);
-      } else {
-        console.log('⚠️ Invalid ratio data, silver prices will be limited');
+    // Log sample prices to verify
+    const sampleDates = ['2023-09-01', '2023-09-15', '2024-12-01', '2025-12-25'];
+    console.log('📅 Sample historical prices:');
+    sampleDates.forEach(d => {
+      if (historicalData.gold[d]) {
+        console.log(`   ${d}: Gold $${historicalData.gold[d]}, Silver $${historicalData.silver[d]}`);
       }
-    }
+    });
 
     historicalData.loaded = true;
   } catch (error) {
-    console.error('❌ Failed to load historical data:', error.message);
+    console.error('❌ Failed to load historical data from JSON:', error.message);
     console.error('Stack trace:', error.stack);
-    // Use fallback monthly averages
+    // Use fallback monthly averages as last resort
     loadFallbackHistoricalData();
   }
 }
@@ -509,10 +482,9 @@ app.get('/api/privacy', (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 // Load data on startup
-Promise.all([
-  fetchLiveSpotPrices(),
-  loadHistoricalData(),
-]).then(() => {
+loadHistoricalData(); // Synchronous JSON load
+
+fetchLiveSpotPrices().then(() => {
   app.listen(PORT, () => {
     console.log(`\n🪙 Stack Tracker API running on port ${PORT}`);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -534,8 +506,7 @@ Promise.all([
 // Refresh spot prices every 5 minutes
 setInterval(fetchLiveSpotPrices, 5 * 60 * 1000);
 
-// Refresh historical data daily
-setInterval(loadHistoricalData, 24 * 60 * 60 * 1000);
+// Historical data loaded from static JSON file, no need to refresh
 
 module.exports = app;
 
