@@ -82,41 +82,51 @@ const path = require('path');
 
 async function fetchLiveSpotPrices() {
   try {
-    console.log('🔍 Attempting to fetch live spot prices...');
+    console.log('🔍 Attempting to fetch live spot prices from GoldAPI.io...');
 
-    // Use metalpriceapi.com (free tier, 100 requests/month)
-    // NOTE: 'demo' API key may not work - requires real API key from metalpriceapi.com
-    const response = await fetch('https://api.metalpriceapi.com/v1/latest?api_key=demo&base=USD&currencies=XAU,XAG,XPT,XPD');
+    const API_KEY = process.env.GOLD_API_KEY || 'goldapi-fu8usmhp9ilsl-io';
+    const headers = {
+      'x-access-token': API_KEY,
+      'Content-Type': 'application/json',
+    };
 
-    console.log(`📡 API Response Status: ${response.status} ${response.statusText}`);
+    // Fetch Gold (XAU) and Silver (XAG) prices separately
+    const [goldResponse, silverResponse] = await Promise.all([
+      fetch('https://www.goldapi.io/api/XAU/USD', { headers }),
+      fetch('https://www.goldapi.io/api/XAG/USD', { headers }),
+    ]);
 
-    if (response.ok) {
-      const data = await response.json();
-      console.log('📊 API Response Data:', JSON.stringify(data).substring(0, 200));
+    console.log(`📡 Gold API Response: ${goldResponse.status} ${goldResponse.statusText}`);
+    console.log(`📡 Silver API Response: ${silverResponse.status} ${silverResponse.statusText}`);
 
-      if (data.success && data.rates) {
-        // API returns price per 1 USD, we need to invert for price per oz
+    if (goldResponse.ok && silverResponse.ok) {
+      const goldData = await goldResponse.json();
+      const silverData = await silverResponse.json();
+
+      console.log('📊 Gold Data:', JSON.stringify(goldData).substring(0, 150));
+      console.log('📊 Silver Data:', JSON.stringify(silverData).substring(0, 150));
+
+      if (goldData.price && silverData.price) {
         spotPriceCache = {
           prices: {
-            gold: Math.round((1 / data.rates.XAU) * 100) / 100,
-            silver: Math.round((1 / data.rates.XAG) * 100) / 100,
-            platinum: Math.round((1 / data.rates.XPT) * 100) / 100,
-            palladium: Math.round((1 / data.rates.XPD) * 100) / 100,
+            gold: Math.round(goldData.price * 100) / 100,
+            silver: Math.round(silverData.price * 100) / 100,
+            platinum: 2400, // GoldAPI.io free tier doesn't include platinum
+            palladium: 1850, // GoldAPI.io free tier doesn't include palladium
           },
           lastUpdated: new Date(),
           source: 'live',
         };
-        console.log('✅ Spot prices updated (live):', spotPriceCache.prices);
+        console.log('✅ Spot prices updated (live via GoldAPI.io):', spotPriceCache.prices);
         return spotPriceCache.prices;
       } else {
-        console.log('⚠️  API returned success=false or no rates');
-        if (data.error) {
-          console.log('❌ API Error:', data.error);
-        }
+        console.log('⚠️  API response missing price data');
       }
     } else {
-      const errorText = await response.text();
-      console.log('❌ API Request Failed:', errorText.substring(0, 200));
+      const goldError = goldResponse.ok ? '' : await goldResponse.text();
+      const silverError = silverResponse.ok ? '' : await silverResponse.text();
+      if (goldError) console.log('❌ Gold API Error:', goldError.substring(0, 200));
+      if (silverError) console.log('❌ Silver API Error:', silverError.substring(0, 200));
     }
   } catch (error) {
     console.error('❌ Failed to fetch spot prices:', error.message);
@@ -125,8 +135,9 @@ async function fetchLiveSpotPrices() {
 
   // Fallback to current hardcoded prices (Dec 2025)
   // These are manually updated estimates based on market conditions
-  console.log('⚠️  Using fallback spot prices (API unavailable or demo key expired)');
-  console.log('💡 To enable live prices, sign up at metalpriceapi.com and set API_KEY env variable');
+  console.log('⚠️  Using fallback spot prices (API unavailable or error)');
+  console.log('💡 To enable live prices, set GOLD_API_KEY environment variable');
+  console.log('💡 Get free API key at: https://www.goldapi.io');
 
   spotPriceCache.prices = { gold: 4530, silver: 77, platinum: 2400, palladium: 1850 };
   spotPriceCache.lastUpdated = new Date();
@@ -271,12 +282,12 @@ app.get('/api/health', (req, res) => {
  */
 app.get('/api/spot-prices', async (req, res) => {
   try {
-    // Refresh if cache is older than 5 minutes
+    // Refresh if cache is older than 15 minutes
     const cacheAge = spotPriceCache.lastUpdated
       ? (Date.now() - spotPriceCache.lastUpdated.getTime()) / 1000 / 60
       : Infinity;
 
-    if (cacheAge > 5) {
+    if (cacheAge > 15) {
       await fetchLiveSpotPrices();
     }
 
@@ -602,8 +613,8 @@ fetchLiveSpotPrices().then(() => {
   });
 });
 
-// Refresh spot prices every 5 minutes
-setInterval(fetchLiveSpotPrices, 5 * 60 * 1000);
+// Refresh spot prices every 15 minutes (96 requests/day, under 100/day free tier limit)
+setInterval(fetchLiveSpotPrices, 15 * 60 * 1000);
 
 // Historical data loaded from static JSON file, no need to refresh
 

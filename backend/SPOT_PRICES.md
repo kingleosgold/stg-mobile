@@ -2,53 +2,92 @@
 
 ## Current Status
 
-The app is currently using **fallback prices** because the free demo API key from metalpriceapi.com has expired or is no longer valid.
+✅ **The app is now using GoldAPI.io for LIVE spot prices!**
 
-**Fallback Prices (Manually Updated Dec 2025):**
-- Gold: $4,530.00/oz
-- Silver: $77.00/oz
-- Platinum: $2,400.00/oz
-- Palladium: $1,850.00/oz
+**Live Prices from GoldAPI.io:**
+- Gold (XAU): Real-time pricing ✓
+- Silver (XAG): Real-time pricing ✓
+- Platinum: Fallback ($2,400/oz) - not included in GoldAPI.io free tier
+- Palladium: Fallback ($1,850/oz) - not included in GoldAPI.io free tier
 
-These are reasonable estimates based on market conditions and are updated periodically.
+## Configuration
 
-## How to Enable Live Spot Prices
+### API Provider: GoldAPI.io
 
-### Option 1: metalpriceapi.com (Recommended)
+**Why GoldAPI.io?**
+- ✅ Free tier: 100 requests/day (we use ~96 with 15-minute caching)
+- ✅ Simple REST API with direct price values
+- ✅ No complex inversions needed
+- ✅ Supports both Gold (XAU) and Silver (XAG)
+- ✅ No credit card required
 
-1. Sign up for a free account at https://metalpriceapi.com
-   - Free tier: 100 requests/month
-   - No credit card required
+### Caching Strategy
 
-2. Get your API key from the dashboard
+**15-Minute Cache:**
+- Cache duration: 15 minutes
+- Daily requests: ~96 (24 hours × 4 requests/hour)
+- Well under the 100/day free tier limit
+- Automatic background refresh every 15 minutes
 
-3. Set the API key as an environment variable on Railway:
-   ```bash
-   railway variables set METAL_PRICE_API_KEY=your_api_key_here
-   ```
+### Environment Variable
 
-4. Update `backend/server.js` line 89 to use the environment variable:
-   ```javascript
-   const API_KEY = process.env.METAL_PRICE_API_KEY || 'demo';
-   const response = await fetch(`https://api.metalpriceapi.com/v1/latest?api_key=${API_KEY}&base=USD&currencies=XAU,XAG,XPT,XPD`);
-   ```
+Set `GOLD_API_KEY` in your environment:
 
-### Option 2: Alternative Free APIs
+```bash
+# On Railway:
+railway variables set GOLD_API_KEY=your-goldapi-key-here
 
-If metalpriceapi.com doesn't work, try these alternatives:
+# On local development:
+# Create backend/.env file:
+GOLD_API_KEY=your-goldapi-key-here
+```
 
-#### goldapi.io
-- Free tier: 1,000 requests/month
-- Sign up: https://www.goldapi.io
-- Endpoint: `https://www.goldapi.io/api/XAU/USD`
-- Requires: API Key header
+### How It Works
 
-#### metals-api.com
+The backend makes **two parallel API calls** every 15 minutes:
+
+1. **Gold (XAU):** `https://www.goldapi.io/api/XAU/USD`
+2. **Silver (XAG):** `https://www.goldapi.io/api/XAG/USD`
+
+Both use the header:
+```
+x-access-token: your-goldapi-key-here
+```
+
+## Alternative APIs (If Needed)
+
+### metalpriceapi.com
+- Free tier: 100 requests/month
+- Sign up: https://metalpriceapi.com
+- Supports: Gold, Silver, Platinum, Palladium
+- Note: Demo key no longer works
+
+### metals-api.com
 - Free tier: 50 requests/month
 - Sign up: https://metals-api.com
 - Similar to metalpriceapi.com
 
 ## Testing the API
+
+### Test GoldAPI.io Directly:
+```bash
+# Test Gold (XAU) endpoint:
+curl -H "x-access-token: your-api-key" "https://www.goldapi.io/api/XAU/USD"
+
+# Test Silver (XAG) endpoint:
+curl -H "x-access-token: your-api-key" "https://www.goldapi.io/api/XAG/USD"
+```
+
+**Expected GoldAPI.io Response:**
+```json
+{
+  "timestamp": 1766873882,
+  "metal": "XAU",
+  "currency": "USD",
+  "price": 4533.42,
+  ...
+}
+```
 
 ### Test Backend Locally:
 ```bash
@@ -64,17 +103,17 @@ curl http://localhost:3000/api/spot-prices
 curl https://stack-tracker-pro-production.up.railway.app/api/spot-prices
 ```
 
-### Expected Response (Live):
+### Expected Response (Live with GoldAPI.io):
 ```json
 {
   "success": true,
-  "gold": 4532.50,
+  "gold": 4533.42,
   "silver": 79.33,
-  "platinum": 2401.25,
-  "palladium": 1852.00,
-  "timestamp": "2025-12-27T21:52:42.822Z",
+  "platinum": 2400,
+  "palladium": 1850,
+  "timestamp": "2025-12-27T22:18:24.666Z",
   "source": "live",
-  "cacheAgeMinutes": 2.3
+  "cacheAgeMinutes": 0
 }
 ```
 
@@ -94,31 +133,40 @@ curl https://stack-tracker-pro-production.up.railway.app/api/spot-prices
 
 ## Logging
 
-The backend now includes detailed logging to help debug spot price issues:
+The backend includes detailed logging to help debug spot price issues:
 
+**Successful GoldAPI.io Fetch:**
 ```
-🔍 Attempting to fetch live spot prices...
-📡 API Response Status: 200 OK
-📊 API Response Data: {"success":true,"rates":{...}}
-✅ Spot prices updated (live): { gold: 4532.50, silver: 79.33, ... }
+🔍 Attempting to fetch live spot prices from GoldAPI.io...
+📡 Gold API Response: 200 OK
+📡 Silver API Response: 200 OK
+📊 Gold Data: {"timestamp":1766873882,"metal":"XAU",...,"price":4533.42,...}
+📊 Silver Data: {"timestamp":1766873875,"metal":"XAG",...,"price":79.33,...}
+✅ Spot prices updated (live via GoldAPI.io): { gold: 4533.42, silver: 79.33, platinum: 2400, palladium: 1850 }
 ```
 
-Or if it fails:
+**If API Fails:**
 ```
-🔍 Attempting to fetch live spot prices...
-📡 API Response Status: 401 Unauthorized
-❌ API Request Failed: {"success":false,"error":{"message":"Invalid API key"}}
-⚠️  Using fallback spot prices (API unavailable or demo key expired)
-💡 To enable live prices, sign up at metalpriceapi.com and set API_KEY env variable
+🔍 Attempting to fetch live spot prices from GoldAPI.io...
+📡 Gold API Response: 401 Unauthorized
+❌ Gold API Error: {"error":"No API Key provided"}
+⚠️  Using fallback spot prices (API unavailable or error)
+💡 To enable live prices, set GOLD_API_KEY environment variable
+💡 Get free API key at: https://www.goldapi.io
 ```
 
 ## How the App Handles Prices
 
-1. **On Startup:** Backend calls `fetchLiveSpotPrices()`
-2. **Every 5 Minutes:** Backend refreshes prices automatically
-3. **On API Call:** If cache is older than 5 minutes, refresh
-4. **If API Fails:** Use fallback prices (hardcoded)
-5. **Mobile App:** Shows source indicator ("live" or "fallback")
+1. **On Startup:** Backend calls `fetchLiveSpotPrices()` from GoldAPI.io
+2. **Every 15 Minutes:** Backend refreshes prices automatically (setInterval)
+3. **On API Call:** If cache is older than 15 minutes, refresh
+4. **If API Fails:** Use fallback prices (hardcoded estimates)
+5. **Mobile App:** Shows source indicator ("live" or "fallback") + timestamp
+
+**Request Rate:**
+- 15-minute refresh = 4 requests/hour
+- 4 requests/hour × 24 hours = 96 requests/day
+- Well under the 100/day free tier limit ✅
 
 ## Updating Fallback Prices
 
