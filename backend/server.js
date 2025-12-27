@@ -96,18 +96,21 @@ async function fetchLiveSpotPrices() {
             palladium: Math.round((1 / data.rates.XPD) * 100) / 100,
           },
           lastUpdated: new Date(),
+          source: 'live',
         };
-        console.log('Spot prices updated:', spotPriceCache.prices);
+        console.log('✅ Spot prices updated (live):', spotPriceCache.prices);
         return spotPriceCache.prices;
       }
     }
   } catch (error) {
     console.error('Failed to fetch spot prices:', error.message);
   }
-  
+
   // Fallback to current hardcoded prices (Dec 2025)
-  console.log('Using fallback spot prices');
+  console.log('⚠️  Using fallback spot prices');
   spotPriceCache.prices = { gold: 4530, silver: 77, platinum: 2400, palladium: 1850 };
+  spotPriceCache.lastUpdated = new Date();
+  spotPriceCache.source = 'fallback';
   return spotPriceCache.prices;
 }
 // ============================================
@@ -249,18 +252,30 @@ app.get('/api/health', (req, res) => {
 app.get('/api/spot-prices', async (req, res) => {
   try {
     // Refresh if cache is older than 5 minutes
-    const cacheAge = spotPriceCache.lastUpdated 
-      ? (Date.now() - spotPriceCache.lastUpdated.getTime()) / 1000 / 60 
+    const cacheAge = spotPriceCache.lastUpdated
+      ? (Date.now() - spotPriceCache.lastUpdated.getTime()) / 1000 / 60
       : Infinity;
-    
+
     if (cacheAge > 5) {
       await fetchLiveSpotPrices();
     }
-    
-    res.json(spotPriceCache.prices);
+
+    res.json({
+      success: true,
+      ...spotPriceCache.prices,
+      timestamp: spotPriceCache.lastUpdated ? spotPriceCache.lastUpdated.toISOString() : new Date().toISOString(),
+      source: spotPriceCache.source || 'live',
+      cacheAgeMinutes: spotPriceCache.lastUpdated ? Math.round(cacheAge * 10) / 10 : 0,
+    });
   } catch (error) {
     console.error('Spot price error:', error);
-    res.json(spotPriceCache.prices); // Return cached prices on error
+    res.json({
+      success: true,
+      ...spotPriceCache.prices,
+      timestamp: spotPriceCache.lastUpdated ? spotPriceCache.lastUpdated.toISOString() : new Date().toISOString(),
+      source: 'cached',
+      error: error.message,
+    });
   }
 });
 

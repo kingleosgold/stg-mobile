@@ -179,6 +179,7 @@ export default function App() {
   const [silverSpot, setSilverSpot] = useState(77);
   const [goldSpot, setGoldSpot] = useState(4530);
   const [priceSource, setPriceSource] = useState('cached');
+  const [priceTimestamp, setPriceTimestamp] = useState(null);
 
   // Portfolio Data
   const [silverItems, setSilverItems] = useState([]);
@@ -326,19 +327,21 @@ export default function App() {
 
   const loadData = async () => {
     try {
-      const [silver, gold, silverS, goldS] = await Promise.all([
+      const [silver, gold, silverS, goldS, timestamp] = await Promise.all([
         AsyncStorage.getItem('stack_silver'),
         AsyncStorage.getItem('stack_gold'),
         AsyncStorage.getItem('stack_silver_spot'),
         AsyncStorage.getItem('stack_gold_spot'),
+        AsyncStorage.getItem('stack_price_timestamp'),
       ]);
 
       if (silver) setSilverItems(JSON.parse(silver));
       if (gold) setGoldItems(JSON.parse(gold));
       if (silverS) setSilverSpot(parseFloat(silverS));
       if (goldS) setGoldSpot(parseFloat(goldS));
+      if (timestamp) setPriceTimestamp(timestamp);
 
-      fetchSpotPrices();
+      fetchSpotPrices(); // Auto-update prices on app open
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {
@@ -501,6 +504,8 @@ export default function App() {
           await AsyncStorage.setItem('stack_gold_spot', data.gold.toString());
         }
         setPriceSource(data.source || 'live');
+        setPriceTimestamp(data.timestamp || new Date().toISOString());
+        await AsyncStorage.setItem('stack_price_timestamp', data.timestamp || new Date().toISOString());
       } else {
         setPriceSource('cached');
       }
@@ -871,7 +876,21 @@ export default function App() {
                   <Text style={{ color: colors.text, fontSize: 24, fontWeight: '700' }}>${formatCurrency(goldSpot)}</Text>
                 </View>
               </View>
-              <Text style={{ color: colors.muted, fontSize: 10, textAlign: 'center', marginTop: 8 }}>Source: {priceSource}</Text>
+
+              {/* Gold/Silver Ratio */}
+              <View style={{ marginTop: 12, padding: 12, backgroundColor: 'rgba(251, 191, 36, 0.1)', borderRadius: 8 }}>
+                <Text style={{ color: colors.muted, fontSize: 11, textAlign: 'center' }}>
+                  Gold/Silver Ratio: <Text style={{ color: colors.gold, fontWeight: '600' }}>{goldSpot > 0 && silverSpot > 0 ? (goldSpot / silverSpot).toFixed(1) : '-'}</Text>
+                </Text>
+              </View>
+
+              {/* Last Updated */}
+              <View style={{ marginTop: 8 }}>
+                <Text style={{ color: colors.muted, fontSize: 10, textAlign: 'center' }}>
+                  Source: {priceSource}
+                  {priceTimestamp && ` • Updated ${new Date(priceTimestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`}
+                </Text>
+              </View>
             </View>
           </>
         )}
