@@ -17,6 +17,9 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
+import Purchases from 'react-native-purchases';
+import { initializePurchases, hasGoldEntitlement, getUserEntitlements } from './src/utils/entitlements';
+import GoldPaywall from './src/components/GoldPaywall';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const API_BASE_URL = Constants.expoConfig?.extra?.apiUrl || 'https://stack-tracker-pro-production.up.railway.app';
@@ -186,6 +189,10 @@ export default function App() {
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [showSpeculationModal, setShowSpeculationModal] = useState(false);
   const [showJunkCalcModal, setShowJunkCalcModal] = useState(false);
+  const [showPaywallModal, setShowPaywallModal] = useState(false);
+
+  // Entitlements
+  const [hasGold, setHasGold] = useState(false);
 
   // Scan State
   const [scanStatus, setScanStatus] = useState(null);
@@ -356,6 +363,50 @@ export default function App() {
   }, [goldItems, isAuthenticated]);
 
   useEffect(() => { authenticate(); }, []);
+
+  // Initialize RevenueCat
+  useEffect(() => {
+    const setupRevenueCat = async () => {
+      try {
+        await initializePurchases('test_LkMLacPMbzdsKIpCuG6QgATsBnNi');
+        const entitlements = await getUserEntitlements();
+        setHasGold(entitlements.hasGold);
+        if (__DEV__) console.log('RevenueCat setup complete. Has Gold:', entitlements.hasGold);
+      } catch (error) {
+        console.error('RevenueCat setup failed:', error);
+      }
+    };
+    setupRevenueCat();
+  }, []);
+
+  // Check entitlements function (can be called after purchase)
+  const checkEntitlements = async () => {
+    const isGold = await hasGoldEntitlement();
+    setHasGold(isGold);
+    return isGold;
+  };
+
+  // Free tier limit check
+  const handleAddPurchase = () => {
+    const FREE_TIER_LIMIT = 25;
+    const totalItems = silverItems.length + goldItems.length;
+
+    if (!hasGold && totalItems >= FREE_TIER_LIMIT) {
+      // User has reached free tier limit, show paywall
+      Alert.alert(
+        'Upgrade to Gold',
+        `You've reached the free tier limit of ${FREE_TIER_LIMIT} items. Upgrade to Gold for unlimited items!`,
+        [
+          { text: 'Maybe Later', style: 'cancel' },
+          { text: 'Upgrade Now', onPress: () => setShowPaywallModal(true) }
+        ]
+      );
+    } else {
+      // User can add more items
+      resetForm();
+      setShowAddModal(true);
+    }
+  };
 
   // ============================================
   // CLOUD BACKUP
@@ -843,7 +894,7 @@ export default function App() {
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity style={[styles.button, { backgroundColor: currentColor, marginBottom: 16 }]} onPress={() => { resetForm(); setShowAddModal(true); }}>
+            <TouchableOpacity style={[styles.button, { backgroundColor: currentColor, marginBottom: 16 }]} onPress={handleAddPurchase}>
               <Text style={{ color: '#000', fontWeight: '600' }}>+ Add Purchase</Text>
             </TouchableOpacity>
 
@@ -1125,6 +1176,13 @@ export default function App() {
           <Text style={{ color: colors.muted, fontStyle: 'italic' }}>"We architected the system so we CAN'T access your data."</Text>
         </View>
       </ModalWrapper>
+
+      {/* Gold Paywall */}
+      <GoldPaywall
+        visible={showPaywallModal}
+        onClose={() => setShowPaywallModal(false)}
+        onPurchaseSuccess={checkEntitlements}
+      />
     </SafeAreaView>
   );
 }
