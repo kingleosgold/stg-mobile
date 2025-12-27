@@ -82,10 +82,18 @@ const path = require('path');
 
 async function fetchLiveSpotPrices() {
   try {
+    console.log('🔍 Attempting to fetch live spot prices...');
+
     // Use metalpriceapi.com (free tier, 100 requests/month)
+    // NOTE: 'demo' API key may not work - requires real API key from metalpriceapi.com
     const response = await fetch('https://api.metalpriceapi.com/v1/latest?api_key=demo&base=USD&currencies=XAU,XAG,XPT,XPD');
+
+    console.log(`📡 API Response Status: ${response.status} ${response.statusText}`);
+
     if (response.ok) {
       const data = await response.json();
+      console.log('📊 API Response Data:', JSON.stringify(data).substring(0, 200));
+
       if (data.success && data.rates) {
         // API returns price per 1 USD, we need to invert for price per oz
         spotPriceCache = {
@@ -100,14 +108,26 @@ async function fetchLiveSpotPrices() {
         };
         console.log('✅ Spot prices updated (live):', spotPriceCache.prices);
         return spotPriceCache.prices;
+      } else {
+        console.log('⚠️  API returned success=false or no rates');
+        if (data.error) {
+          console.log('❌ API Error:', data.error);
+        }
       }
+    } else {
+      const errorText = await response.text();
+      console.log('❌ API Request Failed:', errorText.substring(0, 200));
     }
   } catch (error) {
-    console.error('Failed to fetch spot prices:', error.message);
+    console.error('❌ Failed to fetch spot prices:', error.message);
+    console.error('   Stack:', error.stack);
   }
 
   // Fallback to current hardcoded prices (Dec 2025)
-  console.log('⚠️  Using fallback spot prices');
+  // These are manually updated estimates based on market conditions
+  console.log('⚠️  Using fallback spot prices (API unavailable or demo key expired)');
+  console.log('💡 To enable live prices, sign up at metalpriceapi.com and set API_KEY env variable');
+
   spotPriceCache.prices = { gold: 4530, silver: 77, platinum: 2400, palladium: 1850 };
   spotPriceCache.lastUpdated = new Date();
   spotPriceCache.source = 'fallback';

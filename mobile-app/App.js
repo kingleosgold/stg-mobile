@@ -485,6 +485,8 @@ export default function App() {
   const fetchSpotPrices = async () => {
     setPriceSource('loading...');
     try {
+      if (__DEV__) console.log('📡 Fetching spot prices from:', `${API_BASE_URL}/api/spot-prices`);
+
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
 
@@ -493,7 +495,11 @@ export default function App() {
       });
       clearTimeout(timeoutId);
 
+      if (__DEV__) console.log('✅ API Response Status:', response.status, response.statusText);
+
       const data = await response.json();
+      if (__DEV__) console.log('📊 API Response Data:', JSON.stringify(data).substring(0, 300));
+
       if (data.success) {
         if (data.silver && data.silver > 10) {
           setSilverSpot(data.silver);
@@ -506,11 +512,15 @@ export default function App() {
         setPriceSource(data.source || 'live');
         setPriceTimestamp(data.timestamp || new Date().toISOString());
         await AsyncStorage.setItem('stack_price_timestamp', data.timestamp || new Date().toISOString());
+
+        if (__DEV__) console.log(`💰 Prices updated: Gold $${data.gold}, Silver $${data.silver} (Source: ${data.source})`);
       } else {
+        if (__DEV__) console.log('⚠️  API returned success=false');
         setPriceSource('cached');
       }
     } catch (error) {
-      if (__DEV__) console.log('Using cached spot prices:', error.message);
+      console.error('❌ Error fetching spot prices:', error.message);
+      if (__DEV__) console.error('   Error details:', error);
       setPriceSource('cached');
     }
   };
