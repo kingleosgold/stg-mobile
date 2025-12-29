@@ -205,6 +205,10 @@ export default function App() {
   // Sort State
   const [sortBy, setSortBy] = useState('date-newest'); // date-newest, date-oldest, value-high, value-low, metal, name
 
+  // Daily Snapshot State
+  const [midnightValue, setMidnightValue] = useState(null);
+  const [midnightDate, setMidnightDate] = useState(null);
+
   // Entitlements
   const [hasGold, setHasGold] = useState(false);
   const [scanCount, setScanCount] = useState(0);
@@ -349,7 +353,7 @@ export default function App() {
 
   const loadData = async () => {
     try {
-      const [silver, gold, silverS, goldS, timestamp, hasSeenTutorial, storedScanCount] = await Promise.all([
+      const [silver, gold, silverS, goldS, timestamp, hasSeenTutorial, storedScanCount, storedMidnightValue, storedMidnightDate] = await Promise.all([
         AsyncStorage.getItem('stack_silver'),
         AsyncStorage.getItem('stack_gold'),
         AsyncStorage.getItem('stack_silver_spot'),
@@ -357,6 +361,8 @@ export default function App() {
         AsyncStorage.getItem('stack_price_timestamp'),
         AsyncStorage.getItem('stack_has_seen_tutorial'),
         AsyncStorage.getItem('stack_scan_count'),
+        AsyncStorage.getItem('stack_midnight_value'),
+        AsyncStorage.getItem('stack_midnight_date'),
       ]);
 
       if (silver) setSilverItems(JSON.parse(silver));
@@ -365,6 +371,8 @@ export default function App() {
       if (goldS) setGoldSpot(parseFloat(goldS));
       if (timestamp) setPriceTimestamp(timestamp);
       if (storedScanCount) setScanCount(parseInt(storedScanCount));
+      if (storedMidnightValue) setMidnightValue(parseFloat(storedMidnightValue));
+      if (storedMidnightDate) setMidnightDate(storedMidnightDate);
 
       // Show tutorial if user hasn't seen it
       if (!hasSeenTutorial) {
@@ -411,6 +419,32 @@ export default function App() {
     };
     setupRevenueCat();
   }, []);
+
+  // Daily Snapshot: Check if it's a new day and update midnight value
+  useEffect(() => {
+    const checkAndUpdateMidnightSnapshot = async () => {
+      if (!isAuthenticated) return;
+
+      const today = new Date().toDateString(); // e.g., "Mon Dec 29 2025"
+
+      // If no midnight date or it's a new day
+      if (!midnightDate || midnightDate !== today) {
+        // Save current portfolio value as the new midnight snapshot
+        const currentValue = totalMeltValue;
+
+        await AsyncStorage.setItem('stack_midnight_value', currentValue.toString());
+        await AsyncStorage.setItem('stack_midnight_date', today);
+
+        setMidnightValue(currentValue);
+        setMidnightDate(today);
+
+        console.log(`📸 Daily snapshot updated: $${currentValue.toFixed(2)} on ${today}`);
+      }
+    };
+
+    // Check on app open and when portfolio value changes
+    checkAndUpdateMidnightSnapshot();
+  }, [isAuthenticated, totalMeltValue, midnightDate]);
 
   // Check entitlements function (can be called after purchase)
   const checkEntitlements = async () => {
@@ -1146,6 +1180,41 @@ export default function App() {
               <Text style={{ color: totalGainLoss >= 0 ? colors.success : colors.error, fontSize: 16 }}>
                 {totalGainLoss >= 0 ? '▲' : '▼'} ${Math.abs(totalGainLoss).toLocaleString(undefined, { minimumFractionDigits: 2 })} ({totalGainLossPct >= 0 ? '+' : ''}{totalGainLossPct.toFixed(1)}%)
               </Text>
+            </View>
+
+            {/* Today's Change */}
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>📅 Today's Change</Text>
+              {midnightValue !== null && midnightDate === new Date().toDateString() ? (
+                <>
+                  {(() => {
+                    const dailyChange = totalMeltValue - midnightValue;
+                    const dailyChangePct = midnightValue > 0 ? ((dailyChange / midnightValue) * 100) : 0;
+                    const isPositive = dailyChange >= 0;
+
+                    return (
+                      <>
+                        <Text style={{ color: isPositive ? colors.success : colors.error, fontSize: 32, fontWeight: '700', marginBottom: 4 }}>
+                          {isPositive ? '+' : ''}{dailyChange >= 0 ? '' : '-'}${Math.abs(dailyChange).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </Text>
+                        <Text style={{ color: isPositive ? colors.success : colors.error, fontSize: 16 }}>
+                          {isPositive ? '▲' : '▼'} {isPositive ? '+' : ''}{dailyChangePct.toFixed(2)}%
+                        </Text>
+                        <Text style={{ color: colors.muted, fontSize: 11, marginTop: 8 }}>
+                          Since midnight (${midnightValue.toLocaleString(undefined, { minimumFractionDigits: 2 })})
+                        </Text>
+                      </>
+                    );
+                  })()}
+                </>
+              ) : (
+                <View style={{ paddingVertical: 12 }}>
+                  <Text style={{ color: colors.muted, fontSize: 24, textAlign: 'center' }}>—</Text>
+                  <Text style={{ color: colors.muted, fontSize: 12, textAlign: 'center', marginTop: 4 }}>
+                    No data yet. Check back tomorrow!
+                  </Text>
+                </View>
+              )}
             </View>
 
             {/* Holdings Pie Chart */}
