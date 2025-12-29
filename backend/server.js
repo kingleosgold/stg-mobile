@@ -84,7 +84,7 @@ const fs = require('fs');
 const path = require('path');
 
 // Import web scraper for live spot prices
-const { scrapeGoldSilverPrices, scrapeGoldSilverPricesAlternative } = require('./scrapers/gold-silver-scraper');
+const { scrapeGoldSilverPrices, scrapeGoldSilverPricesAlternative } = require(path.join(__dirname, 'scrapers', 'gold-silver-scraper.js'));
 
 // ============================================
 // FETCH LIVE SPOT PRICES
