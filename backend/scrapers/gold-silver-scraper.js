@@ -18,7 +18,12 @@ async function scrapeGoldSilverPrices() {
 
   // PRIORITY 1: Try GoldAPI.io (Paid tier - 10,000/month)
   try {
-    const API_KEY = process.env.GOLD_API_KEY || 'goldapi-fu8usmhp9ilsl-io';
+    const API_KEY = process.env.GOLD_API_KEY;
+
+    if (!API_KEY) {
+      console.log('⚠️  No GOLD_API_KEY found, skipping GoldAPI.io');
+      throw new Error('No GoldAPI key configured');
+    }
 
     console.log('📡 Attempting GoldAPI.io (paid tier)...');
 
