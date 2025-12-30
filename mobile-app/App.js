@@ -1559,41 +1559,28 @@ export default function App() {
                 {sortItems(items, metalTab).map(item => {
                   const itemPremiumPct = calculatePremiumPercent(item.premium, item.unitPrice);
                   return (
-                    <View key={item.id} style={styles.itemCard}>
-                      <TouchableOpacity
-                        style={{ flex: 1, flexDirection: 'row' }}
-                        onPress={() => viewItemDetail(item, metalTab)}
-                        activeOpacity={0.7}
-                      >
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.itemTitle}>{item.productName}</Text>
-                          {item.datePurchased && (
-                            <Text style={[styles.itemSubtitle, { fontSize: 11, marginBottom: 2 }]}>📅 {item.datePurchased}</Text>
-                          )}
-                          <Text style={styles.itemSubtitle}>{item.quantity}x @ ${formatCurrency(item.unitPrice)} • {(item.ozt * item.quantity).toFixed(2)} oz</Text>
-                          <Text style={[styles.itemSubtitle, { color: colors.gold }]}>
-                            Premium: ${formatCurrency(item.premium * item.quantity)}
-                            {itemPremiumPct > 0 && <Text style={{ fontSize: 11 }}> (+{itemPremiumPct.toFixed(1)}%)</Text>}
-                          </Text>
-                        </View>
-                        <View style={{ alignItems: 'flex-end' }}>
-                          <Text style={[styles.itemValue, { color: currentColor }]}>${formatCurrency(item.ozt * item.quantity * spot)}</Text>
-                          <Text style={{ color: colors.muted, fontSize: 11 }}>melt</Text>
-                        </View>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() => deleteItem(item.id, metalTab)}
-                        style={{
-                          padding: 8,
-                          justifyContent: 'center',
-                          alignItems: 'center',
-                          marginLeft: 8,
-                        }}
-                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                      >
-                        <Text style={{ fontSize: 20 }}>🗑️</Text>
-                      </TouchableOpacity>
-                    </View>
+                    <TouchableOpacity
+                      key={item.id}
+                      style={styles.itemCard}
+                      onPress={() => viewItemDetail(item, metalTab)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.itemTitle}>{item.productName}</Text>
+                        {item.datePurchased && (
+                          <Text style={[styles.itemSubtitle, { fontSize: 11, marginBottom: 2 }]}>📅 {item.datePurchased}</Text>
+                        )}
+                        <Text style={styles.itemSubtitle}>{item.quantity}x @ ${formatCurrency(item.unitPrice)} • {(item.ozt * item.quantity).toFixed(2)} oz</Text>
+                        <Text style={[styles.itemSubtitle, { color: colors.gold }]}>
+                          Premium: ${formatCurrency(item.premium * item.quantity)}
+                          {itemPremiumPct > 0 && <Text style={{ fontSize: 11 }}> (+{itemPremiumPct.toFixed(1)}%)</Text>}
+                        </Text>
+                      </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={[styles.itemValue, { color: currentColor }]}>${formatCurrency(item.ozt * item.quantity * spot)}</Text>
+                        <Text style={{ color: colors.muted, fontSize: 11 }}>melt</Text>
+                      </View>
+                    </TouchableOpacity>
                   );
                 })}
 
@@ -1617,41 +1604,28 @@ export default function App() {
                     {sortItems(silverItems, 'silver').map(item => {
                       const itemPremiumPct = calculatePremiumPercent(item.premium, item.unitPrice);
                       return (
-                        <View key={item.id} style={styles.itemCard}>
-                          <TouchableOpacity
-                            style={{ flex: 1, flexDirection: 'row' }}
-                            onPress={() => viewItemDetail(item, 'silver')}
-                            activeOpacity={0.7}
-                          >
-                            <View style={{ flex: 1 }}>
-                              <Text style={styles.itemTitle}>{item.productName}</Text>
-                              {item.datePurchased && (
-                                <Text style={[styles.itemSubtitle, { fontSize: 11, marginBottom: 2 }]}>📅 {item.datePurchased}</Text>
-                              )}
-                              <Text style={styles.itemSubtitle}>{item.quantity}x @ ${formatCurrency(item.unitPrice)} • {(item.ozt * item.quantity).toFixed(2)} oz</Text>
-                              <Text style={[styles.itemSubtitle, { color: colors.gold }]}>
-                                Premium: ${formatCurrency(item.premium * item.quantity)}
-                                {itemPremiumPct > 0 && <Text style={{ fontSize: 11 }}> (+{itemPremiumPct.toFixed(1)}%)</Text>}
-                              </Text>
-                            </View>
-                            <View style={{ alignItems: 'flex-end' }}>
-                              <Text style={[styles.itemValue, { color: colors.silver }]}>${formatCurrency(item.ozt * item.quantity * silverSpot)}</Text>
-                              <Text style={{ color: colors.muted, fontSize: 11 }}>melt</Text>
-                            </View>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            onPress={() => deleteItem(item.id, 'silver')}
-                            style={{
-                              padding: 8,
-                              justifyContent: 'center',
-                              alignItems: 'center',
-                              marginLeft: 8,
-                            }}
-                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                          >
-                            <Text style={{ fontSize: 20 }}>🗑️</Text>
-                          </TouchableOpacity>
-                        </View>
+                        <TouchableOpacity
+                          key={item.id}
+                          style={styles.itemCard}
+                          onPress={() => viewItemDetail(item, 'silver')}
+                          activeOpacity={0.7}
+                        >
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.itemTitle}>{item.productName}</Text>
+                            {item.datePurchased && (
+                              <Text style={[styles.itemSubtitle, { fontSize: 11, marginBottom: 2 }]}>📅 {item.datePurchased}</Text>
+                            )}
+                            <Text style={styles.itemSubtitle}>{item.quantity}x @ ${formatCurrency(item.unitPrice)} • {(item.ozt * item.quantity).toFixed(2)} oz</Text>
+                            <Text style={[styles.itemSubtitle, { color: colors.gold }]}>
+                              Premium: ${formatCurrency(item.premium * item.quantity)}
+                              {itemPremiumPct > 0 && <Text style={{ fontSize: 11 }}> (+{itemPremiumPct.toFixed(1)}%)</Text>}
+                            </Text>
+                          </View>
+                          <View style={{ alignItems: 'flex-end' }}>
+                            <Text style={[styles.itemValue, { color: colors.silver }]}>${formatCurrency(item.ozt * item.quantity * silverSpot)}</Text>
+                            <Text style={{ color: colors.muted, fontSize: 11 }}>melt</Text>
+                          </View>
+                        </TouchableOpacity>
                       );
                     })}
                   </>
@@ -1668,41 +1642,28 @@ export default function App() {
                     {sortItems(goldItems, 'gold').map(item => {
                       const itemPremiumPct = calculatePremiumPercent(item.premium, item.unitPrice);
                       return (
-                        <View key={item.id} style={styles.itemCard}>
-                          <TouchableOpacity
-                            style={{ flex: 1, flexDirection: 'row' }}
-                            onPress={() => viewItemDetail(item, 'gold')}
-                            activeOpacity={0.7}
-                          >
-                            <View style={{ flex: 1 }}>
-                              <Text style={styles.itemTitle}>{item.productName}</Text>
-                              {item.datePurchased && (
-                                <Text style={[styles.itemSubtitle, { fontSize: 11, marginBottom: 2 }]}>📅 {item.datePurchased}</Text>
-                              )}
-                              <Text style={styles.itemSubtitle}>{item.quantity}x @ ${formatCurrency(item.unitPrice)} • {(item.ozt * item.quantity).toFixed(2)} oz</Text>
-                              <Text style={[styles.itemSubtitle, { color: colors.gold }]}>
-                                Premium: ${formatCurrency(item.premium * item.quantity)}
-                                {itemPremiumPct > 0 && <Text style={{ fontSize: 11 }}> (+{itemPremiumPct.toFixed(1)}%)</Text>}
-                              </Text>
-                            </View>
-                            <View style={{ alignItems: 'flex-end' }}>
-                              <Text style={[styles.itemValue, { color: colors.gold }]}>${formatCurrency(item.ozt * item.quantity * goldSpot)}</Text>
-                              <Text style={{ color: colors.muted, fontSize: 11 }}>melt</Text>
-                            </View>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            onPress={() => deleteItem(item.id, 'gold')}
-                            style={{
-                              padding: 8,
-                              justifyContent: 'center',
-                              alignItems: 'center',
-                              marginLeft: 8,
-                            }}
-                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                          >
-                            <Text style={{ fontSize: 20 }}>🗑️</Text>
-                          </TouchableOpacity>
-                        </View>
+                        <TouchableOpacity
+                          key={item.id}
+                          style={styles.itemCard}
+                          onPress={() => viewItemDetail(item, 'gold')}
+                          activeOpacity={0.7}
+                        >
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.itemTitle}>{item.productName}</Text>
+                            {item.datePurchased && (
+                              <Text style={[styles.itemSubtitle, { fontSize: 11, marginBottom: 2 }]}>📅 {item.datePurchased}</Text>
+                            )}
+                            <Text style={styles.itemSubtitle}>{item.quantity}x @ ${formatCurrency(item.unitPrice)} • {(item.ozt * item.quantity).toFixed(2)} oz</Text>
+                            <Text style={[styles.itemSubtitle, { color: colors.gold }]}>
+                              Premium: ${formatCurrency(item.premium * item.quantity)}
+                              {itemPremiumPct > 0 && <Text style={{ fontSize: 11 }}> (+{itemPremiumPct.toFixed(1)}%)</Text>}
+                            </Text>
+                          </View>
+                          <View style={{ alignItems: 'flex-end' }}>
+                            <Text style={[styles.itemValue, { color: colors.gold }]}>${formatCurrency(item.ozt * item.quantity * goldSpot)}</Text>
+                            <Text style={{ color: colors.muted, fontSize: 11 }}>melt</Text>
+                          </View>
+                        </TouchableOpacity>
                       );
                     })}
                   </>
