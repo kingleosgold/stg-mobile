@@ -14,7 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import * as ImagePicker from 'expo-image-picker';
 import * as LocalAuthentication from 'expo-local-authentication';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Haptics from 'expo-haptics';
@@ -1324,19 +1324,33 @@ export default function App() {
   };
 
   const exportCSV = async () => {
-    const all = [
-      ...silverItems.map(i => ({ ...i, metal: 'Silver' })),
-      ...goldItems.map(i => ({ ...i, metal: 'Gold' })),
-    ];
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-    const headers = 'Metal,Product,Source,Date,OZT,Qty,Unit Price,Taxes,Shipping,Spot,Premium,Total Premium\n';
-    const rows = all.map(i =>
-      `${i.metal},"${i.productName}","${i.source}",${i.datePurchased},${i.ozt},${i.quantity},${i.unitPrice},${i.taxes},${i.shipping},${i.spotPrice},${i.premium},${i.premium * i.quantity}`
-    ).join('\n');
+      const all = [
+        ...silverItems.map(i => ({ ...i, metal: 'Silver' })),
+        ...goldItems.map(i => ({ ...i, metal: 'Gold' })),
+      ];
 
-    const filepath = `${FileSystem.documentDirectory}stack-export-${Date.now()}.csv`;
-    await FileSystem.writeAsStringAsync(filepath, headers + rows);
-    await Sharing.shareAsync(filepath);
+      if (all.length === 0) {
+        Alert.alert('No Data', 'You have no holdings to export.');
+        return;
+      }
+
+      const headers = 'Metal,Product,Source,Date,OZT,Qty,Unit Price,Taxes,Shipping,Spot,Premium,Total Premium\n';
+      const rows = all.map(i =>
+        `${i.metal},"${i.productName}","${i.source}",${i.datePurchased},${i.ozt},${i.quantity},${i.unitPrice},${i.taxes},${i.shipping},${i.spotPrice},${i.premium},${i.premium * i.quantity}`
+      ).join('\n');
+
+      const filepath = `${FileSystem.documentDirectory}stack-export-${Date.now()}.csv`;
+      await FileSystem.writeAsStringAsync(filepath, headers + rows);
+      await Sharing.shareAsync(filepath);
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      console.error('Export CSV error:', error);
+      Alert.alert('Export Failed', error.message || 'Could not export CSV file.');
+    }
   };
 
   // ============================================
