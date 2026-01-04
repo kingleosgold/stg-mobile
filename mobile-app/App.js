@@ -423,9 +423,8 @@ export default function App() {
     const setupRevenueCat = async () => {
       try {
         await initializePurchases('test_LkMLacPMbzdsKIpCuG6QgATsBnNi');
-        const entitlements = await getUserEntitlements();
-        setHasGold(entitlements.hasGold);
-        if (__DEV__) console.log('RevenueCat setup complete. Has Gold:', entitlements.hasGold);
+        await checkEntitlements();
+        if (__DEV__) console.log('RevenueCat setup complete');
       } catch (error) {
         console.error('RevenueCat setup failed:', error);
       }
