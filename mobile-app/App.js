@@ -1821,6 +1821,26 @@ export default function App() {
 
             <View style={styles.card}>
               <Text style={styles.cardTitle}>⚙️ Settings</Text>
+
+              {!hasGold && !hasLifetimeAccess && (
+                <TouchableOpacity
+                  style={[styles.statRow, {
+                    backgroundColor: 'rgba(251, 191, 36, 0.1)',
+                    borderRadius: 8,
+                    padding: 12,
+                    marginBottom: 12,
+                    borderWidth: 1,
+                    borderColor: 'rgba(251, 191, 36, 0.3)'
+                  }]}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    setShowPaywallModal(true);
+                  }}
+                >
+                  <Text style={{ color: colors.gold, fontWeight: '600' }}>👑 Upgrade to Gold</Text>
+                </TouchableOpacity>
+              )}
+
               <TouchableOpacity style={styles.statRow} onPress={exportCSV}>
                 <Text style={{ color: colors.text }}>📤 Export CSV</Text>
               </TouchableOpacity>
