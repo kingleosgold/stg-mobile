@@ -4,11 +4,11 @@
  * "Make Stacking Great Again" Edition 🪙
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Component } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput,
   Alert, Modal, Platform, SafeAreaView, StatusBar, ActivityIndicator,
-  Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView, Dimensions, AppState, FlatList, Clipboard,
+  Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView, Dimensions, AppState, FlatList, Clipboard, Linking,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
@@ -26,6 +26,64 @@ import Tutorial from './src/components/Tutorial';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const API_BASE_URL = Constants.expoConfig?.extra?.apiUrl || 'https://stack-tracker-pro-production.up.railway.app';
+
+// ============================================
+// ERROR BOUNDARY - Catches crashes and shows error UI
+// ============================================
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    this.setState({ errorInfo });
+    // Log error for debugging (visible in Crashlytics/Sentry if added later)
+    console.error('ErrorBoundary caught error:', error);
+    console.error('Error info:', errorInfo);
+  }
+
+  handleRestart = async () => {
+    // Clear error state and try to re-render
+    this.setState({ hasError: false, error: null, errorInfo: null });
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#0f0f0f', justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <StatusBar barStyle="light-content" />
+          <Text style={{ fontSize: 48, marginBottom: 16 }}>⚠️</Text>
+          <Text style={{ fontSize: 24, fontWeight: '700', color: '#fff', marginBottom: 12, textAlign: 'center' }}>
+            Something went wrong
+          </Text>
+          <Text style={{ fontSize: 14, color: '#a1a1aa', textAlign: 'center', marginBottom: 24, lineHeight: 20 }}>
+            The app encountered an unexpected error. Please try restarting.
+          </Text>
+          {!__DEV__ ? null : (
+            <View style={{ backgroundColor: '#1a1a2e', padding: 12, borderRadius: 8, marginBottom: 24, maxWidth: '100%' }}>
+              <Text style={{ fontSize: 10, color: '#ef4444', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>
+                {this.state.error?.toString()?.substring(0, 200)}
+              </Text>
+            </View>
+          )}
+          <TouchableOpacity
+            onPress={this.handleRestart}
+            style={{ backgroundColor: '#fbbf24', paddingHorizontal: 32, paddingVertical: 14, borderRadius: 8 }}
+          >
+            <Text style={{ fontSize: 16, fontWeight: '700', color: '#1a1a2e' }}>Try Again</Text>
+          </TouchableOpacity>
+        </SafeAreaView>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 // ============================================
 // REUSABLE COMPONENTS
@@ -171,7 +229,8 @@ const ModalWrapper = ({ visible, onClose, title, children }) => (
 // MAIN APP
 // ============================================
 
-export default function App() {
+// Main app content (wrapped by ErrorBoundary below)
+function AppContent() {
   // Core State
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -345,25 +404,44 @@ export default function App() {
 
   const authenticate = async () => {
     try {
-      const hasHardware = await LocalAuthentication.hasHardwareAsync();
-      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+      // Wrap all authentication in defensive try-catch
+      let shouldAuthenticate = false;
 
-      if (hasHardware && isEnrolled) {
-        const result = await LocalAuthentication.authenticateAsync({
-          promptMessage: 'Unlock Stack Tracker Pro',
-          fallbackLabel: 'Use Passcode',
-        });
-        if (result.success) {
-          setIsAuthenticated(true);
-          loadData();
+      try {
+        const hasHardware = await LocalAuthentication.hasHardwareAsync();
+        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+
+        if (hasHardware && isEnrolled) {
+          const result = await LocalAuthentication.authenticateAsync({
+            promptMessage: 'Unlock Stack Tracker Pro',
+            fallbackLabel: 'Use Passcode',
+          });
+          shouldAuthenticate = result?.success === true;
+        } else {
+          // No biometric hardware or not enrolled - allow access
+          shouldAuthenticate = true;
         }
-      } else {
+      } catch (authError) {
+        console.error('Biometric auth error (non-fatal):', authError?.message || authError);
+        // If biometric fails, allow access anyway
+        shouldAuthenticate = true;
+      }
+
+      // Only update state and load data if authentication succeeded or was skipped
+      if (shouldAuthenticate) {
         setIsAuthenticated(true);
-        loadData();
+        // Wrap loadData in setTimeout to ensure state update completes first
+        setTimeout(() => {
+          loadData().catch(err => {
+            console.error('loadData failed (non-fatal):', err?.message || err);
+            setIsLoading(false); // Still hide loading even if data fails
+          });
+        }, 50);
       }
     } catch (e) {
+      console.error('authenticate outer catch:', e?.message || e);
       setIsAuthenticated(true);
-      loadData();
+      setIsLoading(false);
     }
   };
 
@@ -381,13 +459,18 @@ export default function App() {
         AsyncStorage.getItem('stack_midnight_date'),
       ]);
 
-      if (silver) setSilverItems(JSON.parse(silver));
-      if (gold) setGoldItems(JSON.parse(gold));
-      if (silverS) setSilverSpot(parseFloat(silverS));
-      if (goldS) setGoldSpot(parseFloat(goldS));
+      // Safely parse JSON data with fallbacks
+      if (silver) {
+        try { setSilverItems(JSON.parse(silver)); } catch (e) { console.error('Failed to parse silver data'); }
+      }
+      if (gold) {
+        try { setGoldItems(JSON.parse(gold)); } catch (e) { console.error('Failed to parse gold data'); }
+      }
+      if (silverS) setSilverSpot(parseFloat(silverS) || 30);
+      if (goldS) setGoldSpot(parseFloat(goldS) || 2600);
       if (timestamp) setPriceTimestamp(timestamp);
-      if (storedScanCount) setScanCount(parseInt(storedScanCount));
-      if (storedMidnightValue) setMidnightValue(parseFloat(storedMidnightValue));
+      if (storedScanCount) setScanCount(parseInt(storedScanCount) || 0);
+      if (storedMidnightValue) setMidnightValue(parseFloat(storedMidnightValue) || 0);
       if (storedMidnightDate) setMidnightDate(storedMidnightDate);
 
       // Show tutorial if user hasn't seen it
@@ -395,9 +478,12 @@ export default function App() {
         setShowTutorial(true);
       }
 
-      fetchSpotPrices(); // Auto-update prices on app open
+      // Delay fetchSpotPrices to not block the main thread
+      setTimeout(() => {
+        fetchSpotPrices().catch(err => console.error('fetchSpotPrices failed:', err?.message));
+      }, 100);
     } catch (error) {
-      console.error('Error loading data:', error);
+      console.error('Error loading data:', error?.message || error);
     } finally {
       setIsLoading(false);
     }
@@ -451,24 +537,40 @@ export default function App() {
     }
   };
 
-  // Initialize RevenueCat (waits for authentication)
+  // Initialize RevenueCat (non-blocking, runs after authentication)
+  // IMPORTANT: Uses setTimeout to ensure this doesn't block the main render
   useEffect(() => {
     if (!isAuthenticated) return; // Wait for auth to complete first
 
-    const setupRevenueCat = async () => {
-      try {
-        const initialized = await initializePurchases('test_LkMLacPMbzdsKIpCuG6QgATsBnNi');
-        if (initialized) {
-          await checkEntitlements();
-          if (__DEV__) console.log('RevenueCat setup complete');
-        } else {
-          if (__DEV__) console.log('RevenueCat initialization failed, skipping entitlements check');
+    // Delay RevenueCat setup slightly to ensure UI renders first
+    const timeoutId = setTimeout(() => {
+      const setupRevenueCat = async () => {
+        try {
+          // Use production key for production builds, test key for development
+          const apiKey = __DEV__
+            ? 'test_LkMLacPMbzdsKIpCuG6QgATsBnNi'  // Sandbox/test key
+            : 'appl_WDKPrWsOHfWzfJhxOGluQYsniLW';   // Production key
+
+          if (__DEV__) console.log('🔧 Initializing RevenueCat with key:', apiKey.substring(0, 10) + '...');
+
+          const initialized = await initializePurchases(apiKey);
+          if (initialized) {
+            // Additional delay before checking entitlements
+            await new Promise(resolve => setTimeout(resolve, 100));
+            await checkEntitlements();
+            if (__DEV__) console.log('✅ RevenueCat setup complete');
+          } else {
+            if (__DEV__) console.log('⚠️ RevenueCat initialization returned false, skipping entitlements');
+          }
+        } catch (error) {
+          // Log but don't crash - RevenueCat is not critical for app function
+          console.error('RevenueCat setup failed (non-fatal):', error?.message || error);
         }
-      } catch (error) {
-        console.error('RevenueCat setup failed:', error);
-      }
-    };
-    setupRevenueCat();
+      };
+      setupRevenueCat();
+    }, 500); // 500ms delay to let UI settle
+
+    return () => clearTimeout(timeoutId);
   }, [isAuthenticated]); // Run when isAuthenticated changes
 
   // Daily Snapshot: Check if it's a new day and update midnight value
@@ -1922,6 +2024,16 @@ export default function App() {
                   </TouchableOpacity>
                 </View>
               </View>
+
+              {/* Legal Links */}
+              <View style={{ marginTop: 20, flexDirection: 'row', justifyContent: 'center', gap: 16 }}>
+                <TouchableOpacity onPress={() => Linking.openURL('https://stack-tracker-pro-production.up.railway.app/privacy')}>
+                  <Text style={{ color: colors.muted, fontSize: 13, textDecorationLine: 'underline' }}>Privacy Policy</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => Linking.openURL('https://stack-tracker-pro-production.up.railway.app/terms')}>
+                  <Text style={{ color: colors.muted, fontSize: 13, textDecorationLine: 'underline' }}>Terms of Use</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </>
         )}
@@ -2594,6 +2706,15 @@ export default function App() {
         onComplete={handleTutorialComplete}
       />
     </SafeAreaView>
+  );
+}
+
+// Export App wrapped with ErrorBoundary to catch any crashes
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppContent />
+    </ErrorBoundary>
   );
 }
 

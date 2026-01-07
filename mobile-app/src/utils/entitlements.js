@@ -52,11 +52,24 @@ export const getUserEntitlements = async () => {
  */
 export const initializePurchases = async (apiKey) => {
   try {
+    // Validate apiKey before calling configure
+    if (!apiKey || typeof apiKey !== 'string' || apiKey.length < 10) {
+      console.error('Invalid RevenueCat API key provided');
+      return false;
+    }
+
+    // Check if Purchases is available
+    if (!Purchases || typeof Purchases.configure !== 'function') {
+      console.error('RevenueCat Purchases SDK not available');
+      return false;
+    }
+
     await Purchases.configure({ apiKey });
     if (__DEV__) console.log('RevenueCat initialized successfully');
     return true;
   } catch (error) {
-    console.error('Failed to initialize RevenueCat:', error);
+    // Log error details but don't crash
+    console.error('Failed to initialize RevenueCat:', error?.message || error);
     return false;
   }
 };

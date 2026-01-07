@@ -15,11 +15,15 @@ import {
   Alert,
   Platform,
   TextInput,
+  Linking,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Purchases from 'react-native-purchases';
 import * as Haptics from 'expo-haptics';
 import { restorePurchases } from '../utils/entitlements';
+
+const PRIVACY_URL = 'https://stack-tracker-pro-production.up.railway.app/privacy';
+const TERMS_URL = 'https://stack-tracker-pro-production.up.railway.app/terms';
 
 const GoldPaywall = ({ visible, onClose, onPurchaseSuccess }) => {
   const [offerings, setOfferings] = useState(null);
@@ -229,6 +233,17 @@ const GoldPaywall = ({ visible, onClose, onPurchaseSuccess }) => {
             )}
           </ScrollView>
 
+          {/* Legal Links */}
+          <View style={styles.legalLinks}>
+            <TouchableOpacity onPress={() => Linking.openURL(PRIVACY_URL)}>
+              <Text style={styles.legalLinkText}>Privacy Policy</Text>
+            </TouchableOpacity>
+            <Text style={styles.legalSeparator}>|</Text>
+            <TouchableOpacity onPress={() => Linking.openURL(TERMS_URL)}>
+              <Text style={styles.legalLinkText}>Terms of Use</Text>
+            </TouchableOpacity>
+          </View>
+
           {/* Restore Button */}
           <TouchableOpacity
             onPress={handleRestore}
@@ -403,6 +418,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 40,
     fontSize: 16,
+  },
+  legalLinks: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 16,
+    gap: 8,
+  },
+  legalLinkText: {
+    fontSize: 13,
+    color: '#a1a1aa',
+    textDecorationLine: 'underline',
+  },
+  legalSeparator: {
+    fontSize: 13,
+    color: '#52525b',
   },
   restoreButton: {
     paddingVertical: 16,
