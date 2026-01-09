@@ -246,6 +246,7 @@ function AppContent() {
   // Portfolio Data
   const [silverItems, setSilverItems] = useState([]);
   const [goldItems, setGoldItems] = useState([]);
+  const [dataLoaded, setDataLoaded] = useState(false); // Prevents saving until initial load completes
 
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
@@ -263,6 +264,7 @@ function AppContent() {
   const [detailItem, setDetailItem] = useState(null);
   const [detailMetal, setDetailMetal] = useState(null);
   const [showSortMenu, setShowSortMenu] = useState(false);
+  const [showHelpModal, setShowHelpModal] = useState(false);
 
   // Sort State
   const [sortBy, setSortBy] = useState('date-newest'); // date-newest, date-oldest, value-high, value-low, metal, name
@@ -483,12 +485,17 @@ function AppContent() {
         setShowTutorial(true);
       }
 
+      // Mark data as loaded BEFORE fetching prices - this prevents the save useEffect from overwriting
+      setDataLoaded(true);
+
       // Delay fetchSpotPrices to not block the main thread
       setTimeout(() => {
         fetchSpotPrices().catch(err => console.error('fetchSpotPrices failed:', err?.message));
       }, 100);
     } catch (error) {
       console.error('Error loading data:', error?.message || error);
+      // Still mark as loaded on error to prevent infinite loop, but data won't be overwritten
+      setDataLoaded(true);
     } finally {
       setIsLoading(false);
     }
@@ -503,12 +510,14 @@ function AppContent() {
   };
 
   useEffect(() => {
-    if (isAuthenticated) saveData('stack_silver', silverItems);
-  }, [silverItems, isAuthenticated]);
+    // Only save after initial data has been loaded to prevent overwriting with empty arrays
+    if (isAuthenticated && dataLoaded) saveData('stack_silver', silverItems);
+  }, [silverItems, isAuthenticated, dataLoaded]);
 
   useEffect(() => {
-    if (isAuthenticated) saveData('stack_gold', goldItems);
-  }, [goldItems, isAuthenticated]);
+    // Only save after initial data has been loaded to prevent overwriting with empty arrays
+    if (isAuthenticated && dataLoaded) saveData('stack_gold', goldItems);
+  }, [goldItems, isAuthenticated, dataLoaded]);
 
   useEffect(() => { authenticate(); }, []);
 
@@ -2146,6 +2155,20 @@ function AppContent() {
               </View>
             </View>
 
+            {/* Help & Tips Section */}
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Help & Tips</Text>
+              <TouchableOpacity
+                style={styles.statRow}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setShowHelpModal(true);
+                }}
+              >
+                <Text style={{ color: colors.text }}>📖 View Help Guide</Text>
+              </TouchableOpacity>
+            </View>
+
             {/* Advanced Section */}
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Advanced</Text>
@@ -2484,6 +2507,60 @@ function AppContent() {
         <View style={[styles.card, { backgroundColor: `${colors.success}22` }]}>
           <Text style={{ color: colors.success, fontWeight: '600' }}>Our Promise</Text>
           <Text style={{ color: colors.muted, fontStyle: 'italic' }}>"We architected the system so we CAN'T access your data."</Text>
+        </View>
+      </ModalWrapper>
+
+      {/* Help & Tips Modal */}
+      <ModalWrapper
+        visible={showHelpModal}
+        onClose={() => setShowHelpModal(false)}
+        title="📖 Help & Tips"
+      >
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Getting Started</Text>
+          <Text style={styles.privacyItem}>• Add purchases manually by tapping "+" on the Holdings tab</Text>
+          <Text style={styles.privacyItem}>• Or use AI Receipt Scanner to automatically extract data from receipts and invoices</Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>AI Receipt Scanner</Text>
+          <Text style={styles.privacyItem}>• Tap "Take Photo" to capture a receipt with your camera</Text>
+          <Text style={styles.privacyItem}>• Tap "Upload Photo" to select an existing image from your gallery</Text>
+          <Text style={styles.privacyItem}>• The AI will extract product name, quantity, price, dealer, and date</Text>
+          <Text style={styles.privacyItem}>• Review and edit the extracted data before saving</Text>
+          <Text style={[styles.privacyItem, { marginTop: 8 }]}>• Free users get 5 scans per month (resets monthly)</Text>
+          <Text style={styles.privacyItem}>• Gold/Lifetime subscribers get unlimited scans</Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Backup & Restore</Text>
+          <Text style={styles.privacyItem}>• Your data is stored locally on your device only - we can't access it</Text>
+          <Text style={styles.privacyItem}>• Use "Backup" to save your portfolio to iCloud Drive, Google Drive, or any cloud storage</Text>
+          <Text style={styles.privacyItem}>• Use "Restore" to load a backup onto this device or a new device</Text>
+          <View style={{ backgroundColor: 'rgba(251, 191, 36, 0.15)', padding: 10, borderRadius: 8, marginTop: 8 }}>
+            <Text style={{ color: colors.gold, fontSize: 13, fontWeight: '600' }}>⚠️ IMPORTANT: Backup regularly to avoid data loss!</Text>
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Using Multiple Devices</Text>
+          <Text style={styles.privacyItem}>• Stack Tracker Pro does not automatically sync between devices</Text>
+          <Text style={[styles.privacyItem, { marginTop: 8 }]}>• To use on multiple devices (iPhone + iPad):</Text>
+          <Text style={[styles.privacyItem, { paddingLeft: 12 }]}>1. Backup from your primary device</Text>
+          <Text style={[styles.privacyItem, { paddingLeft: 12 }]}>2. Restore on your secondary device</Text>
+          <Text style={[styles.privacyItem, { marginTop: 8, color: colors.muted, fontSize: 12 }]}>Note: Changes on one device won't appear on the other unless you backup and restore again</Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Export CSV</Text>
+          <Text style={styles.privacyItem}>• Export your entire portfolio as a CSV spreadsheet</Text>
+          <Text style={styles.privacyItem}>• Use for your own records, tax preparation, or importing to other tools</Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Support</Text>
+          <Text style={styles.privacyItem}>• Need help? Email stacktrackerpro@gmail.com</Text>
+          <Text style={[styles.privacyItem, { marginTop: 4, color: colors.muted, fontSize: 12 }]}>Include your Support ID (found in Settings → Advanced) for faster assistance</Text>
         </View>
       </ModalWrapper>
 
