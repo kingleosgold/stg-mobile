@@ -2133,7 +2133,7 @@ function AppContent() {
 
             <View style={styles.card}>
               <Text style={styles.cardTitle}>About</Text>
-              <Text style={{ color: colors.muted }}>Stack Tracker Pro v1.0.1</Text>
+              <Text style={{ color: colors.muted }}>Stack Tracker Pro v1.0.2</Text>
               <Text style={{ color: colors.gold, fontStyle: 'italic', marginTop: 8 }}>"We CAN'T access your data."</Text>
 
               {hasLifetimeAccess && (
