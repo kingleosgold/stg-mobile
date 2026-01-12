@@ -23,7 +23,21 @@
       "Bash(npm start)",
       "Bash(npm uninstall:*)",
       "Bash(del generate-ring-icons.js)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(npx expo start:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)",
+      "Bash(del:*)",
+      "Bash(magick:*)",
+      "Bash(py:*)",
+      "Bash(python generate_feature_graphic.py:*)",
+      "Bash(pip install:*)",
+      "Bash(python:*)",
+      "WebSearch",
+      "WebFetch(domain:metalpriceapi.com)",
+      "Bash(where railway:*)",
+      "Bash(npx eas-cli:*)"
     ]
   }
 }

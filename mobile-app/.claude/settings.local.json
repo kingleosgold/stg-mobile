@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nRemove hardcoded promo codes and improve subscription security\n\nSecurity improvements:\n- Remove hardcoded promo codes \\(FOUNDER2025, EARLYBIRD, STACKERLIFE\\)\n- Remove promo code validation easter egg \\(5-tap version number\\)\n- Update lifetime access to use RevenueCat \"Lifetime\" entitlement\n- Add RevenueCat User ID display in Settings for support\n- Replace \"Coming Soon\" fallback UI with proper error handling\n- Remove email notification system for subscription launches\n\nAll premium access now controlled server-side through RevenueCat dashboard.\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nFix RevenueCat User ID not displaying in Settings\n\nCall checkEntitlements\\(\\) on app initialization to properly set:\n- hasGold entitlement status\n- hasLifetimeAccess entitlement status  \n- revenueCatUserId for support\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nFix RevenueCat User ID display - always show section\n\nChanges:\n- User ID section now always visible in Settings \\(not conditional\\)\n- Shows \"Loading...\" placeholder when User ID hasn''t loaded yet\n- Copy button disabled until User ID loads\n- Add debug logging to checkEntitlements\\(\\) for troubleshooting\n\nThis ensures users can always see where their User ID will appear\nand can report if it''s stuck on \"Loading...\".\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git commit:*)",
+      "Bash(npx eas build:*)",
+      "Bash(npx eas:*)",
+      "Bash(npx expo export:*)",
+      "Bash(curl:*)",
+      "Bash(git push:*)",
+      "Bash(eas build:*)",
+      "Bash(ls:*)",
+      "Bash(dir \"C:\\\\Users\\\\Jon\\\\Developer\\\\stack-tracker-pro\\\\backend\\\\*.js\")",
+      "Bash(railway:*)",
+      "WebFetch(domain:stack-tracker-pro-production.up.railway.app)",
+      "Bash(node:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:react-native-cloud-storage.oss.kuatsu.de)",
+      "WebFetch(domain:react-native-cloud-store.vercel.app)",
+      "WebFetch(domain:docs.expo.dev)",
+      "WebFetch(domain:www.npmjs.com)",
+      "Bash(npx expo:*)",
+      "Bash(npx:*)",
+      "Bash(timeout:*)",
+      "Bash(more:*)",
+      "Bash(npm install:*)",
+      "Bash(where railway:*)",
+      "Bash(powershell -Command \"Get-ChildItem icon*.png | ForEach-Object { $_Name + '': '' + \\(Get-Item $_FullName\\).Length + '' bytes'' }\")",
+      "Bash(where:*)",
+      "Bash(python:*)",
+      "Bash(git log:*)"
+    ]
+  }
+}

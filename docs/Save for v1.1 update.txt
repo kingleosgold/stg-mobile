@@ -1,0 +1,30 @@
+Save for v1.1 update:
+
+Dashboard Settings:
+- Toggle visibility for each card (Today's Change, Milestones, Live Prices, etc.)
+- Drag to reorder cards
+- Reset to default layout
+
+
+- Backup to native cloud (iCloud and Android)
+- Icloud SDK to sync across iPhone/ipad/new devices
+
+- Historical Charts
+- Price alerts
+
+
+
+
+
+- Silver news feed
+- X feed of silver news
+
+
+Future Expansion Options
+Option A: Stack Tracker Pro v2.0 (recommended first)
+
+Add Platinum & Palladium tracking
+Silver/Whale subscription tiers
+iCloud/Google Drive sync
+Historical price charts
+

@@ -25,6 +25,7 @@ import { CloudStorage, CloudStorageScope } from 'react-native-cloud-storage';
 import { initializePurchases, hasGoldEntitlement, getUserEntitlements } from './src/utils/entitlements';
 import GoldPaywall from './src/components/GoldPaywall';
 import Tutorial from './src/components/Tutorial';
+import { VictoryPie } from 'victory-native';
 
 // iCloud sync key
 const ICLOUD_HOLDINGS_KEY = 'stack_tracker_holdings.json';
@@ -128,156 +129,49 @@ const PieChart = ({ data, size = 150, cardBgColor, textColor, mutedColor }) => {
   const total = data.reduce((sum, item) => sum + item.value, 0);
   if (total === 0) return null;
 
-  const gapAngle = 4; // Gap in degrees between segments
-  const bgColor = cardBgColor || '#18181b';
-
   // Calculate legend percentages from all data (including 0%)
   const legendItems = data.map((item) => ({
     ...item,
     percentage: item.value / total,
   }));
 
-  // Filter out zero-value segments for pie rendering
-  const nonZeroData = data.filter((item) => item.value > 0);
-  const numSegments = nonZeroData.length;
+  // Filter out zero-value segments and prepare data for VictoryPie
+  const chartData = data
+    .filter((item) => item.value > 0)
+    .map((item) => ({ x: item.label, y: item.value }));
 
-  // Build segments with angles, leaving room for gaps
-  const totalGapAngle = numSegments > 1 ? gapAngle * numSegments : 0;
-  const usableAngle = 360 - totalGapAngle;
-
-  let currentAngle = gapAngle / 2; // Start with half gap
-  const segments = nonZeroData.map((item) => {
-    const percentage = item.value / total;
-    const angle = percentage * usableAngle;
-    const startAngle = currentAngle;
-    currentAngle += angle + gapAngle;
-    return { ...item, percentage, startAngle, angle };
-  });
-
-  // Render a segment using the half-circle overlay technique
-  const renderSegment = (segment) => {
-    const { startAngle, angle, color, label } = segment;
-    if (angle <= 0) return null;
-
-    // For segments <= 180 degrees, we use one half-circle
-    // For segments > 180 degrees, we need two half-circles
-    if (angle <= 180) {
-      return (
-        <View
-          key={label}
-          style={{
-            position: 'absolute',
-            width: size,
-            height: size,
-          }}
-        >
-          {/* First half-circle at startAngle */}
-          <View style={{
-            position: 'absolute',
-            width: size,
-            height: size,
-            transform: [{ rotate: `${startAngle}deg` }],
-          }}>
-            <View style={{
-              position: 'absolute',
-              width: size / 2,
-              height: size,
-              left: size / 2,
-              backgroundColor: color,
-            }} />
-          </View>
-          {/* Mask to cut at startAngle + angle */}
-          <View style={{
-            position: 'absolute',
-            width: size,
-            height: size,
-            transform: [{ rotate: `${startAngle + angle}deg` }],
-          }}>
-            <View style={{
-              position: 'absolute',
-              width: size / 2,
-              height: size,
-              left: size / 2,
-              backgroundColor: bgColor,
-            }} />
-          </View>
-        </View>
-      );
-    } else {
-      // For > 180 degrees, render full right half then partial left
-      return (
-        <View key={label} style={{ position: 'absolute', width: size, height: size }}>
-          {/* Right half (180 degrees) */}
-          <View style={{
-            position: 'absolute',
-            width: size,
-            height: size,
-            transform: [{ rotate: `${startAngle}deg` }],
-          }}>
-            <View style={{
-              position: 'absolute',
-              width: size / 2,
-              height: size,
-              left: size / 2,
-              backgroundColor: color,
-            }} />
-          </View>
-          {/* Left half up to the remaining angle */}
-          <View style={{
-            position: 'absolute',
-            width: size,
-            height: size,
-            transform: [{ rotate: `${startAngle + 180}deg` }],
-          }}>
-            <View style={{
-              position: 'absolute',
-              width: size / 2,
-              height: size,
-              left: size / 2,
-              backgroundColor: color,
-            }} />
-          </View>
-          {/* Mask for the remaining */}
-          <View style={{
-            position: 'absolute',
-            width: size,
-            height: size,
-            transform: [{ rotate: `${startAngle + angle}deg` }],
-          }}>
-            <View style={{
-              position: 'absolute',
-              width: size / 2,
-              height: size,
-              left: size / 2,
-              backgroundColor: bgColor,
-            }} />
-          </View>
-        </View>
-      );
-    }
-  };
+  // Get colors in same order as chartData
+  const colorScale = data
+    .filter((item) => item.value > 0)
+    .map((item) => item.color);
 
   return (
     <View style={{ alignItems: 'center' }}>
-      <View style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        overflow: 'hidden',
-        position: 'relative',
-        backgroundColor: bgColor,
-      }}>
-        {/* Render all segments */}
-        {segments.map((segment) => renderSegment(segment))}
-        {/* Center hole */}
+      <View style={{ width: size, height: size, position: 'relative' }}>
+        <VictoryPie
+          data={chartData}
+          width={size}
+          height={size}
+          innerRadius={size * 0.32}
+          padAngle={3}
+          startAngle={-90}
+          endAngle={270}
+          colorScale={colorScale}
+          labels={() => null}
+          style={{
+            data: {
+              stroke: 'transparent',
+              strokeWidth: 0,
+            },
+          }}
+        />
+        {/* Center label */}
         <View style={{
           position: 'absolute',
-          width: size * 0.6,
-          height: size * 0.6,
-          borderRadius: size * 0.3,
-          backgroundColor: bgColor,
-          top: size * 0.2,
-          left: size * 0.2,
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
           justifyContent: 'center',
           alignItems: 'center',
         }}>
