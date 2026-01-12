@@ -204,47 +204,39 @@ const ProgressBar = ({ value, max, color, label }) => {
   );
 };
 
-// Modal wrapper with proper keyboard handling
+// Modal wrapper with proper keyboard handling and smooth scrolling
 const ModalWrapper = ({ visible, onClose, title, children }) => (
   <Modal visible={visible} animationType="slide" transparent>
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <View style={styles.modalOverlay}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.modalKeyboardView}
-        >
-          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-            <View style={styles.modalContent}>
-              {/* Header - always visible */}
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>{title}</Text>
-                <TouchableOpacity
-                  onPress={onClose}
-                  style={styles.closeButton}
-                  hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
-                >
-                  <Text style={styles.closeButtonText}>✕</Text>
-                </TouchableOpacity>
-              </View>
+    <View style={styles.modalOverlay}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.modalKeyboardView}
+      >
+        <View style={styles.modalContent}>
+          {/* Header - always visible */}
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>{title}</Text>
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.closeButton}
+              hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+            >
+              <Text style={styles.closeButtonText}>✕</Text>
+            </TouchableOpacity>
+          </View>
 
-              {/* Tap to dismiss hint */}
-              <TouchableOpacity onPress={Keyboard.dismiss} style={styles.dismissHint}>
-                <Text style={{ color: '#52525b', fontSize: 11 }}>Tap here to hide keyboard</Text>
-              </TouchableOpacity>
-
-              {/* Content */}
-              <ScrollView
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ paddingBottom: 40 }}
-              >
-                {children}
-              </ScrollView>
-            </View>
-          </TouchableWithoutFeedback>
-        </KeyboardAvoidingView>
-      </View>
-    </TouchableWithoutFeedback>
+          {/* Content - scrollable with keyboard dismiss on scroll */}
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 40 }}
+          >
+            {children}
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </View>
   </Modal>
 );
 
@@ -2600,51 +2592,46 @@ function AppContent() {
 
       {/* ADD/EDIT MODAL - Custom with sticky save button */}
       <Modal visible={showAddModal} animationType="slide" transparent>
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <View style={styles.modalOverlay}>
-            <KeyboardAvoidingView
-              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-              style={styles.modalKeyboardView}
-            >
-              <View style={styles.modalContent}>
-                {/* Header */}
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>{editingItem ? 'Edit' : 'Add'} Purchase</Text>
-                  <TouchableOpacity
-                    onPress={() => {
-                      // If editing a scanned item, return to scan results without losing data
-                      if (editingItem?.scannedIndex !== undefined) {
-                        resetForm();
-                        setShowAddModal(false);
-                        setShowScannedItemsPreview(true);
-                      } else if (editingItem?.importIndex !== undefined) {
-                        // If editing an imported item, return to import preview
-                        resetForm();
-                        setShowAddModal(false);
-                        setShowImportPreview(true);
-                      } else {
-                        resetForm();
-                        setShowAddModal(false);
-                      }
-                    }}
-                    style={styles.closeButton}
-                    hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
-                  >
-                    <Text style={styles.closeButtonText}>✕</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* Tap to dismiss hint */}
-                <TouchableOpacity onPress={Keyboard.dismiss} style={styles.dismissHint}>
-                  <Text style={{ color: '#52525b', fontSize: 11 }}>Tap here to hide keyboard</Text>
-                </TouchableOpacity>
-
-                {/* Scrollable Content */}
-                <ScrollView
-                  keyboardShouldPersistTaps="handled"
-                  showsVerticalScrollIndicator={false}
-                  contentContainerStyle={{ paddingBottom: 20 }}
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.modalKeyboardView}
+          >
+            <View style={styles.modalContent}>
+              {/* Header */}
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>{editingItem ? 'Edit' : 'Add'} Purchase</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    // If editing a scanned item, return to scan results without losing data
+                    if (editingItem?.scannedIndex !== undefined) {
+                      resetForm();
+                      setShowAddModal(false);
+                      setShowScannedItemsPreview(true);
+                    } else if (editingItem?.importIndex !== undefined) {
+                      // If editing an imported item, return to import preview
+                      resetForm();
+                      setShowAddModal(false);
+                      setShowImportPreview(true);
+                    } else {
+                      resetForm();
+                      setShowAddModal(false);
+                    }
+                  }}
+                  style={styles.closeButton}
+                  hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
                 >
+                  <Text style={styles.closeButtonText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Scrollable Content */}
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 20 }}
+              >
                   {scanStatus && (
                     <View style={[styles.scanStatus, { backgroundColor: scanStatus === 'success' ? `${colors.success}22` : scanStatus === 'error' ? `${colors.error}22` : `${colors.gold}22` }]}>
                       <Text style={{ color: scanStatus === 'success' ? colors.success : scanStatus === 'error' ? colors.error : colors.gold }}>{scanMessage}</Text>
@@ -2754,7 +2741,6 @@ function AppContent() {
               </View>
             </KeyboardAvoidingView>
           </View>
-        </TouchableWithoutFeedback>
       </Modal>
 
       {/* SPECULATION MODAL */}
@@ -3416,7 +3402,6 @@ const styles = StyleSheet.create({
   modalTitle: { color: '#fff', fontSize: 20, fontWeight: '700' },
   closeButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 22 },
   closeButtonText: { color: '#fff', fontSize: 18, fontWeight: '600' },
-  dismissHint: { alignItems: 'center', paddingVertical: 8, marginBottom: 8 },
 
   scanStatus: { padding: 12, borderRadius: 10, marginBottom: 16 },
   privacyItem: { color: '#a1a1aa', fontSize: 13, lineHeight: 24 },
