@@ -734,7 +734,7 @@ app.post('/api/scan-receipt', upload.single('receipt'), async (req, res) => {
     const mediaType = req.file.mimetype || 'image/jpeg';
     console.log(`   - Base64 length: ${base64Image.length} characters`);
 
-    // Simple, direct prompt - filter non-metal items
+    // Prompt with ext price for verification
     const prompt = `This is a receipt from a precious metals dealer. Read it carefully and extract ONLY precious metal products.
 
 IMPORTANT RULES:
@@ -749,7 +749,8 @@ Extract:
 - For each METAL item only:
   - Product description (exactly as printed)
   - Quantity
-  - Unit price (price per single item - read the EXACT number printed)
+  - Unit price (price per single item)
+  - Ext price (line total - quantity × unit price, as shown on receipt)
   - Metal type (gold/silver/platinum/palladium)
   - Weight per item in troy ounces
 
@@ -762,6 +763,7 @@ Return as JSON only:
       "description": "product name",
       "quantity": 1,
       "unitPrice": 123.45,
+      "extPrice": 123.45,
       "metal": "gold",
       "ozt": 1.0
     }
@@ -835,6 +837,33 @@ Return as JSON only:
       extractedData.items = [];
     }
 
+    // Verify and correct unit prices using ext price
+    console.log('\n🔍 PRICE VERIFICATION (using ext price):');
+    extractedData.items = extractedData.items.map((item, index) => {
+      const qty = item.quantity || 1;
+      const readUnitPrice = item.unitPrice;
+      const extPrice = item.extPrice;
+
+      // If we have ext price, verify unit price
+      if (extPrice && qty > 0) {
+        const calculatedUnitPrice = Math.round((extPrice / qty) * 100) / 100;
+
+        if (Math.abs(calculatedUnitPrice - readUnitPrice) > 0.02) {
+          console.log(`   Item ${index + 1}: CORRECTED`);
+          console.log(`      Read unit price: $${readUnitPrice}`);
+          console.log(`      Ext price: $${extPrice} ÷ ${qty} = $${calculatedUnitPrice}`);
+          console.log(`      Using calculated: $${calculatedUnitPrice}`);
+          return { ...item, unitPrice: calculatedUnitPrice };
+        } else {
+          console.log(`   Item ${index + 1}: OK ($${readUnitPrice} × ${qty} = $${extPrice})`);
+        }
+      } else {
+        console.log(`   Item ${index + 1}: No ext price to verify`);
+      }
+
+      return item;
+    });
+
     // Log parsed data
     console.log('\n✅ PARSED EXTRACTION RESULT:');
     console.log('─'.repeat(60));
@@ -850,6 +879,7 @@ Return as JSON only:
         console.log(`      Metal: ${item.metal}`);
         console.log(`      Quantity: ${item.quantity}`);
         console.log(`      Unit Price: $${item.unitPrice}`);
+        console.log(`      Ext Price: $${item.extPrice || 'N/A'}`);
         console.log(`      Weight: ${item.ozt} ozt`);
         console.log('');
       });

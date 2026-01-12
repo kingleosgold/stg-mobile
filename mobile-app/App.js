@@ -1291,14 +1291,18 @@ function AppContent() {
             premium = (unitPrice - (spotNum * ozt)).toFixed(2);
           }
 
+          const qty = parseInt(item.quantity) || 1;
+          const extPrice = item.extPrice ? parseFloat(item.extPrice) : unitPrice * qty;
+
           processedItems.push({
             metal: extractedMetal,
             productName: item.description || '',
             source: dealer,
             datePurchased: purchaseDate,
             ozt: parseFloat(item.ozt) || 0,
-            quantity: parseInt(item.quantity) || 1,
-            unitPrice: parseFloat(item.unitPrice) || 0,
+            quantity: qty,
+            unitPrice: unitPrice,
+            extPrice: extPrice,
             taxes: 0,
             shipping: 0,
             spotPrice: parseFloat(spotPrice) || 0,
@@ -1592,6 +1596,31 @@ function AppContent() {
         }}
       ]);
     }
+  };
+
+  // Update scanned item price inline (with auto-recalculation)
+  const updateScannedItemPrice = (index, field, value) => {
+    const updatedItems = [...scannedItems];
+    const item = updatedItems[index];
+    const numValue = parseFloat(value) || 0;
+    const qty = item.quantity || 1;
+
+    if (field === 'unitPrice') {
+      // User edited unit price - recalculate ext price
+      item.unitPrice = numValue;
+      item.extPrice = Math.round(numValue * qty * 100) / 100;
+    } else if (field === 'extPrice') {
+      // User edited ext price - recalculate unit price
+      item.extPrice = numValue;
+      item.unitPrice = Math.round((numValue / qty) * 100) / 100;
+    }
+
+    // Recalculate premium
+    if (item.unitPrice > 0 && item.spotPrice > 0 && item.ozt > 0) {
+      item.premium = Math.round((item.unitPrice - (item.spotPrice * item.ozt)) * 100) / 100;
+    }
+
+    setScannedItems(updatedItems);
   };
 
   // Edit a scanned item before adding
@@ -2935,7 +2964,6 @@ function AppContent() {
 
         {scannedItems.map((item, index) => {
           const itemColor = item.metal === 'silver' ? colors.silver : colors.gold;
-          const totalValue = item.unitPrice * item.quantity;
 
           return (
             <View key={index} style={[styles.card, { marginBottom: 12, padding: 12, borderLeftWidth: 3, borderLeftColor: itemColor }]}>
@@ -2946,31 +2974,54 @@ function AppContent() {
                     {item.metal.toUpperCase()} • {item.ozt} oz{item.quantity > 1 ? ` • Qty: ${item.quantity}` : ''}
                   </Text>
                 </View>
-                <Text style={{ color: colors.success, fontWeight: '600', fontSize: 16 }}>
-                  ${totalValue.toFixed(2)}
-                </Text>
               </View>
 
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
-                <Text style={{ color: colors.muted, fontSize: 11 }}>
-                  ${item.unitPrice.toFixed(2)} per item
-                </Text>
-                {item.spotPrice > 0 && (
+              {/* Editable Price Fields */}
+              <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.muted, fontSize: 10, marginBottom: 4 }}>Unit Price</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.cardBg, borderRadius: 6, paddingHorizontal: 8 }}>
+                    <Text style={{ color: colors.text, fontSize: 14 }}>$</Text>
+                    <TextInput
+                      style={{ flex: 1, color: colors.text, fontSize: 14, paddingVertical: 8 }}
+                      value={item.unitPrice.toFixed(2)}
+                      keyboardType="decimal-pad"
+                      onChangeText={(value) => updateScannedItemPrice(index, 'unitPrice', value)}
+                      selectTextOnFocus
+                    />
+                  </View>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.muted, fontSize: 10, marginBottom: 4 }}>Line Total{item.quantity > 1 ? ` (×${item.quantity})` : ''}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.cardBg, borderRadius: 6, paddingHorizontal: 8 }}>
+                    <Text style={{ color: colors.text, fontSize: 14 }}>$</Text>
+                    <TextInput
+                      style={{ flex: 1, color: colors.text, fontSize: 14, paddingVertical: 8 }}
+                      value={item.extPrice.toFixed(2)}
+                      keyboardType="decimal-pad"
+                      onChangeText={(value) => updateScannedItemPrice(index, 'extPrice', value)}
+                      selectTextOnFocus
+                    />
+                  </View>
+                </View>
+              </View>
+
+              {item.spotPrice > 0 && (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
                   <Text style={{ color: colors.muted, fontSize: 11 }}>
                     Spot: ${item.spotPrice.toFixed(2)}
                   </Text>
-                )}
-              </View>
-
-              {item.premium !== 0 && (
-                <Text style={{ color: item.premium > 0 ? colors.gold : colors.error, fontSize: 11, marginTop: 2 }}>
-                  Premium: ${item.premium.toFixed(2)}
-                </Text>
+                  {item.premium !== 0 && (
+                    <Text style={{ color: item.premium > 0 ? colors.gold : colors.error, fontSize: 11 }}>
+                      Premium: ${item.premium.toFixed(2)}
+                    </Text>
+                  )}
+                </View>
               )}
 
               <TouchableOpacity
                 style={{
-                  marginTop: 8,
+                  marginTop: 10,
                   paddingVertical: 6,
                   paddingHorizontal: 12,
                   backgroundColor: 'rgba(251,191,36,0.2)',
@@ -2979,7 +3030,7 @@ function AppContent() {
                 }}
                 onPress={() => editScannedItem(index)}
               >
-                <Text style={{ color: colors.gold, fontSize: 12, fontWeight: '600' }}>✏️ Edit</Text>
+                <Text style={{ color: colors.gold, fontSize: 12, fontWeight: '600' }}>✏️ Edit All Details</Text>
               </TouchableOpacity>
             </View>
           );
