@@ -137,15 +137,123 @@ const PieChart = ({ data, size = 150, cardBgColor, textColor, mutedColor }) => {
   // Filter out zero-value segments for pie rendering
   const nonZeroData = data.filter((item) => item.value > 0);
 
-  // Build segments with angles for rendering
-  let currentAngle = 0;
+  // Build segments with cumulative angles
+  let cumulativeAngle = 0;
   const segments = nonZeroData.map((item) => {
     const percentage = item.value / total;
     const angle = percentage * 360;
-    const startAngle = currentAngle;
-    currentAngle += angle;
+    const startAngle = cumulativeAngle;
+    cumulativeAngle += angle;
     return { ...item, percentage, startAngle, angle };
   });
+
+  // For a two-segment pie, we use the "mask" approach:
+  // 1. Background = first segment color (fills 100%)
+  // 2. Second segment is rendered by masking/covering from its start angle
+  // This works by placing two half-circles that "reveal" the second color
+
+  const renderSecondSegment = () => {
+    if (segments.length < 2) return null;
+    const segment = segments[1];
+    const { startAngle, angle, color } = segment;
+
+    // The second segment starts where the first ends
+    // We need to cover "angle" degrees starting from "startAngle"
+
+    if (angle <= 0) return null;
+
+    const elements = [];
+
+    if (angle <= 180) {
+      // For <= 180 degrees, we need one rotated half that reveals the second color
+      // We place the second color on the right half, rotate container to startAngle
+      elements.push(
+        <View
+          key="seg-single"
+          style={{
+            position: 'absolute',
+            width: size,
+            height: size,
+            transform: [{ rotate: `${startAngle}deg` }],
+          }}
+        >
+          {/* Right half with second color */}
+          <View style={{
+            position: 'absolute',
+            width: size / 2,
+            height: size,
+            left: size / 2,
+            backgroundColor: color,
+          }} />
+          {/* Left-side mask to hide excess - rotated to show only "angle" degrees */}
+          <View style={{
+            position: 'absolute',
+            width: size / 2,
+            height: size,
+            left: size / 2,
+            backgroundColor: segments[0].color,
+            transform: [{ rotate: `${angle}deg` }],
+          }} />
+        </View>
+      );
+    } else {
+      // For > 180 degrees, we show the full right half plus part of the left
+      // First, show the entire right half (180 degrees)
+      elements.push(
+        <View
+          key="seg-right"
+          style={{
+            position: 'absolute',
+            width: size,
+            height: size,
+            transform: [{ rotate: `${startAngle}deg` }],
+          }}
+        >
+          <View style={{
+            position: 'absolute',
+            width: size / 2,
+            height: size,
+            left: size / 2,
+            backgroundColor: color,
+          }} />
+        </View>
+      );
+
+      // Then show the remaining portion on the left side
+      const remainingAngle = angle - 180;
+      elements.push(
+        <View
+          key="seg-left"
+          style={{
+            position: 'absolute',
+            width: size,
+            height: size,
+            transform: [{ rotate: `${startAngle + 180}deg` }],
+          }}
+        >
+          {/* Right half with second color */}
+          <View style={{
+            position: 'absolute',
+            width: size / 2,
+            height: size,
+            left: size / 2,
+            backgroundColor: color,
+          }} />
+          {/* Mask to hide excess */}
+          <View style={{
+            position: 'absolute',
+            width: size / 2,
+            height: size,
+            left: size / 2,
+            backgroundColor: segments[0].color,
+            transform: [{ rotate: `${remainingAngle}deg` }],
+          }} />
+        </View>
+      );
+    }
+
+    return elements;
+  };
 
   return (
     <View style={{ alignItems: 'center' }}>
@@ -155,23 +263,12 @@ const PieChart = ({ data, size = 150, cardBgColor, textColor, mutedColor }) => {
         borderRadius: size / 2,
         overflow: 'hidden',
         position: 'relative',
-        backgroundColor: segments[0]?.color, // Fill background with first segment color
+        backgroundColor: segments[0]?.color, // Base with first color
       }}>
-        {/* Render remaining segments as overlays */}
-        {segments.slice(1).map((segment, index) => (
-          <View
-            key={index}
-            style={{
-              position: 'absolute',
-              width: size,
-              height: size,
-              transform: [{ rotate: `${segment.startAngle}deg` }],
-            }}
-          >
-            <View style={{ width: size / 2, height: size, backgroundColor: segment.color }} />
-          </View>
-        ))}
-        {/* Center hole - transparent to show card background */}
+        {/* Render second segment overlay */}
+        {renderSecondSegment()}
+
+        {/* Center hole */}
         <View style={{
           position: 'absolute',
           width: size * 0.6,
@@ -3243,7 +3340,12 @@ function AppContent() {
           );
         })}
 
-        <View style={{ marginTop: 16 }}>
+        {/* AI Disclaimer */}
+        <Text style={{ color: colors.muted, fontSize: 11, textAlign: 'center', marginTop: 12, marginBottom: 8 }}>
+          AI scanner may make mistakes. Please verify all values before adding.
+        </Text>
+
+        <View style={{ marginTop: 8 }}>
           <TouchableOpacity
             style={[styles.button, { backgroundColor: colors.success, marginBottom: 8 }]}
             onPress={confirmScannedItems}
