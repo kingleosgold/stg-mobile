@@ -124,7 +124,7 @@ const FloatingInput = ({ label, value, onChangeText, placeholder, keyboardType, 
   );
 };
 
-const PieChart = ({ data, size = 150 }) => {
+const PieChart = ({ data, size = 150, cardBgColor, textColor, mutedColor }) => {
   const total = data.reduce((sum, item) => sum + item.value, 0);
   if (total === 0) return null;
 
@@ -171,18 +171,19 @@ const PieChart = ({ data, size = 150 }) => {
             <View style={{ width: size / 2, height: size, backgroundColor: segment.color }} />
           </View>
         ))}
+        {/* Center hole - transparent to show card background */}
         <View style={{
           position: 'absolute',
           width: size * 0.6,
           height: size * 0.6,
           borderRadius: size * 0.3,
-          backgroundColor: '#1a1a2e',
+          backgroundColor: cardBgColor || '#18181b',
           top: size * 0.2,
           left: size * 0.2,
           justifyContent: 'center',
           alignItems: 'center',
         }}>
-          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
+          <Text style={{ color: textColor || '#fff', fontWeight: '700', fontSize: 14 }}>
             ${(total / 1000).toFixed(1)}k
           </Text>
         </View>
@@ -192,7 +193,7 @@ const PieChart = ({ data, size = 150 }) => {
         {legendItems.map((item, index) => (
           <View key={index} style={{ flexDirection: 'row', alignItems: 'center' }}>
             <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: item.color, marginRight: 6 }} />
-            <Text style={{ color: '#a1a1aa', fontSize: 12 }}>{item.label} {(item.percentage * 100).toFixed(0)}%</Text>
+            <Text style={{ color: mutedColor || '#a1a1aa', fontSize: 12 }}>{item.label} {(item.percentage * 100).toFixed(0)}%</Text>
           </View>
         ))}
       </View>
@@ -2151,6 +2152,9 @@ function AppContent() {
                   { label: 'Gold', value: goldMeltValue, color: colors.gold },
                 ]}
                 size={140}
+                cardBgColor={colors.cardBg}
+                textColor={colors.text}
+                mutedColor={colors.muted}
               />
             </View>
 
@@ -2515,7 +2519,7 @@ function AppContent() {
                         flexDirection: 'row',
                         alignItems: 'center',
                         justifyContent: 'space-between',
-                        backgroundColor: '#27272a',
+                        backgroundColor: isDarkMode ? '#27272a' : '#f4f4f5',
                         padding: 12,
                         borderRadius: 8,
                         marginBottom: 12,
@@ -2529,7 +2533,7 @@ function AppContent() {
                         width: 44,
                         height: 24,
                         borderRadius: 12,
-                        backgroundColor: iCloudSyncEnabled ? colors.success : '#52525b',
+                        backgroundColor: iCloudSyncEnabled ? colors.success : (isDarkMode ? '#52525b' : '#d4d4d8'),
                         justifyContent: 'center',
                         padding: 2,
                       }}>
@@ -2553,7 +2557,7 @@ function AppContent() {
                           </Text>
                           <TouchableOpacity
                             onPress={triggerManualSync}
-                            style={{ backgroundColor: '#27272a', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}
+                            style={{ backgroundColor: isDarkMode ? '#27272a' : '#e4e4e7', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}
                             disabled={iCloudSyncing}
                           >
                             <Text style={{ color: colors.gold, fontWeight: '500', fontSize: 12 }}>
