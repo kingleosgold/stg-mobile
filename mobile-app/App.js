@@ -128,6 +128,9 @@ const PieChart = ({ data, size = 150, cardBgColor, textColor, mutedColor }) => {
   const total = data.reduce((sum, item) => sum + item.value, 0);
   if (total === 0) return null;
 
+  const gapAngle = 4; // Gap in degrees between segments
+  const bgColor = cardBgColor || '#18181b';
+
   // Calculate legend percentages from all data (including 0%)
   const legendItems = data.map((item) => ({
     ...item,
@@ -136,16 +139,123 @@ const PieChart = ({ data, size = 150, cardBgColor, textColor, mutedColor }) => {
 
   // Filter out zero-value segments for pie rendering
   const nonZeroData = data.filter((item) => item.value > 0);
+  const numSegments = nonZeroData.length;
 
-  // Build segments with angles for rendering
-  let currentAngle = 0;
+  // Build segments with angles, leaving room for gaps
+  const totalGapAngle = numSegments > 1 ? gapAngle * numSegments : 0;
+  const usableAngle = 360 - totalGapAngle;
+
+  let currentAngle = gapAngle / 2; // Start with half gap
   const segments = nonZeroData.map((item) => {
     const percentage = item.value / total;
-    const angle = percentage * 360;
+    const angle = percentage * usableAngle;
     const startAngle = currentAngle;
-    currentAngle += angle;
+    currentAngle += angle + gapAngle;
     return { ...item, percentage, startAngle, angle };
   });
+
+  // Render a segment using the half-circle overlay technique
+  const renderSegment = (segment) => {
+    const { startAngle, angle, color, label } = segment;
+    if (angle <= 0) return null;
+
+    // For segments <= 180 degrees, we use one half-circle
+    // For segments > 180 degrees, we need two half-circles
+    if (angle <= 180) {
+      return (
+        <View
+          key={label}
+          style={{
+            position: 'absolute',
+            width: size,
+            height: size,
+          }}
+        >
+          {/* First half-circle at startAngle */}
+          <View style={{
+            position: 'absolute',
+            width: size,
+            height: size,
+            transform: [{ rotate: `${startAngle}deg` }],
+          }}>
+            <View style={{
+              position: 'absolute',
+              width: size / 2,
+              height: size,
+              left: size / 2,
+              backgroundColor: color,
+            }} />
+          </View>
+          {/* Mask to cut at startAngle + angle */}
+          <View style={{
+            position: 'absolute',
+            width: size,
+            height: size,
+            transform: [{ rotate: `${startAngle + angle}deg` }],
+          }}>
+            <View style={{
+              position: 'absolute',
+              width: size / 2,
+              height: size,
+              left: size / 2,
+              backgroundColor: bgColor,
+            }} />
+          </View>
+        </View>
+      );
+    } else {
+      // For > 180 degrees, render full right half then partial left
+      return (
+        <View key={label} style={{ position: 'absolute', width: size, height: size }}>
+          {/* Right half (180 degrees) */}
+          <View style={{
+            position: 'absolute',
+            width: size,
+            height: size,
+            transform: [{ rotate: `${startAngle}deg` }],
+          }}>
+            <View style={{
+              position: 'absolute',
+              width: size / 2,
+              height: size,
+              left: size / 2,
+              backgroundColor: color,
+            }} />
+          </View>
+          {/* Left half up to the remaining angle */}
+          <View style={{
+            position: 'absolute',
+            width: size,
+            height: size,
+            transform: [{ rotate: `${startAngle + 180}deg` }],
+          }}>
+            <View style={{
+              position: 'absolute',
+              width: size / 2,
+              height: size,
+              left: size / 2,
+              backgroundColor: color,
+            }} />
+          </View>
+          {/* Mask for the remaining */}
+          <View style={{
+            position: 'absolute',
+            width: size,
+            height: size,
+            transform: [{ rotate: `${startAngle + angle}deg` }],
+          }}>
+            <View style={{
+              position: 'absolute',
+              width: size / 2,
+              height: size,
+              left: size / 2,
+              backgroundColor: bgColor,
+            }} />
+          </View>
+        </View>
+      );
+    }
+  };
 
   return (
     <View style={{ alignItems: 'center' }}>
@@ -155,29 +265,17 @@ const PieChart = ({ data, size = 150, cardBgColor, textColor, mutedColor }) => {
         borderRadius: size / 2,
         overflow: 'hidden',
         position: 'relative',
-        backgroundColor: segments[0]?.color, // Fill background with first segment color
+        backgroundColor: bgColor,
       }}>
-        {/* Render remaining segments as overlays */}
-        {segments.slice(1).map((segment, index) => (
-          <View
-            key={index}
-            style={{
-              position: 'absolute',
-              width: size,
-              height: size,
-              transform: [{ rotate: `${segment.startAngle}deg` }],
-            }}
-          >
-            <View style={{ width: size / 2, height: size, backgroundColor: segment.color }} />
-          </View>
-        ))}
-        {/* Center hole - transparent to show card background */}
+        {/* Render all segments */}
+        {segments.map((segment) => renderSegment(segment))}
+        {/* Center hole */}
         <View style={{
           position: 'absolute',
           width: size * 0.6,
           height: size * 0.6,
           borderRadius: size * 0.3,
-          backgroundColor: cardBgColor || '#18181b',
+          backgroundColor: bgColor,
           top: size * 0.2,
           left: size * 0.2,
           justifyContent: 'center',
