@@ -432,6 +432,113 @@ function AppContent() {
     return (premium / unitPrice) * 100;
   };
 
+  // Helper function to parse various date formats into YYYY-MM-DD
+  // Handles: 2023-03-21, Mar 21 2023, 03/21/2023, 21/03/2023, March 21, 2023, etc.
+  const parseDate = (dateStr) => {
+    if (!dateStr) return '';
+    const str = String(dateStr).trim();
+    if (!str) return '';
+
+    // Month name mappings
+    const months = {
+      jan: '01', january: '01',
+      feb: '02', february: '02',
+      mar: '03', march: '03',
+      apr: '04', april: '04',
+      may: '05',
+      jun: '06', june: '06',
+      jul: '07', july: '07',
+      aug: '08', august: '08',
+      sep: '09', sept: '09', september: '09',
+      oct: '10', october: '10',
+      nov: '11', november: '11',
+      dec: '12', december: '12',
+    };
+
+    // Already in YYYY-MM-DD format
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+      return str;
+    }
+
+    // ISO format with time: 2023-03-21T... -> 2023-03-21
+    if (/^\d{4}-\d{2}-\d{2}T/.test(str)) {
+      return str.substring(0, 10);
+    }
+
+    // MM/DD/YYYY or MM-DD-YYYY (US format)
+    let match = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if (match) {
+      const [, m, d, y] = match;
+      return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    }
+
+    // DD/MM/YYYY or DD-MM-YYYY (European format) - check if day > 12
+    match = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if (match) {
+      const [, first, second, y] = match;
+      // If first number > 12, it must be day (European format)
+      if (parseInt(first) > 12) {
+        return `${y}-${second.padStart(2, '0')}-${first.padStart(2, '0')}`;
+      }
+    }
+
+    // YYYY/MM/DD or YYYY.MM.DD
+    match = str.match(/^(\d{4})[\/\.](\d{1,2})[\/\.](\d{1,2})$/);
+    if (match) {
+      const [, y, m, d] = match;
+      return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    }
+
+    // Month DD, YYYY or Month DD YYYY (e.g., "March 21, 2023" or "Mar 21 2023")
+    match = str.match(/^([a-zA-Z]+)\s+(\d{1,2}),?\s+(\d{4})$/);
+    if (match) {
+      const [, monthStr, d, y] = match;
+      const m = months[monthStr.toLowerCase()];
+      if (m) {
+        return `${y}-${m}-${d.padStart(2, '0')}`;
+      }
+    }
+
+    // DD Month YYYY (e.g., "21 March 2023" or "21 Mar 2023")
+    match = str.match(/^(\d{1,2})\s+([a-zA-Z]+),?\s+(\d{4})$/);
+    if (match) {
+      const [, d, monthStr, y] = match;
+      const m = months[monthStr.toLowerCase()];
+      if (m) {
+        return `${y}-${m}-${d.padStart(2, '0')}`;
+      }
+    }
+
+    // Month YYYY (assume day 1) - e.g., "March 2023"
+    match = str.match(/^([a-zA-Z]+)\s+(\d{4})$/);
+    if (match) {
+      const [, monthStr, y] = match;
+      const m = months[monthStr.toLowerCase()];
+      if (m) {
+        return `${y}-${m}-01`;
+      }
+    }
+
+    // Try JavaScript's Date parser as last resort
+    try {
+      const parsed = new Date(str);
+      if (!isNaN(parsed.getTime())) {
+        const y = parsed.getFullYear();
+        const m = String(parsed.getMonth() + 1).padStart(2, '0');
+        const d = String(parsed.getDate()).padStart(2, '0');
+        // Only accept if year is reasonable (1900-2100)
+        if (y >= 1900 && y <= 2100) {
+          return `${y}-${m}-${d}`;
+        }
+      }
+    } catch (e) {
+      // Ignore parse errors
+    }
+
+    // Return original if we couldn't parse it
+    return str;
+  };
+
   // ============================================
   // CALCULATIONS
   // ============================================
@@ -1417,7 +1524,7 @@ function AppContent() {
             allItems = [...allItems, ...data.items];
             // Use first found dealer/date
             if (!dealer && data.dealer) dealer = data.dealer;
-            if (!purchaseDate && data.purchaseDate) purchaseDate = data.purchaseDate;
+            if (!purchaseDate && data.purchaseDate) purchaseDate = parseDate(data.purchaseDate);
             successCount++;
             if (__DEV__) console.log(`✅ Image ${i + 1}: Found ${data.items.length} items`);
           } else {
@@ -1668,7 +1775,7 @@ function AppContent() {
           metal,
           quantity: parseInt(row[colMap.quantity]) || 1,
           unitPrice: parseFloat(row[colMap.unitPrice]) || 0,
-          datePurchased: row[colMap.date] ? String(row[colMap.date]) : '',
+          datePurchased: row[colMap.date] ? parseDate(String(row[colMap.date])) : '',
           source: row[colMap.dealer] ? String(row[colMap.dealer]) : '',
           ozt: parseFloat(row[colMap.ozt]) || 1,
         });
