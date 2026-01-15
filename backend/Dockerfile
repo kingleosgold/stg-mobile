@@ -17,8 +17,10 @@ RUN npm ci --only=production
 
 # Copy application code
 COPY server.js ./
+COPY supabaseClient.js ./
 COPY data/ ./data/
 COPY scrapers/ ./scrapers/
+COPY services/ ./services/
 
 # Security: No writable volumes needed (we never store data)
 # The app runs entirely in memory
