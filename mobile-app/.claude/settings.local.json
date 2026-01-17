@@ -42,7 +42,8 @@
       "WebFetch(domain:expo.dev)",
       "Bash(eas build:list:*)",
       "Bash(python3:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(npm search:*)"
     ]
   }
 }

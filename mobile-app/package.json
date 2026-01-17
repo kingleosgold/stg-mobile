@@ -13,6 +13,7 @@
     "submit:android": "eas submit --platform android"
   },
   "dependencies": {
+    "@bacons/apple-targets": "^3.0.7",
     "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "^54.0.30",
     "expo-constants": "~18.0.3",

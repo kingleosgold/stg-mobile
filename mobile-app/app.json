@@ -21,6 +21,10 @@
       "bundleIdentifier": "com.stacktrackerpro.app",
       "buildNumber": "14",
       "requireFullScreen": false,
+      "appleTeamId": "3BKELS5FG9",
+      "entitlements": {
+        "com.apple.security.application-groups": ["group.com.stacktrackerpro.shared"]
+      },
       "infoPlist": {
         "NSCameraUsageDescription": "Stack Tracker Pro needs camera access to scan your precious metals purchase receipts using AI-powered OCR. Your photos are processed securely and never stored.",
         "NSPhotoLibraryUsageDescription": "Stack Tracker Pro needs photo library access to scan your purchase receipts. Your photos are processed securely and never stored on our servers.",
@@ -89,7 +93,8 @@
           "color": "#fbbf24",
           "sounds": []
         }
-      ]
+      ],
+      "@bacons/apple-targets"
     ],
     "extra": {
       "apiUrl": "https://stack-tracker-pro-production.up.railway.app",
