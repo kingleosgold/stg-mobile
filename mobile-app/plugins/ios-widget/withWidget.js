@@ -19,6 +19,7 @@ const path = require('path');
 const WIDGET_NAME = 'StackTrackerWidget';
 const APP_GROUP_ID = 'group.com.stacktrackerpro.shared';
 const BUNDLE_ID = 'com.stacktrackerpro.app';
+const APPLE_TEAM_ID = '3BKELS5FG9';
 
 /**
  * Add App Group entitlement to main app
@@ -308,6 +309,9 @@ const withXcodeProjectMod = (config) => {
               buildSettings.PRODUCT_NAME = '"$(TARGET_NAME)"';
               buildSettings.SKIP_INSTALL = 'YES';
               buildSettings.SWIFT_EMIT_LOC_STRINGS = 'YES';
+              // Code signing settings - required for EAS builds
+              buildSettings.DEVELOPMENT_TEAM = APPLE_TEAM_ID;
+              buildSettings.CODE_SIGN_STYLE = 'Automatic';
             }
           }
         }
