@@ -864,27 +864,11 @@ function AppContent() {
   // 1. We have a midnight value
   // 2. The midnight date is today
   // 3. We have live prices (not stale defaults)
-  // 4. The percentage change is reasonable (< 15% in a day - metals rarely move more)
-  const isReasonableChange = Math.abs(dailyChangePct) < 15;
   const isTodaySnapshot = midnightDate === new Date().toDateString();
   const showDailyChange = midnightValue !== null
     && midnightValue > 0
     && isTodaySnapshot
-    && spotPricesLive
-    && isReasonableChange;
-
-  // If change is unreasonable and we have live prices, clear the stale snapshot
-  // This will trigger a recalibration on the next render cycle
-  useEffect(() => {
-    const clearStaleSnapshot = async () => {
-      if (spotPricesLive && isTodaySnapshot && midnightValue > 0 && !isReasonableChange) {
-        console.log(`⚠️ Unreasonable daily change (${dailyChangePct.toFixed(1)}%), clearing stale snapshot for recalibration...`);
-        await AsyncStorage.removeItem('stack_midnight_date');
-        setMidnightDate(null);
-      }
-    };
-    clearStaleSnapshot();
-  }, [spotPricesLive, isReasonableChange, isTodaySnapshot, midnightValue, dailyChangePct]);
+    && spotPricesLive;
 
   // Speculation
   const specSilverNum = parseFloat(specSilverPrice) || silverSpot;
@@ -2761,7 +2745,6 @@ function AppContent() {
                   <Text style={{ color: colors.muted, fontSize: 12, textAlign: 'center', marginTop: 4 }}>
                     {!spotPricesLive ? 'Waiting for live prices...' :
                      !midnightValue ? 'No baseline yet. Check back tomorrow!' :
-                     !isReasonableChange ? 'Recalibrating...' :
                      'No data yet'}
                   </Text>
                 </View>
