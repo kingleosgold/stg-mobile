@@ -89,8 +89,7 @@
           "color": "#fbbf24",
           "sounds": []
         }
-      ],
-      "./plugins/ios-widget/withWidget.js"
+      ]
     ],
     "extra": {
       "apiUrl": "https://stack-tracker-pro-production.up.railway.app",
