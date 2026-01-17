@@ -35,7 +35,9 @@
       "Bash(python:*)",
       "Bash(git log:*)",
       "Bash(npm uninstall:*)",
-      "Bash(eas submit:*)"
+      "Bash(eas submit:*)",
+      "Bash(git ls-tree:*)",
+      "Bash(git fetch:*)"
     ]
   }
 }
