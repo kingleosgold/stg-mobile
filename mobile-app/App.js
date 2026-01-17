@@ -672,7 +672,7 @@ function AppContent() {
   } : {
     // Light mode colors
     silver: '#64748b',
-    gold: '#d97706',
+    gold: '#ca8a04',
     success: '#16a34a',
     error: '#dc2626',
     text: '#18181b',
