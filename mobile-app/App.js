@@ -694,6 +694,10 @@ function AppContent() {
   // Format: { "2025-01-15": { gold: 2650, silver: 31.50 }, ... }
   const historicalPriceCache = useRef({});
 
+  // Snapshots cache - stores ALL snapshots to avoid re-fetching on range change
+  // We fetch once and filter client-side by range
+  const snapshotsCacheRef = useRef({ data: null, calculatedData: null, fetched: false });
+
   // Form State
   const [form, setForm] = useState({
     productName: '', source: '', datePurchased: '', ozt: '',
@@ -2038,12 +2042,72 @@ function AppContent() {
   };
 
   /**
-   * Fetch portfolio snapshots for analytics charts
-   * If user has holdings but no snapshots, saves one immediately and calculates historical data
+   * Filter snapshots array by time range (client-side filtering)
    */
-  const fetchAnalyticsSnapshots = async (range = analyticsRange) => {
+  const filterSnapshotsByRange = (snapshots, range) => {
+    if (!snapshots || snapshots.length === 0) return [];
+
+    const now = new Date();
+    let startDate;
+
+    switch (range.toUpperCase()) {
+      case '1W':
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case '1M':
+        startDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+        break;
+      case '3M':
+        startDate = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
+        break;
+      case '6M':
+        startDate = new Date(now.getFullYear(), now.getMonth() - 6, now.getDate());
+        break;
+      case '1Y':
+        startDate = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+        break;
+      case 'ALL':
+      default:
+        return snapshots; // Return all
+    }
+
+    const startDateStr = startDate.toISOString().split('T')[0];
+    return snapshots.filter(s => s.date >= startDateStr);
+  };
+
+  /**
+   * Apply the selected range filter to cached snapshots and update state
+   */
+  const applyRangeFilter = (range) => {
+    const cache = snapshotsCacheRef.current;
+
+    // Use calculated data if available (for users with holdings but no snapshots)
+    const sourceData = cache.calculatedData || cache.data;
+
+    if (sourceData && sourceData.length > 0) {
+      const filtered = filterSnapshotsByRange(sourceData, range);
+      setAnalyticsSnapshots(filtered);
+      if (__DEV__) console.log(`📊 Filtered to ${filtered.length} snapshots for range: ${range}`);
+    }
+  };
+
+  /**
+   * Fetch portfolio snapshots for analytics charts
+   * Fetches ALL data once and caches it - subsequent range changes filter client-side
+   * If user has holdings but no snapshots, calculates historical data
+   */
+  const fetchAnalyticsSnapshots = async (forceRefresh = false) => {
     if (!hasGold && !hasLifetimeAccess) return;
     if (!revenueCatUserId) return;
+
+    const cache = snapshotsCacheRef.current;
+
+    // If we have cached data and not forcing refresh, just apply the filter
+    if (!forceRefresh && cache.fetched && (cache.data || cache.calculatedData)) {
+      if (__DEV__) console.log('📊 Using cached snapshots data');
+      applyRangeFilter(analyticsRange);
+      return;
+    }
 
     // Cancel any in-progress fetch
     if (analyticsAbortRef.current) {
@@ -2059,15 +2123,16 @@ function AppContent() {
       // Add timeout
       const timeoutId = setTimeout(() => controller.abort(), 10000);
 
+      // Always fetch ALL data - we filter client-side
       const response = await fetch(
-        `${API_BASE_URL}/api/snapshots/${encodeURIComponent(revenueCatUserId)}?range=${range}`,
+        `${API_BASE_URL}/api/snapshots/${encodeURIComponent(revenueCatUserId)}?range=ALL`,
         { signal: controller.signal }
       );
       clearTimeout(timeoutId);
 
-      // Check if this request was aborted (user switched ranges)
+      // Check if this request was aborted
       if (controller.signal.aborted) {
-        if (__DEV__) console.log('📊 Analytics fetch aborted (range changed)');
+        if (__DEV__) console.log('📊 Analytics fetch aborted');
         return;
       }
 
@@ -2079,14 +2144,14 @@ function AppContent() {
       if (data.success && data.snapshots) {
         // If user has holdings but no snapshots, save one now and calculate historical data
         if (data.snapshots.length === 0 && (silverItems.length > 0 || goldItems.length > 0)) {
-          if (__DEV__) console.log('📊 No snapshots found but user has holdings - calculating history for range:', range);
+          if (__DEV__) console.log('📊 No snapshots found but user has holdings - calculating history');
 
           // Save current snapshot (don't await - let it run in background)
           saveDailySnapshot().catch(err => console.log('Snapshot save error:', err.message));
 
-          // Calculate historical data from holdings with a timeout wrapper
+          // Calculate historical data for ALL time (we'll filter client-side)
           try {
-            const historicalPromise = calculateHistoricalPortfolioData(range);
+            const historicalPromise = calculateHistoricalPortfolioData('ALL');
             const timeoutPromise = new Promise((_, reject) =>
               setTimeout(() => reject(new Error('Historical calculation timeout')), 15000)
             );
@@ -2096,8 +2161,15 @@ function AppContent() {
             if (controller.signal.aborted) return;
 
             if (historicalData && historicalData.length > 0) {
-              setAnalyticsSnapshots(historicalData);
-              if (__DEV__) console.log(`📊 Calculated ${historicalData.length} historical data points`);
+              // Cache the calculated data
+              cache.calculatedData = historicalData;
+              cache.data = null;
+              cache.fetched = true;
+
+              // Apply current range filter
+              const filtered = filterSnapshotsByRange(historicalData, analyticsRange);
+              setAnalyticsSnapshots(filtered);
+              if (__DEV__) console.log(`📊 Cached ${historicalData.length} calculated points, showing ${filtered.length} for ${analyticsRange}`);
             } else {
               throw new Error('No historical data returned');
             }
@@ -2107,7 +2179,7 @@ function AppContent() {
 
             if (__DEV__) console.log('⚠️ Historical calculation failed, using today only:', histError.message);
             // Fallback: show today's data only
-            setAnalyticsSnapshots([{
+            const todayData = [{
               date: new Date().toISOString().split('T')[0],
               total_value: totalMeltValue,
               gold_value: totalGoldOzt * goldSpot,
@@ -2116,13 +2188,27 @@ function AppContent() {
               silver_oz: totalSilverOzt,
               gold_spot: goldSpot,
               silver_spot: silverSpot,
-            }]);
+            }];
+            cache.calculatedData = todayData;
+            cache.data = null;
+            cache.fetched = true;
+            setAnalyticsSnapshots(todayData);
           }
         } else if (data.snapshots.length > 0) {
-          setAnalyticsSnapshots(data.snapshots);
-          if (__DEV__) console.log(`📊 Loaded ${data.snapshots.length} snapshots for range: ${range}`);
+          // Cache the API snapshots
+          cache.data = data.snapshots;
+          cache.calculatedData = null;
+          cache.fetched = true;
+
+          // Apply current range filter
+          const filtered = filterSnapshotsByRange(data.snapshots, analyticsRange);
+          setAnalyticsSnapshots(filtered);
+          if (__DEV__) console.log(`📊 Cached ${data.snapshots.length} snapshots, showing ${filtered.length} for ${analyticsRange}`);
         } else {
           // No holdings and no snapshots
+          cache.data = [];
+          cache.calculatedData = null;
+          cache.fetched = true;
           setAnalyticsSnapshots([]);
         }
       } else {
@@ -2140,7 +2226,7 @@ function AppContent() {
       console.error('❌ Error fetching analytics:', error.message);
       // On error, show today's data as fallback if user has holdings
       if (silverItems.length > 0 || goldItems.length > 0) {
-        setAnalyticsSnapshots([{
+        const todayData = [{
           date: new Date().toISOString().split('T')[0],
           total_value: totalMeltValue,
           gold_value: totalGoldOzt * goldSpot,
@@ -2149,7 +2235,8 @@ function AppContent() {
           silver_oz: totalSilverOzt,
           gold_spot: goldSpot,
           silver_spot: silverSpot,
-        }]);
+        }];
+        setAnalyticsSnapshots(todayData);
       } else {
         setAnalyticsSnapshots([]);
       }
@@ -2168,10 +2255,10 @@ function AppContent() {
     }
   }, [dataLoaded, spotPricesLive, revenueCatUserId, hasGold, hasLifetimeAccess]);
 
-  // Fetch analytics when range changes or tab opens
+  // Fetch analytics when tab opens (data is cached, so only fetches once per session)
   useEffect(() => {
     if (tab === 'analytics' && revenueCatUserId && (hasGold || hasLifetimeAccess)) {
-      fetchAnalyticsSnapshots(analyticsRange);
+      fetchAnalyticsSnapshots(); // Uses cache if available
     }
 
     // Cleanup: cancel any in-progress fetch when dependencies change or unmount
@@ -2180,7 +2267,15 @@ function AppContent() {
         analyticsAbortRef.current.abort();
       }
     };
-  }, [tab, analyticsRange, revenueCatUserId, hasGold, hasLifetimeAccess]);
+  }, [tab, revenueCatUserId, hasGold, hasLifetimeAccess]); // Removed analyticsRange - handled by filter
+
+  // Apply filter when range changes (instant, no API call)
+  useEffect(() => {
+    const cache = snapshotsCacheRef.current;
+    if (tab === 'analytics' && cache.fetched && (cache.data || cache.calculatedData)) {
+      applyRangeFilter(analyticsRange);
+    }
+  }, [analyticsRange]);
 
   // ============================================
   // CLOUD BACKUP
@@ -2433,7 +2528,9 @@ function AppContent() {
   const onRefreshAnalytics = async () => {
     setIsRefreshing(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await fetchAnalyticsSnapshots(analyticsRange);
+    // Clear cache and force refresh
+    snapshotsCacheRef.current = { data: null, calculatedData: null, fetched: false };
+    await fetchAnalyticsSnapshots(true); // forceRefresh = true
     setIsRefreshing(false);
   };
 
