@@ -1210,10 +1210,24 @@ app.get('/api/snapshots/:userId', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Get snapshots error:', error);
+    console.error('❌ Get snapshots error:', error.message);
+
+    // If database is not available, return empty array instead of error
+    // This allows the app to gracefully handle and calculate historical data
+    if (error.message === 'Database not available') {
+      return res.json({
+        success: true,
+        snapshots: [],
+        count: 0,
+        range: req.query.range || '1M',
+        note: 'Database temporarily unavailable'
+      });
+    }
+
     res.status(500).json({
       success: false,
-      error: 'Failed to get snapshots'
+      error: 'Failed to get snapshots',
+      details: error.message
     });
   }
 });

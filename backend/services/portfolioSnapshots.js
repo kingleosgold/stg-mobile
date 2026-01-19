@@ -66,7 +66,8 @@ async function saveSnapshot({
  */
 async function getSnapshots(userId, range = '1M') {
   if (!isSupabaseAvailable()) {
-    throw new Error('Database not available');
+    console.log('⚠️ Supabase not available for getSnapshots');
+    return []; // Return empty array instead of throwing
   }
 
   const supabase = getSupabase();
@@ -107,8 +108,9 @@ async function getSnapshots(userId, range = '1M') {
     .order('date', { ascending: true });
 
   if (error) {
-    console.error('Error fetching snapshots:', error);
-    throw error;
+    console.error('Error fetching snapshots:', error.message || error);
+    // Return empty array instead of throwing - allows app to calculate historical data
+    return [];
   }
 
   console.log(`📊 Retrieved ${data?.length || 0} snapshots for user ${userId.substring(0, 8)}...`);
