@@ -2009,14 +2009,24 @@ function AppContent() {
       }
     };
 
-    // Fetch uncached dates (if any)
+    // Fetch uncached dates with a time limit
+    // After time limit, use whatever we've cached so far
+    const fetchStartTime = Date.now();
+    const maxFetchTime = 30000; // 30 seconds max for fetching
     let consecutiveFailures = 0;
     const maxConsecutiveFailures = 3;
+    let fetchedCount = 0;
 
     for (const date of uncachedDates) {
+      // Stop if we've exceeded the time limit
+      if (Date.now() - fetchStartTime > maxFetchTime) {
+        console.log(`⏱️ Fetch time limit reached (${maxFetchTime/1000}s), using ${fetchedCount} fetched + ${cachedCount} cached prices`);
+        break;
+      }
+
       // Stop if we've had too many failures in a row
       if (consecutiveFailures >= maxConsecutiveFailures) {
-        if (__DEV__) console.log('⚠️ Too many consecutive failures, stopping historical fetch');
+        console.log('⚠️ Too many consecutive failures, stopping historical fetch');
         break;
       }
 
@@ -2027,21 +2037,24 @@ function AppContent() {
 
         if (priceData.success) {
           consecutiveFailures = 0; // Reset on success
+          fetchedCount++;
           // Cache the result
           historicalPriceCache.current[date] = {
             gold: priceData.gold,
             silver: priceData.silver,
           };
-          if (__DEV__) console.log(`   ✅ Fetched & cached ${date}: Gold $${priceData.gold}, Silver $${priceData.silver}`);
+          console.log(`   ✅ Fetched & cached ${date}: Gold $${priceData.gold}, Silver $${priceData.silver}`);
         } else {
           consecutiveFailures++;
-          if (__DEV__) console.log(`⚠️ API returned error for ${date}:`, priceData.error);
+          console.log(`⚠️ API returned error for ${date}:`, priceData.error);
         }
       } catch (error) {
         consecutiveFailures++;
-        if (__DEV__) console.log(`⚠️ Could not fetch price for ${date}:`, error.message);
+        console.log(`⚠️ Could not fetch price for ${date}:`, error.message);
       }
     }
+
+    console.log(`📊 Fetch phase complete: ${fetchedCount} new + ${cachedCount} previously cached`);
 
     // Now calculate portfolio values using cached prices
     const historicalData = [];
@@ -2075,6 +2088,11 @@ function AppContent() {
         gold_spot: goldSpotHist,
         silver_spot: silverSpotHist,
       });
+    }
+
+    console.log(`📊 Calculation complete: ${historicalData.length} data points from ${sortedDates.length} dates`);
+    if (historicalData.length > 0) {
+      console.log(`   📅 Data range: ${historicalData[0].date} to ${historicalData[historicalData.length - 1].date}`);
     }
 
     return historicalData;
@@ -2214,22 +2232,19 @@ function AppContent() {
 
         // Always calculate historical data when user has holdings
         // This ensures we have data going back to earliest purchase dates
+        // Note: The calculation function handles its own time limits and returns partial results
         let calculatedData = null;
         if (hasHoldings) {
           try {
-            if (__DEV__) console.log('📊 Calculating historical data from holdings...');
-            const historicalPromise = calculateHistoricalPortfolioData('ALL');
-            const timeoutPromise = new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('Historical calculation timeout')), 15000)
-            );
-            calculatedData = await Promise.race([historicalPromise, timeoutPromise]);
+            console.log('📊 Calculating historical data from holdings...');
+            calculatedData = await calculateHistoricalPortfolioData('ALL');
 
             if (controller.signal.aborted) return;
 
-            if (__DEV__) console.log(`📊 Calculated ${calculatedData?.length || 0} historical points`);
+            console.log(`📊 Calculated ${calculatedData?.length || 0} historical points`);
           } catch (histError) {
             if (controller.signal.aborted) return;
-            if (__DEV__) console.log('⚠️ Historical calculation failed:', histError.message);
+            console.log('⚠️ Historical calculation failed:', histError.message);
           }
         }
 
