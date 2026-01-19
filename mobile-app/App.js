@@ -1914,9 +1914,11 @@ function AppContent() {
     }
 
     // Generate dates to calculate (sample every few days for performance)
+    // Limit to max 10 data points to avoid too many API calls
     const dates = [];
     const totalDays = Math.ceil((now - startDate) / (1000 * 60 * 60 * 24));
-    const step = totalDays > 60 ? Math.ceil(totalDays / 30) : (totalDays > 14 ? 2 : 1);
+    const maxPoints = 10;
+    const step = Math.max(1, Math.ceil(totalDays / maxPoints));
 
     for (let d = new Date(startDate); d <= now; d.setDate(d.getDate() + step)) {
       dates.push(d.toISOString().split('T')[0]);
@@ -1925,9 +1927,34 @@ function AppContent() {
     const today = now.toISOString().split('T')[0];
     if (!dates.includes(today)) dates.push(today);
 
+    if (__DEV__) console.log(`📊 Calculating ${dates.length} data points for range ${range}`);
+
+    // Helper function to fetch with timeout
+    const fetchWithTimeout = async (url, timeoutMs = 5000) => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const response = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        return response;
+      } catch (error) {
+        clearTimeout(timeoutId);
+        throw error;
+      }
+    };
+
     // Fetch historical prices and calculate portfolio values
     const historicalData = [];
+    let consecutiveFailures = 0;
+    const maxConsecutiveFailures = 3;
+
     for (const date of dates) {
+      // Stop if we've had too many failures in a row
+      if (consecutiveFailures >= maxConsecutiveFailures) {
+        if (__DEV__) console.log('⚠️ Too many consecutive failures, stopping historical fetch');
+        break;
+      }
+
       try {
         // Get items owned on this date (purchased on or before this date)
         const ownedItems = allItems.filter(item => !item.datePurchased || item.datePurchased <= date);
@@ -1942,11 +1969,12 @@ function AppContent() {
           .filter(i => goldItems.includes(i))
           .reduce((sum, i) => sum + (i.ozt * i.quantity), 0);
 
-        // Fetch historical spot prices
-        const response = await fetch(`${API_BASE_URL}/api/historical-spot?date=${date}`);
+        // Fetch historical spot prices with timeout
+        const response = await fetchWithTimeout(`${API_BASE_URL}/api/historical-spot?date=${date}`, 5000);
         const priceData = await response.json();
 
         if (priceData.success) {
+          consecutiveFailures = 0; // Reset on success
           const silverSpotHist = priceData.silver || silverSpot;
           const goldSpotHist = priceData.gold || goldSpot;
           const totalValue = (silverOz * silverSpotHist) + (goldOz * goldSpotHist);
@@ -1961,8 +1989,12 @@ function AppContent() {
             gold_spot: goldSpotHist,
             silver_spot: silverSpotHist,
           });
+        } else {
+          consecutiveFailures++;
+          if (__DEV__) console.log(`⚠️ API returned error for ${date}:`, priceData.error);
         }
       } catch (error) {
+        consecutiveFailures++;
         if (__DEV__) console.log(`⚠️ Could not fetch price for ${date}:`, error.message);
       }
     }
@@ -1980,9 +2012,15 @@ function AppContent() {
 
     setAnalyticsLoading(true);
     try {
+      // Add timeout to the initial fetch
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
       const response = await fetch(
-        `${API_BASE_URL}/api/snapshots/${encodeURIComponent(revenueCatUserId)}?range=${range}`
+        `${API_BASE_URL}/api/snapshots/${encodeURIComponent(revenueCatUserId)}?range=${range}`,
+        { signal: controller.signal }
       );
+      clearTimeout(timeoutId);
       const data = await response.json();
 
       if (data.success && data.snapshots) {
@@ -1990,17 +2028,26 @@ function AppContent() {
         if (data.snapshots.length === 0 && (silverItems.length > 0 || goldItems.length > 0)) {
           if (__DEV__) console.log('📊 No snapshots found but user has holdings - saving initial snapshot and calculating history');
 
-          // Save current snapshot
-          await saveDailySnapshot();
+          // Save current snapshot (don't await - let it run in background)
+          saveDailySnapshot().catch(err => console.log('Snapshot save error:', err.message));
 
-          // Calculate historical data from holdings
-          const historicalData = await calculateHistoricalPortfolioData(range);
+          // Calculate historical data from holdings with a timeout wrapper
+          try {
+            const historicalPromise = calculateHistoricalPortfolioData(range);
+            const timeoutPromise = new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Historical calculation timeout')), 15000)
+            );
+            const historicalData = await Promise.race([historicalPromise, timeoutPromise]);
 
-          if (historicalData.length > 0) {
-            setAnalyticsSnapshots(historicalData);
-            if (__DEV__) console.log(`📊 Calculated ${historicalData.length} historical data points`);
-          } else {
-            // At minimum, show today's data
+            if (historicalData && historicalData.length > 0) {
+              setAnalyticsSnapshots(historicalData);
+              if (__DEV__) console.log(`📊 Calculated ${historicalData.length} historical data points`);
+            } else {
+              throw new Error('No historical data returned');
+            }
+          } catch (histError) {
+            if (__DEV__) console.log('⚠️ Historical calculation failed, using today only:', histError.message);
+            // Fallback: show today's data only
             setAnalyticsSnapshots([{
               date: new Date().toISOString().split('T')[0],
               total_value: totalMeltValue,
@@ -2012,13 +2059,35 @@ function AppContent() {
               silver_spot: silverSpot,
             }]);
           }
-        } else {
+        } else if (data.snapshots.length > 0) {
           setAnalyticsSnapshots(data.snapshots);
           if (__DEV__) console.log(`📊 Loaded ${data.snapshots.length} snapshots for range: ${range}`);
+        } else {
+          // No holdings and no snapshots
+          setAnalyticsSnapshots([]);
         }
+      } else {
+        // API returned but not successful - show empty state
+        if (__DEV__) console.log('⚠️ Analytics API returned unsuccessful response');
+        setAnalyticsSnapshots([]);
       }
     } catch (error) {
       console.error('❌ Error fetching analytics:', error.message);
+      // On error, show today's data as fallback if user has holdings
+      if (silverItems.length > 0 || goldItems.length > 0) {
+        setAnalyticsSnapshots([{
+          date: new Date().toISOString().split('T')[0],
+          total_value: totalMeltValue,
+          gold_value: totalGoldOzt * goldSpot,
+          silver_value: totalSilverOzt * silverSpot,
+          gold_oz: totalGoldOzt,
+          silver_oz: totalSilverOzt,
+          gold_spot: goldSpot,
+          silver_spot: silverSpot,
+        }]);
+      } else {
+        setAnalyticsSnapshots([]);
+      }
     } finally {
       setAnalyticsLoading(false);
     }
@@ -2283,6 +2352,13 @@ function AppContent() {
     setIsRefreshing(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     await fetchSpotPrices();
+    setIsRefreshing(false);
+  };
+
+  const onRefreshAnalytics = async () => {
+    setIsRefreshing(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await fetchAnalyticsSnapshots(analyticsRange);
     setIsRefreshing(false);
   };
 
@@ -3403,10 +3479,10 @@ function AppContent() {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         refreshControl={
-          tab === 'dashboard' ? (
+          (tab === 'dashboard' || tab === 'analytics') ? (
             <RefreshControl
               refreshing={isRefreshing}
-              onRefresh={onRefreshDashboard}
+              onRefresh={tab === 'dashboard' ? onRefreshDashboard : onRefreshAnalytics}
               tintColor={colors.gold}
               colors={[colors.gold]}
             />
@@ -3876,7 +3952,10 @@ function AppContent() {
                           borderRadius: 8,
                           backgroundColor: analyticsRange === range ? colors.gold : (isDarkMode ? '#27272a' : '#f4f4f5'),
                         }}
-                        onPress={() => setAnalyticsRange(range)}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setAnalyticsRange(range);
+                        }}
                       >
                         <Text style={{
                           color: analyticsRange === range ? '#000' : colors.text,
