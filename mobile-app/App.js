@@ -690,6 +690,10 @@ function AppContent() {
   // Analytics fetch abort controller - allows canceling in-progress fetches
   const analyticsAbortRef = useRef(null);
 
+  // Historical price cache - avoids re-fetching same dates when switching time ranges
+  // Format: { "2025-01-15": { gold: 2650, silver: 31.50 }, ... }
+  const historicalPriceCache = useRef({});
+
   // Form State
   const [form, setForm] = useState({
     productName: '', source: '', datePurchased: '', ozt: '',
@@ -1930,7 +1934,23 @@ function AppContent() {
     const today = now.toISOString().split('T')[0];
     if (!dates.includes(today)) dates.push(today);
 
-    if (__DEV__) console.log(`📊 Calculating ${dates.length} data points for range ${range}`);
+    // Pre-cache today's prices from live spot data (avoids an API call)
+    if (goldSpot > 0 && silverSpot > 0 && !historicalPriceCache.current[today]) {
+      historicalPriceCache.current[today] = {
+        gold: goldSpot,
+        silver: silverSpot,
+      };
+      if (__DEV__) console.log(`   📦 Pre-cached today's prices from live spot: Gold $${goldSpot}, Silver $${silverSpot}`);
+    }
+
+    // Check how many dates we need to fetch (not in cache)
+    const uncachedDates = dates.filter(d => !historicalPriceCache.current[d]);
+    const cachedCount = dates.length - uncachedDates.length;
+
+    if (__DEV__) {
+      console.log(`📊 Calculating ${dates.length} data points for range ${range}`);
+      console.log(`   📦 ${cachedCount} cached, ${uncachedDates.length} need fetching`);
+    }
 
     // Helper function to fetch with timeout
     const fetchWithTimeout = async (url, timeoutMs = 5000) => {
@@ -1946,12 +1966,11 @@ function AppContent() {
       }
     };
 
-    // Fetch historical prices and calculate portfolio values
-    const historicalData = [];
+    // Fetch uncached dates (if any)
     let consecutiveFailures = 0;
     const maxConsecutiveFailures = 3;
 
-    for (const date of dates) {
+    for (const date of uncachedDates) {
       // Stop if we've had too many failures in a row
       if (consecutiveFailures >= maxConsecutiveFailures) {
         if (__DEV__) console.log('⚠️ Too many consecutive failures, stopping historical fetch');
@@ -1959,39 +1978,18 @@ function AppContent() {
       }
 
       try {
-        // Get items owned on this date (purchased on or before this date)
-        const ownedItems = allItems.filter(item => !item.datePurchased || item.datePurchased <= date);
-
-        if (ownedItems.length === 0) continue;
-
-        // Calculate oz owned
-        const silverOz = ownedItems
-          .filter(i => silverItems.includes(i))
-          .reduce((sum, i) => sum + (i.ozt * i.quantity), 0);
-        const goldOz = ownedItems
-          .filter(i => goldItems.includes(i))
-          .reduce((sum, i) => sum + (i.ozt * i.quantity), 0);
-
         // Fetch historical spot prices with timeout
         const response = await fetchWithTimeout(`${API_BASE_URL}/api/historical-spot?date=${date}`, 5000);
         const priceData = await response.json();
 
         if (priceData.success) {
           consecutiveFailures = 0; // Reset on success
-          const silverSpotHist = priceData.silver || silverSpot;
-          const goldSpotHist = priceData.gold || goldSpot;
-          const totalValue = (silverOz * silverSpotHist) + (goldOz * goldSpotHist);
-
-          historicalData.push({
-            date,
-            total_value: totalValue,
-            gold_value: goldOz * goldSpotHist,
-            silver_value: silverOz * silverSpotHist,
-            gold_oz: goldOz,
-            silver_oz: silverOz,
-            gold_spot: goldSpotHist,
-            silver_spot: silverSpotHist,
-          });
+          // Cache the result
+          historicalPriceCache.current[date] = {
+            gold: priceData.gold,
+            silver: priceData.silver,
+          };
+          if (__DEV__) console.log(`   ✅ Fetched & cached ${date}: Gold $${priceData.gold}, Silver $${priceData.silver}`);
         } else {
           consecutiveFailures++;
           if (__DEV__) console.log(`⚠️ API returned error for ${date}:`, priceData.error);
@@ -2000,6 +1998,40 @@ function AppContent() {
         consecutiveFailures++;
         if (__DEV__) console.log(`⚠️ Could not fetch price for ${date}:`, error.message);
       }
+    }
+
+    // Now calculate portfolio values using cached prices
+    const historicalData = [];
+    for (const date of dates) {
+      const cached = historicalPriceCache.current[date];
+      if (!cached) continue; // Skip dates we couldn't fetch
+
+      // Get items owned on this date (purchased on or before this date)
+      const ownedItems = allItems.filter(item => !item.datePurchased || item.datePurchased <= date);
+      if (ownedItems.length === 0) continue;
+
+      // Calculate oz owned
+      const silverOz = ownedItems
+        .filter(i => silverItems.includes(i))
+        .reduce((sum, i) => sum + (i.ozt * i.quantity), 0);
+      const goldOz = ownedItems
+        .filter(i => goldItems.includes(i))
+        .reduce((sum, i) => sum + (i.ozt * i.quantity), 0);
+
+      const silverSpotHist = cached.silver || silverSpot;
+      const goldSpotHist = cached.gold || goldSpot;
+      const totalValue = (silverOz * silverSpotHist) + (goldOz * goldSpotHist);
+
+      historicalData.push({
+        date,
+        total_value: totalValue,
+        gold_value: goldOz * goldSpotHist,
+        silver_value: silverOz * silverSpotHist,
+        gold_oz: goldOz,
+        silver_oz: silverOz,
+        gold_spot: goldSpotHist,
+        silver_spot: silverSpotHist,
+      });
     }
 
     return historicalData;
