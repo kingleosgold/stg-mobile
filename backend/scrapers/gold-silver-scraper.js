@@ -8,10 +8,85 @@
  */
 
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
+
+// Store yesterday's closing prices for calculating change when using MetalPriceAPI
+let previousDayPrices = {
+  gold: null,
+  silver: null,
+  date: null, // YYYY-MM-DD format
+};
+
+// Load previous day prices from file on startup
+const PREV_PRICES_FILE = path.join(__dirname, '..', 'data', 'previous-day-prices.json');
+try {
+  if (fs.existsSync(PREV_PRICES_FILE)) {
+    const saved = JSON.parse(fs.readFileSync(PREV_PRICES_FILE, 'utf8'));
+    previousDayPrices = saved;
+    console.log('📊 Loaded previous day prices:', previousDayPrices);
+  }
+} catch (err) {
+  console.log('⚠️  Could not load previous day prices:', err.message);
+}
+
+/**
+ * Update the stored "previous day" prices for tomorrow's change calculation
+ * This saves the CURRENT prices to be used as yesterday's baseline tomorrow
+ * We track lastSavedDate to only update once per day (at end of day)
+ */
+let lastSavedDate = null;
+
+function savePreviousDayPrices(gold, silver) {
+  const today = new Date().toISOString().split('T')[0];
+
+  // Only save once per day, and only if we have valid prices
+  // This captures the last price of the day for tomorrow's comparison
+  if (lastSavedDate === today || !gold || !silver) {
+    return;
+  }
+
+  // Mark that we've processed today (will save at end of day via the file)
+  lastSavedDate = today;
+
+  // If this is a NEW day and we have stored prices, those are yesterday's prices
+  // We should NOT overwrite them until end of day
+  // Instead, schedule the save for later (or just save current as "today's baseline")
+
+  // For simplicity: save current prices with today's date
+  // Tomorrow, when date changes, these become "yesterday's" prices
+  const dataToSave = { gold, silver, date: today };
+
+  try {
+    const dataDir = path.join(__dirname, '..', 'data');
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    fs.writeFileSync(PREV_PRICES_FILE, JSON.stringify(dataToSave, null, 2));
+    console.log('💾 Saved today\'s prices for tomorrow\'s change calc:', dataToSave);
+  } catch (err) {
+    console.log('⚠️  Could not save prices:', err.message);
+  }
+}
+
+/**
+ * Get yesterday's prices for change calculation
+ * Returns the stored prices only if they're from a PREVIOUS day
+ */
+function getYesterdayPrices() {
+  const today = new Date().toISOString().split('T')[0];
+
+  // Only return prices if they're from a previous day (not today)
+  if (previousDayPrices.date && previousDayPrices.date < today) {
+    return previousDayPrices;
+  }
+
+  return null;
+}
 
 /**
  * Fetch gold and silver spot prices
- * @returns {Promise<{gold: number, silver: number, platinum: number, palladium: number, timestamp: string, source: string}>}
+ * @returns {Promise<{gold: number, silver: number, platinum: number, palladium: number, timestamp: string, source: string, change: object}>}
  */
 async function scrapeGoldSilverPrices() {
   console.log('🔍 Fetching live spot prices...');
@@ -58,6 +133,38 @@ async function scrapeGoldSilverPrices() {
     }
 
     if (goldPrice && silverPrice) {
+      // Calculate change from yesterday's prices (if available)
+      let changeData = { gold: {}, silver: {}, source: 'unavailable' };
+      const yesterdayPrices = getYesterdayPrices();
+
+      if (yesterdayPrices) {
+        const goldChange = goldPrice - yesterdayPrices.gold;
+        const goldChangePercent = (goldChange / yesterdayPrices.gold) * 100;
+        const silverChange = silverPrice - yesterdayPrices.silver;
+        const silverChangePercent = (silverChange / yesterdayPrices.silver) * 100;
+
+        changeData = {
+          gold: {
+            amount: Math.round(goldChange * 100) / 100,
+            percent: Math.round(goldChangePercent * 100) / 100,
+            prevClose: yesterdayPrices.gold,
+          },
+          silver: {
+            amount: Math.round(silverChange * 100) / 100,
+            percent: Math.round(silverChangePercent * 100) / 100,
+            prevClose: yesterdayPrices.silver,
+          },
+          source: 'calculated',
+        };
+        console.log(`📈 Calculated change - Gold: ${goldChange >= 0 ? '+' : ''}$${changeData.gold.amount} (${changeData.gold.percent}%)`);
+        console.log(`📈 Calculated change - Silver: ${silverChange >= 0 ? '+' : ''}$${changeData.silver.amount} (${changeData.silver.percent}%)`);
+      } else {
+        console.log('📊 No previous day prices available for change calculation');
+      }
+
+      // Save current prices for tomorrow's change calculation
+      savePreviousDayPrices(goldPrice, silverPrice);
+
       const result = {
         gold: Math.round(goldPrice * 100) / 100,
         silver: Math.round(silverPrice * 100) / 100,
@@ -65,6 +172,7 @@ async function scrapeGoldSilverPrices() {
         palladium: Math.round(palladiumPrice * 100) / 100,
         timestamp: new Date().toISOString(),
         source: 'metalpriceapi',
+        change: changeData,
       };
 
       console.log(`💰 Gold Spot: $${result.gold}/oz (MetalPriceAPI)`);
@@ -78,7 +186,7 @@ async function scrapeGoldSilverPrices() {
     console.log('   Falling back to GoldAPI.io...');
   }
 
-  // PRIORITY 2: Try GoldAPI.io (Fallback)
+  // PRIORITY 2: Try GoldAPI.io (Fallback) - includes change data directly
   try {
     const API_KEY = process.env.GOLD_API_KEY;
 
@@ -106,7 +214,38 @@ async function scrapeGoldSilverPrices() {
       }),
     ]);
 
+    console.log('📊 GoldAPI.io Gold Response:', JSON.stringify(goldRes.data).substring(0, 300));
+    console.log('📊 GoldAPI.io Silver Response:', JSON.stringify(silverRes.data).substring(0, 300));
+
     if (goldRes.data && silverRes.data && goldRes.data.price && silverRes.data.price) {
+      // Extract change data from GoldAPI.io response
+      // Fields: ch (change amount), chp (change percent), prev_close_price, open_price
+      const changeData = {
+        gold: {
+          amount: goldRes.data.ch ? Math.round(goldRes.data.ch * 100) / 100 : null,
+          percent: goldRes.data.chp ? Math.round(goldRes.data.chp * 100) / 100 : null,
+          prevClose: goldRes.data.prev_close_price ? Math.round(goldRes.data.prev_close_price * 100) / 100 : null,
+          openPrice: goldRes.data.open_price ? Math.round(goldRes.data.open_price * 100) / 100 : null,
+        },
+        silver: {
+          amount: silverRes.data.ch ? Math.round(silverRes.data.ch * 100) / 100 : null,
+          percent: silverRes.data.chp ? Math.round(silverRes.data.chp * 100) / 100 : null,
+          prevClose: silverRes.data.prev_close_price ? Math.round(silverRes.data.prev_close_price * 100) / 100 : null,
+          openPrice: silverRes.data.open_price ? Math.round(silverRes.data.open_price * 100) / 100 : null,
+        },
+        source: 'goldapi-io',
+      };
+
+      if (changeData.gold.amount !== null) {
+        console.log(`📈 GoldAPI change - Gold: ${changeData.gold.amount >= 0 ? '+' : ''}$${changeData.gold.amount} (${changeData.gold.percent}%)`);
+      }
+      if (changeData.silver.amount !== null) {
+        console.log(`📈 GoldAPI change - Silver: ${changeData.silver.amount >= 0 ? '+' : ''}$${changeData.silver.amount} (${changeData.silver.percent}%)`);
+      }
+
+      // Save prices for MetalPriceAPI fallback calculation
+      savePreviousDayPrices(goldRes.data.price, silverRes.data.price);
+
       const result = {
         gold: Math.round(goldRes.data.price * 100) / 100,
         silver: Math.round(silverRes.data.price * 100) / 100,
@@ -114,6 +253,7 @@ async function scrapeGoldSilverPrices() {
         palladium: 960, // Not available in free/paid tier
         timestamp: new Date().toISOString(),
         source: 'goldapi-io',
+        change: changeData,
       };
 
       console.log(`💰 Gold Spot: $${result.gold}/oz (GoldAPI.io)`);
@@ -136,6 +276,7 @@ async function scrapeGoldSilverPrices() {
     palladium: 960,
     timestamp: new Date().toISOString(),
     source: 'static-fallback',
+    change: { gold: {}, silver: {}, source: 'unavailable' },
   };
 }
 

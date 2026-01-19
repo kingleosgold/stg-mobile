@@ -66,6 +66,7 @@ const anthropic = new Anthropic({
 let spotPriceCache = {
   prices: { gold: 2650, silver: 31, platinum: 980, palladium: 1050 },
   lastUpdated: null,
+  change: { gold: {}, silver: {}, source: 'unavailable' },
 };
 
 let historicalData = {
@@ -144,6 +145,7 @@ async function fetchLiveSpotPrices() {
       },
       lastUpdated: new Date(),
       source: fetchedPrices.source,
+      change: fetchedPrices.change || { gold: {}, silver: {}, source: 'unavailable' },
     };
 
     console.log('✅ Spot prices updated:', spotPriceCache.prices);
@@ -342,6 +344,7 @@ app.get('/api/spot-prices', async (req, res) => {
       timestamp: spotPriceCache.lastUpdated ? spotPriceCache.lastUpdated.toISOString() : new Date().toISOString(),
       source: spotPriceCache.source || 'goldapi-io',
       cacheAgeMinutes: spotPriceCache.lastUpdated ? Math.round(cacheAge * 10) / 10 : 0,
+      change: spotPriceCache.change || { gold: {}, silver: {}, source: 'unavailable' },
     });
   } catch (error) {
     console.error('Spot price error:', error);
@@ -351,6 +354,7 @@ app.get('/api/spot-prices', async (req, res) => {
       timestamp: spotPriceCache.lastUpdated ? spotPriceCache.lastUpdated.toISOString() : new Date().toISOString(),
       source: 'cached',
       error: error.message,
+      change: spotPriceCache.change || { gold: {}, silver: {}, source: 'unavailable' },
     });
   }
 });
