@@ -1924,16 +1924,41 @@ function AppContent() {
         break;
     }
 
-    // Generate dates to calculate (sample every few days for performance)
-    // Limit to max 10 data points to avoid too many API calls
+    // Generate dates with tiered density:
+    // - Last 30 days: every 2 days (ensures 1W/1M have enough points)
+    // - Older data: sparser sampling based on maxPoints
+    // Price cache makes fetching cheap - only uncached dates hit the API
     const dates = [];
     const totalDays = Math.ceil((now - startDate) / (1000 * 60 * 60 * 24));
-    const maxPoints = 10;
-    const step = Math.max(1, Math.ceil(totalDays / maxPoints));
 
-    for (let d = new Date(startDate); d <= now; d.setDate(d.getDate() + step)) {
+    // First, add recent dates with high density (last 30 days, every 2 days)
+    const recentDays = Math.min(30, totalDays);
+    for (let i = 0; i < recentDays; i += 2) {
+      const d = new Date(now);
+      d.setDate(d.getDate() - i);
       dates.push(d.toISOString().split('T')[0]);
     }
+
+    // Then add older dates with sparser sampling if range extends beyond 30 days
+    if (totalDays > 30) {
+      const olderDays = totalDays - 30;
+      const maxOlderPoints = 20; // Limit older data points
+      const olderStep = Math.max(7, Math.ceil(olderDays / maxOlderPoints)); // At least weekly
+
+      const olderStart = new Date(startDate);
+      const thirtyDaysAgo = new Date(now);
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      for (let d = new Date(olderStart); d < thirtyDaysAgo; d.setDate(d.getDate() + olderStep)) {
+        const dateStr = d.toISOString().split('T')[0];
+        if (!dates.includes(dateStr)) {
+          dates.push(dateStr);
+        }
+      }
+    }
+
+    // Sort dates chronologically
+    dates.sort();
     // Always include today
     const today = now.toISOString().split('T')[0];
     if (!dates.includes(today)) dates.push(today);
