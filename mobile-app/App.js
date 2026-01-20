@@ -4169,30 +4169,52 @@ function AppContent() {
                 <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
                   <Text style={[styles.cardTitle, { color: colors.text, marginBottom: 12 }]}>Portfolio Value</Text>
                   {analyticsSnapshots.length > 1 ? (() => {
-                    // Determine date format based on range span
-                    const firstDate = new Date(analyticsSnapshots[0]?.date);
-                    const lastDate = new Date(analyticsSnapshots[analyticsSnapshots.length - 1]?.date);
-                    const spanDays = Math.ceil((lastDate - firstDate) / (1000 * 60 * 60 * 24));
+                    // Get actual date range from data
+                    const firstDate = new Date(analyticsSnapshots[0]?.date + 'T12:00:00');
+                    const lastDate = new Date(analyticsSnapshots[analyticsSnapshots.length - 1]?.date + 'T12:00:00');
+                    const spanMs = lastDate - firstDate;
+                    const spanDays = Math.ceil(spanMs / (1000 * 60 * 60 * 24));
                     const spanYears = lastDate.getFullYear() !== firstDate.getFullYear();
 
-                    // Format: M/D for short ranges, M/YY for multi-year, M/D/YY for medium ranges
+                    // Format label based on time span
                     const formatLabel = (dateStr) => {
-                      const d = new Date(dateStr);
+                      const d = new Date(dateStr + 'T12:00:00');
                       const month = d.getMonth() + 1;
                       const day = d.getDate();
                       const year = String(d.getFullYear()).slice(-2);
 
                       if (spanYears || spanDays > 180) {
-                        // Multi-year or 6M+: show M/YY
-                        return `${month}/${year}`;
-                      } else if (spanDays > 60) {
-                        // 2-6 months: show M/D
-                        return `${month}/${day}`;
+                        return `${month}/${year}`; // M/YY for long ranges
                       } else {
-                        // Short range: show M/D
-                        return `${month}/${day}`;
+                        return `${month}/${day}`; // M/D for short ranges
                       }
                     };
+
+                    // Generate 6 evenly-spaced target timestamps across the range
+                    const numLabels = 6;
+                    const targetTimestamps = [];
+                    for (let i = 0; i < numLabels; i++) {
+                      targetTimestamps.push(firstDate.getTime() + (spanMs * i / (numLabels - 1)));
+                    }
+
+                    // Find which data point indices are closest to each target
+                    const labelIndices = new Set();
+                    labelIndices.add(0); // Always show first
+                    labelIndices.add(analyticsSnapshots.length - 1); // Always show last
+
+                    for (const targetTs of targetTimestamps) {
+                      let closestIdx = 0;
+                      let closestDiff = Infinity;
+                      for (let i = 0; i < analyticsSnapshots.length; i++) {
+                        const pointTs = new Date(analyticsSnapshots[i].date + 'T12:00:00').getTime();
+                        const diff = Math.abs(pointTs - targetTs);
+                        if (diff < closestDiff) {
+                          closestDiff = diff;
+                          closestIdx = i;
+                        }
+                      }
+                      labelIndices.add(closestIdx);
+                    }
 
                     return (
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -4200,8 +4222,7 @@ function AppContent() {
                         key={`chart-${analyticsRange}-${analyticsSnapshots.length}`}
                         data={{
                           labels: analyticsSnapshots.map((s, i) => {
-                            const showEveryN = Math.ceil(analyticsSnapshots.length / 7);
-                            if (i % showEveryN !== 0 && i !== analyticsSnapshots.length - 1) return '';
+                            if (!labelIndices.has(i)) return '';
                             return formatLabel(s.date);
                           }),
                           datasets: [{
