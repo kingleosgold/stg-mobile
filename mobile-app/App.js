@@ -4232,15 +4232,23 @@ function AppContent() {
                       spanYears,
                       labelIndices: Array.from(labelIndices).sort((a, b) => a - b),
                       labelsWithValues: labelsArray.filter(l => l !== ''),
-                      allLabels: labelsArray,
                     });
+
+                    // TEST: Hardcode labels to see if chart respects them at all
+                    const testLabels = analyticsSnapshots.map((_, i) => {
+                      if (i === 0) return 'START';
+                      if (i === analyticsSnapshots.length - 1) return 'END';
+                      if (i === Math.floor(analyticsSnapshots.length / 2)) return 'MID';
+                      return '';
+                    });
+                    console.log('TEST LABELS:', testLabels.filter(l => l !== ''));
 
                     return (
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                       <LineChart
                         key={`chart-${analyticsRange}-${analyticsSnapshots.length}`}
                         data={{
-                          labels: labelsArray,
+                          labels: testLabels,
                           datasets: [{
                             data: analyticsSnapshots.map(s => s.total_value || 0),
                             color: (opacity = 1) => `rgba(251, 191, 36, ${opacity})`,
