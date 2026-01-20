@@ -4168,7 +4168,33 @@ function AppContent() {
                 {/* Portfolio Value Chart */}
                 <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
                   <Text style={[styles.cardTitle, { color: colors.text, marginBottom: 12 }]}>Portfolio Value</Text>
-                  {analyticsSnapshots.length > 1 ? (
+                  {analyticsSnapshots.length > 1 ? (() => {
+                    // Determine date format based on range span
+                    const firstDate = new Date(analyticsSnapshots[0]?.date);
+                    const lastDate = new Date(analyticsSnapshots[analyticsSnapshots.length - 1]?.date);
+                    const spanDays = Math.ceil((lastDate - firstDate) / (1000 * 60 * 60 * 24));
+                    const spanYears = lastDate.getFullYear() !== firstDate.getFullYear();
+
+                    // Format: M/D for short ranges, M/YY for multi-year, M/D/YY for medium ranges
+                    const formatLabel = (dateStr) => {
+                      const d = new Date(dateStr);
+                      const month = d.getMonth() + 1;
+                      const day = d.getDate();
+                      const year = String(d.getFullYear()).slice(-2);
+
+                      if (spanYears || spanDays > 180) {
+                        // Multi-year or 6M+: show M/YY
+                        return `${month}/${year}`;
+                      } else if (spanDays > 60) {
+                        // 2-6 months: show M/D
+                        return `${month}/${day}`;
+                      } else {
+                        // Short range: show M/D
+                        return `${month}/${day}`;
+                      }
+                    };
+
+                    return (
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                       <LineChart
                         key={`chart-${analyticsRange}-${analyticsSnapshots.length}`}
@@ -4176,8 +4202,7 @@ function AppContent() {
                           labels: analyticsSnapshots.map((s, i) => {
                             const showEveryN = Math.ceil(analyticsSnapshots.length / 7);
                             if (i % showEveryN !== 0 && i !== analyticsSnapshots.length - 1) return '';
-                            const d = new Date(s.date);
-                            return `${d.getMonth() + 1}/${d.getDate()}`;
+                            return formatLabel(s.date);
                           }),
                           datasets: [{
                             data: analyticsSnapshots.map(s => s.total_value || 0),
@@ -4215,7 +4240,8 @@ function AppContent() {
                         style={{ borderRadius: 8 }}
                       />
                     </ScrollView>
-                  ) : (
+                    );
+                  })() : (
                     <View style={{ alignItems: 'center', paddingVertical: 40 }}>
                       <Text style={{ fontSize: 32, marginBottom: 12 }}>📊</Text>
                       <Text style={{ color: colors.muted, textAlign: 'center' }}>
