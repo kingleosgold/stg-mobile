@@ -4169,11 +4169,23 @@ function AppContent() {
                 <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
                   <Text style={[styles.cardTitle, { color: colors.text, marginBottom: 12 }]}>Portfolio Value</Text>
                   {analyticsSnapshots.length > 1 ? (() => {
-                    // Get actual date range from data
-                    const firstDate = new Date(analyticsSnapshots[0]?.date + 'T12:00:00');
-                    const lastDate = new Date(analyticsSnapshots[analyticsSnapshots.length - 1]?.date + 'T12:00:00');
-                    const spanMs = lastDate - firstDate;
-                    const spanDays = Math.ceil(spanMs / (1000 * 60 * 60 * 24));
+                    // Sample down to 6-8 evenly spaced data points for clean chart display
+                    const maxPoints = 7;
+                    const step = Math.max(1, Math.floor((analyticsSnapshots.length - 1) / (maxPoints - 1)));
+
+                    const sampledData = [];
+                    for (let i = 0; i < analyticsSnapshots.length; i += step) {
+                      sampledData.push(analyticsSnapshots[i]);
+                    }
+                    // Always include the last point
+                    if (sampledData[sampledData.length - 1] !== analyticsSnapshots[analyticsSnapshots.length - 1]) {
+                      sampledData.push(analyticsSnapshots[analyticsSnapshots.length - 1]);
+                    }
+
+                    // Determine label format based on date range
+                    const firstDate = new Date(sampledData[0]?.date + 'T12:00:00');
+                    const lastDate = new Date(sampledData[sampledData.length - 1]?.date + 'T12:00:00');
+                    const spanDays = Math.ceil((lastDate - firstDate) / (1000 * 60 * 60 * 24));
                     const spanYears = lastDate.getFullYear() !== firstDate.getFullYear();
 
                     // Format label based on time span
@@ -4190,72 +4202,32 @@ function AppContent() {
                       }
                     };
 
-                    // Generate 6 evenly-spaced target timestamps across the range
-                    const numLabels = 6;
-                    const targetTimestamps = [];
-                    for (let i = 0; i < numLabels; i++) {
-                      targetTimestamps.push(firstDate.getTime() + (spanMs * i / (numLabels - 1)));
-                    }
+                    // Generate labels for each sampled point
+                    const chartLabels = sampledData.map(s => formatLabel(s.date));
+                    const chartData = sampledData.map(s => s.total_value || 0);
 
-                    // Find which data point indices are closest to each target
-                    const labelIndices = new Set();
-                    labelIndices.add(0); // Always show first
-                    labelIndices.add(analyticsSnapshots.length - 1); // Always show last
-
-                    for (const targetTs of targetTimestamps) {
-                      let closestIdx = 0;
-                      let closestDiff = Infinity;
-                      for (let i = 0; i < analyticsSnapshots.length; i++) {
-                        const pointTs = new Date(analyticsSnapshots[i].date + 'T12:00:00').getTime();
-                        const diff = Math.abs(pointTs - targetTs);
-                        if (diff < closestDiff) {
-                          closestDiff = diff;
-                          closestIdx = i;
-                        }
-                      }
-                      labelIndices.add(closestIdx);
-                    }
-
-                    // Generate the labels array
-                    const labelsArray = analyticsSnapshots.map((s, i) => {
-                      if (!labelIndices.has(i)) return '';
-                      return formatLabel(s.date);
-                    });
-
-                    // DEBUG: Log chart data before rendering
-                    console.log('CHART DEBUG:', {
+                    console.log('CHART SAMPLED:', {
                       range: analyticsRange,
-                      dataLength: analyticsSnapshots.length,
-                      firstDate: analyticsSnapshots[0]?.date,
-                      lastDate: analyticsSnapshots[analyticsSnapshots.length - 1]?.date,
-                      spanDays,
-                      spanYears,
-                      labelIndices: Array.from(labelIndices).sort((a, b) => a - b),
-                      labelsWithValues: labelsArray.filter(l => l !== ''),
+                      originalPoints: analyticsSnapshots.length,
+                      sampledPoints: sampledData.length,
+                      labels: chartLabels,
+                      firstDate: sampledData[0]?.date,
+                      lastDate: sampledData[sampledData.length - 1]?.date,
                     });
-
-                    // TEST: Hardcode labels to see if chart respects them at all
-                    const testLabels = analyticsSnapshots.map((_, i) => {
-                      if (i === 0) return 'START';
-                      if (i === analyticsSnapshots.length - 1) return 'END';
-                      if (i === Math.floor(analyticsSnapshots.length / 2)) return 'MID';
-                      return '';
-                    });
-                    console.log('TEST LABELS:', testLabels.filter(l => l !== ''));
 
                     return (
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                       <LineChart
-                        key={`chart-${analyticsRange}-${analyticsSnapshots.length}`}
+                        key={`chart-${analyticsRange}-${sampledData.length}`}
                         data={{
-                          labels: testLabels,
+                          labels: chartLabels,
                           datasets: [{
-                            data: analyticsSnapshots.map(s => s.total_value || 0),
+                            data: chartData,
                             color: (opacity = 1) => `rgba(251, 191, 36, ${opacity})`,
                             strokeWidth: 2,
                           }],
                         }}
-                        width={Math.max(SCREEN_WIDTH - 48, analyticsSnapshots.length * 40)}
+                        width={SCREEN_WIDTH - 48}
                         height={200}
                         yAxisLabel="$"
                         yAxisSuffix=""
@@ -4268,7 +4240,7 @@ function AppContent() {
                           labelColor: (opacity = 1) => colors.muted,
                           style: { borderRadius: 8 },
                           propsForDots: {
-                            r: '4',
+                            r: '5',
                             strokeWidth: '2',
                             stroke: colors.gold,
                           },
@@ -4280,16 +4252,9 @@ function AppContent() {
                           },
                         }}
                         fromZero={false}
-                        segments={5}
+                        segments={4}
                         bezier
                         style={{ borderRadius: 8 }}
-                        formatXLabel={(label, index) => {
-                          console.log('formatXLabel called:', { label, index });
-                          return label || '';
-                        }}
-                        xLabelsOffset={0}
-                        withHorizontalLabels={true}
-                        withVerticalLabels={true}
                       />
                     </ScrollView>
                     );
