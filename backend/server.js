@@ -756,11 +756,12 @@ app.post('/api/historical-spot-batch', async (req, res) => {
 
     console.log(`📅 Batch historical spot lookup: ${dates.length} dates`);
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayStr = today.toISOString().split('T')[0];
+    // Get today's date in a timezone-safe way (use local date components)
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
     const results = {};
+    let fromPriceLog = 0;
     let fromMacrotrends = 0;
     let fromCurrentSpot = 0;
     let fromCache = 0;
@@ -771,8 +772,6 @@ app.post('/api/historical-spot-batch', async (req, res) => {
         results[date] = { success: false, error: 'Invalid date format' };
         continue;
       }
-
-      const requestedDate = new Date(date + 'T00:00:00');
 
       // For today or future dates, use current spot
       if (date >= todayStr) {
@@ -786,7 +785,7 @@ app.post('/api/historical-spot-batch', async (req, res) => {
         continue;
       }
 
-      // Check our in-memory cache first
+      // Check our in-memory cache first (populated from previous lookups)
       if (historicalPriceCache.gold[date] && historicalPriceCache.silver[date]) {
         results[date] = {
           success: true,
@@ -798,7 +797,35 @@ app.post('/api/historical-spot-batch', async (req, res) => {
         continue;
       }
 
-      // Use MacroTrends data (available for most dates)
+      // Parse the date to determine which tier to use
+      const requestedDate = new Date(date + 'T12:00:00'); // Use noon to avoid timezone issues
+      const year = requestedDate.getFullYear();
+
+      // TIER 1: For dates >= April 2006, check price_log first (most accurate)
+      if (year >= 2006 && !(year === 2006 && requestedDate.getMonth() < 3)) {
+        if (isSupabaseAvailable()) {
+          try {
+            const loggedPrice = await findClosestLoggedPrice(date);
+            if (loggedPrice && loggedPrice.gold && loggedPrice.silver) {
+              results[date] = {
+                success: true,
+                gold: loggedPrice.gold,
+                silver: loggedPrice.silver,
+                source: 'price_log'
+              };
+              // Cache for future
+              historicalPriceCache.gold[date] = loggedPrice.gold;
+              historicalPriceCache.silver[date] = loggedPrice.silver;
+              fromPriceLog++;
+              continue;
+            }
+          } catch (err) {
+            // price_log lookup failed, continue to fallback
+          }
+        }
+      }
+
+      // TIER 2: Use MacroTrends data (available for most dates as monthly averages)
       const goldPrice = historicalData.gold[date];
       const silverPrice = historicalData.silver[date];
 
@@ -809,7 +836,7 @@ app.post('/api/historical-spot-batch', async (req, res) => {
           silver: silverPrice,
           source: 'macrotrends'
         };
-        // Also cache for future
+        // Cache for future
         historicalPriceCache.gold[date] = goldPrice;
         historicalPriceCache.silver[date] = silverPrice;
         fromMacrotrends++;
@@ -827,7 +854,7 @@ app.post('/api/historical-spot-batch', async (req, res) => {
       fromCurrentSpot++;
     }
 
-    console.log(`   ✅ Batch complete: ${fromMacrotrends} macrotrends, ${fromCache} cached, ${fromCurrentSpot} current spot`);
+    console.log(`   ✅ Batch complete: ${fromPriceLog} price_log, ${fromMacrotrends} macrotrends, ${fromCache} cached, ${fromCurrentSpot} current spot`);
 
     res.json({
       success: true,

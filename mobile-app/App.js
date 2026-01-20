@@ -2031,18 +2031,14 @@ function AppContent() {
 
     // Now calculate portfolio values using cached prices
     const historicalData = [];
-    const todayStr = now.toISOString().split('T')[0];
 
     for (const date of sortedDates) {
       const cached = historicalPriceCache.current[date];
       if (!cached) continue; // Skip dates we couldn't fetch
 
       // Get items owned on this date (purchased on or before this date)
-      // Items WITHOUT a purchase date are treated as purchased TODAY (only appear in recent data)
-      const ownedItems = allItems.filter(item => {
-        const purchaseDate = item.datePurchased || todayStr; // Default to today if no date
-        return purchaseDate <= date;
-      });
+      // Items WITHOUT a purchase date are included at all dates (assumed always owned)
+      const ownedItems = allItems.filter(item => !item.datePurchased || item.datePurchased <= date);
       if (ownedItems.length === 0) continue;
 
       // Calculate oz owned
@@ -2069,19 +2065,7 @@ function AppContent() {
       });
     }
 
-    console.log(`📊 Calculation complete: ${historicalData.length} data points from ${sortedDates.length} dates`);
-    if (historicalData.length > 0) {
-      console.log(`   📅 Data range: ${historicalData[0].date} to ${historicalData[historicalData.length - 1].date}`);
-      // Log min/max values and sample points for debugging
-      const values = historicalData.map(d => d.total_value);
-      const minVal = Math.min(...values);
-      const maxVal = Math.max(...values);
-      const minPoint = historicalData.find(d => d.total_value === minVal);
-      const maxPoint = historicalData.find(d => d.total_value === maxVal);
-      console.log(`   💰 Value range: $${minVal.toFixed(0)} to $${maxVal.toFixed(0)}`);
-      console.log(`   📉 Min: ${minPoint?.date} - Gold $${minPoint?.gold_spot?.toFixed(0)}/oz, Silver $${minPoint?.silver_spot?.toFixed(2)}/oz`);
-      console.log(`   📈 Max: ${maxPoint?.date} - Gold $${maxPoint?.gold_spot?.toFixed(0)}/oz, Silver $${maxPoint?.silver_spot?.toFixed(2)}/oz`);
-    }
+    console.log(`📊 Historical calculation complete: ${historicalData.length} data points`);
 
     return historicalData;
   };
@@ -4184,17 +4168,7 @@ function AppContent() {
                 {/* Portfolio Value Chart */}
                 <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
                   <Text style={[styles.cardTitle, { color: colors.text, marginBottom: 12 }]}>Portfolio Value</Text>
-                  {analyticsSnapshots.length > 1 ? (() => {
-                    // Pre-calculate chart data for debugging and proper formatting
-                    const chartValues = analyticsSnapshots.map(s => s.total_value || 0);
-                    const minValue = Math.min(...chartValues);
-                    const maxValue = Math.max(...chartValues);
-                    console.log(`📊 Chart data: ${chartValues.length} points, min=$${minValue.toFixed(0)}, max=$${maxValue.toFixed(0)}`);
-                    if (chartValues.length <= 5) {
-                      console.log(`   Values: ${chartValues.map(v => '$' + v.toFixed(0)).join(', ')}`);
-                    }
-
-                    return (
+                  {analyticsSnapshots.length > 1 ? (
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                       <LineChart
                         key={`chart-${analyticsRange}-${analyticsSnapshots.length}`}
@@ -4206,7 +4180,7 @@ function AppContent() {
                             return `${d.getMonth() + 1}/${d.getDate()}`;
                           }),
                           datasets: [{
-                            data: chartValues,
+                            data: analyticsSnapshots.map(s => s.total_value || 0),
                             color: (opacity = 1) => `rgba(251, 191, 36, ${opacity})`,
                             strokeWidth: 2,
                           }],
@@ -4241,8 +4215,7 @@ function AppContent() {
                         style={{ borderRadius: 8 }}
                       />
                     </ScrollView>
-                    );
-                  })() : (
+                  ) : (
                     <View style={{ alignItems: 'center', paddingVertical: 40 }}>
                       <Text style={{ fontSize: 32, marginBottom: 12 }}>📊</Text>
                       <Text style={{ color: colors.muted, textAlign: 'center' }}>
