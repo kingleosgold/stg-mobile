@@ -708,6 +708,15 @@ function AppContent() {
   const [isGeneratingShare, setIsGeneratingShare] = useState(false);
   const [showSharePreview, setShowSharePreview] = useState(false);
 
+  // Custom Milestone State
+  const [showMilestoneModal, setShowMilestoneModal] = useState(false);
+  const [customSilverMilestone, setCustomSilverMilestone] = useState(null); // null means use default
+  const [customGoldMilestone, setCustomGoldMilestone] = useState(null);
+  const [tempSilverMilestone, setTempSilverMilestone] = useState('');
+  const [tempGoldMilestone, setTempGoldMilestone] = useState('');
+  const [lastReachedSilverMilestone, setLastReachedSilverMilestone] = useState(null);
+  const [lastReachedGoldMilestone, setLastReachedGoldMilestone] = useState(null);
+
   // Analytics fetch abort controller - allows canceling in-progress fetches
   const analyticsAbortRef = useRef(null);
 
@@ -1009,11 +1018,18 @@ function AppContent() {
   const silverBreakeven = totalSilverOzt > 0 ? (silverCostBasis / totalSilverOzt) : 0;
   const goldBreakeven = totalGoldOzt > 0 ? (goldCostBasis / totalGoldOzt) : 0;
 
-  // Milestones
-  const silverMilestones = [10, 50, 100, 250, 500, 1000];
-  const goldMilestones = [1, 5, 10, 25, 50, 100];
-  const nextSilverMilestone = silverMilestones.find(m => totalSilverOzt < m) || 1000;
-  const nextGoldMilestone = goldMilestones.find(m => totalGoldOzt < m) || 100;
+  // Milestones - use custom if set, otherwise use defaults
+  const defaultSilverMilestones = [10, 50, 100, 250, 500, 1000];
+  const defaultGoldMilestones = [1, 5, 10, 25, 50, 100];
+
+  // If custom milestone is set, use it; otherwise find next default milestone
+  const nextSilverMilestone = customSilverMilestone
+    ? customSilverMilestone
+    : (defaultSilverMilestones.find(m => totalSilverOzt < m) || 1000);
+
+  const nextGoldMilestone = customGoldMilestone
+    ? customGoldMilestone
+    : (defaultGoldMilestones.find(m => totalGoldOzt < m) || 100);
 
   // ============================================
   // AUTO-CALCULATE PREMIUM
@@ -1081,7 +1097,7 @@ function AppContent() {
 
   const loadData = async () => {
     try {
-      const [silver, gold, silverS, goldS, timestamp, hasSeenTutorial, storedMidnightSnapshot, storedTheme, storedChangeDisplayMode, storedLargeText] = await Promise.all([
+      const [silver, gold, silverS, goldS, timestamp, hasSeenTutorial, storedMidnightSnapshot, storedTheme, storedChangeDisplayMode, storedLargeText, storedSilverMilestone, storedGoldMilestone, storedLastSilverReached, storedLastGoldReached] = await Promise.all([
         AsyncStorage.getItem('stack_silver'),
         AsyncStorage.getItem('stack_gold'),
         AsyncStorage.getItem('stack_silver_spot'),
@@ -1092,6 +1108,10 @@ function AppContent() {
         AsyncStorage.getItem('stack_theme_preference'),
         AsyncStorage.getItem('stack_spot_change_display_mode'),
         AsyncStorage.getItem('stack_large_text'),
+        AsyncStorage.getItem('stack_silver_milestone'),
+        AsyncStorage.getItem('stack_gold_milestone'),
+        AsyncStorage.getItem('stack_last_silver_milestone_reached'),
+        AsyncStorage.getItem('stack_last_gold_milestone_reached'),
       ]);
 
       // Safely parse JSON data with fallbacks
@@ -1121,6 +1141,22 @@ function AppContent() {
         setLargeText(true);
       }
 
+      // Load custom milestones
+      if (storedSilverMilestone) {
+        const parsed = parseFloat(storedSilverMilestone);
+        if (!isNaN(parsed) && parsed > 0) setCustomSilverMilestone(parsed);
+      }
+      if (storedGoldMilestone) {
+        const parsed = parseFloat(storedGoldMilestone);
+        if (!isNaN(parsed) && parsed > 0) setCustomGoldMilestone(parsed);
+      }
+      if (storedLastSilverReached) {
+        setLastReachedSilverMilestone(parseFloat(storedLastSilverReached));
+      }
+      if (storedLastGoldReached) {
+        setLastReachedGoldMilestone(parseFloat(storedLastGoldReached));
+      }
+
       // Show tutorial if user hasn't seen it
       if (!hasSeenTutorial) {
         setShowTutorial(true);
@@ -1147,6 +1183,58 @@ function AppContent() {
       await AsyncStorage.setItem(key, JSON.stringify(data));
     } catch (error) {
       console.error('Error saving data:', error);
+    }
+  };
+
+  // Save custom milestone goals
+  const saveMilestones = async () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+      const silverVal = parseFloat(tempSilverMilestone);
+      const goldVal = parseFloat(tempGoldMilestone);
+
+      // Validate inputs
+      if (tempSilverMilestone && (isNaN(silverVal) || silverVal <= 0)) {
+        Alert.alert('Invalid Input', 'Please enter a valid silver milestone (positive number)');
+        return;
+      }
+      if (tempGoldMilestone && (isNaN(goldVal) || goldVal <= 0)) {
+        Alert.alert('Invalid Input', 'Please enter a valid gold milestone (positive number)');
+        return;
+      }
+
+      // Save silver milestone
+      if (tempSilverMilestone && silverVal > 0) {
+        setCustomSilverMilestone(silverVal);
+        await AsyncStorage.setItem('stack_silver_milestone', silverVal.toString());
+        // Reset "reached" tracking if new goal is higher than current stack
+        if (silverVal > totalSilverOzt) {
+          setLastReachedSilverMilestone(null);
+          await AsyncStorage.removeItem('stack_last_silver_milestone_reached');
+        }
+      } else {
+        setCustomSilverMilestone(null);
+        await AsyncStorage.removeItem('stack_silver_milestone');
+      }
+
+      // Save gold milestone
+      if (tempGoldMilestone && goldVal > 0) {
+        setCustomGoldMilestone(goldVal);
+        await AsyncStorage.setItem('stack_gold_milestone', goldVal.toString());
+        if (goldVal > totalGoldOzt) {
+          setLastReachedGoldMilestone(null);
+          await AsyncStorage.removeItem('stack_last_gold_milestone_reached');
+        }
+      } else {
+        setCustomGoldMilestone(null);
+        await AsyncStorage.removeItem('stack_gold_milestone');
+      }
+
+      setShowMilestoneModal(false);
+    } catch (error) {
+      console.error('Error saving milestones:', error);
+      Alert.alert('Error', 'Failed to save milestones. Please try again.');
     }
   };
 
@@ -1335,6 +1423,69 @@ function AppContent() {
     // Only save after initial data has been loaded to prevent overwriting with empty arrays
     if (isAuthenticated && dataLoaded) saveData('stack_gold', goldItems);
   }, [goldItems, isAuthenticated, dataLoaded]);
+
+  // Milestone Reached Detection
+  useEffect(() => {
+    const checkMilestoneReached = async () => {
+      // Check silver milestone
+      if (customSilverMilestone && totalSilverOzt >= customSilverMilestone) {
+        if (lastReachedSilverMilestone !== customSilverMilestone) {
+          // Milestone reached! Show congratulations alert
+          setLastReachedSilverMilestone(customSilverMilestone);
+          await AsyncStorage.setItem('stack_last_silver_milestone_reached', customSilverMilestone.toString());
+
+          // Suggest next milestone (1.5x rounded up)
+          const suggestedNext = Math.ceil(customSilverMilestone * 1.5 / 10) * 10;
+
+          Alert.alert(
+            'Silver Goal Reached!',
+            `Congratulations! You've reached your silver goal of ${customSilverMilestone} oz!`,
+            [
+              { text: 'Keep Current Goal', style: 'cancel' },
+              {
+                text: 'Set New Goal',
+                onPress: () => {
+                  setTempSilverMilestone(suggestedNext.toString());
+                  setTempGoldMilestone(customGoldMilestone?.toString() || '');
+                  setShowMilestoneModal(true);
+                }
+              },
+            ]
+          );
+        }
+      }
+
+      // Check gold milestone
+      if (customGoldMilestone && totalGoldOzt >= customGoldMilestone) {
+        if (lastReachedGoldMilestone !== customGoldMilestone) {
+          setLastReachedGoldMilestone(customGoldMilestone);
+          await AsyncStorage.setItem('stack_last_gold_milestone_reached', customGoldMilestone.toString());
+
+          const suggestedNext = Math.ceil(customGoldMilestone * 1.5);
+
+          Alert.alert(
+            'Gold Goal Reached!',
+            `Congratulations! You've reached your gold goal of ${customGoldMilestone} oz!`,
+            [
+              { text: 'Keep Current Goal', style: 'cancel' },
+              {
+                text: 'Set New Goal',
+                onPress: () => {
+                  setTempGoldMilestone(suggestedNext.toString());
+                  setTempSilverMilestone(customSilverMilestone?.toString() || '');
+                  setShowMilestoneModal(true);
+                }
+              },
+            ]
+          );
+        }
+      }
+    };
+
+    if (dataLoaded) {
+      checkMilestoneReached();
+    }
+  }, [totalSilverOzt, totalGoldOzt, customSilverMilestone, customGoldMilestone, dataLoaded]);
 
   useEffect(() => { authenticate(); }, []);
 
@@ -2153,6 +2304,9 @@ function AppContent() {
     let startDate;
 
     switch (range.toUpperCase()) {
+      case '1D':
+        // Return empty - the chart will handle 1D specially using midnightSnapshot
+        return [];
       case '1W':
         startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
         break;
@@ -3886,12 +4040,25 @@ function AppContent() {
               </View>
             </View>
 
-            {/* Milestones */}
-            <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-              <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>🏆 Stack Milestones</Text>
-              <ProgressBar value={totalSilverOzt} max={nextSilverMilestone} color={colors.silver} label={`Silver: ${totalSilverOzt.toFixed(0)} / ${nextSilverMilestone} oz`} />
-              <ProgressBar value={totalGoldOzt} max={nextGoldMilestone} color={colors.gold} label={`Gold: ${totalGoldOzt.toFixed(2)} / ${nextGoldMilestone} oz`} />
-            </View>
+            {/* Milestones - Tappable to Edit */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setTempSilverMilestone(customSilverMilestone?.toString() || '');
+                setTempGoldMilestone(customGoldMilestone?.toString() || '');
+                setShowMilestoneModal(true);
+              }}
+            >
+              <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>🏆 Stack Milestones</Text>
+                  <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny }}>Tap to edit</Text>
+                </View>
+                <ProgressBar value={totalSilverOzt} max={nextSilverMilestone} color={colors.silver} label={`Silver: ${totalSilverOzt.toFixed(0)} / ${nextSilverMilestone} oz${customSilverMilestone ? ' (custom)' : ''}`} />
+                <ProgressBar value={totalGoldOzt} max={nextGoldMilestone} color={colors.gold} label={`Gold: ${totalGoldOzt.toFixed(2)} / ${nextGoldMilestone} oz${customGoldMilestone ? ' (custom)' : ''}`} />
+              </View>
+            </TouchableOpacity>
 
             {/* Live Spot Prices */}
             <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
@@ -4264,7 +4431,7 @@ function AppContent() {
                 <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
                   <Text style={[styles.cardTitle, { color: colors.text, marginBottom: 12, fontSize: scaledFonts.medium }]}>Time Range</Text>
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                    {['1W', '1M', '3M', '6M', '1Y', 'ALL'].map((range) => (
+                    {['1D', '1W', '1M', '3M', '6M', '1Y', 'ALL'].map((range) => (
                       <TouchableOpacity
                         key={range}
                         style={{
@@ -4293,7 +4460,96 @@ function AppContent() {
                 {/* Portfolio Value Chart */}
                 <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
                   <Text style={[styles.cardTitle, { color: colors.text, marginBottom: 12, fontSize: scaledFonts.medium }]}>Portfolio Value</Text>
-                  {analyticsSnapshots.length > 1 ? (() => {
+                  {/* Special handling for 1D range */}
+                  {analyticsRange === '1D' ? (() => {
+                    // Check if we have midnight snapshot for today
+                    const today = new Date().toDateString();
+                    const hasTodaySnapshot = midnightSnapshot && midnightSnapshot.date === today;
+
+                    if (!hasTodaySnapshot || (silverItems.length === 0 && goldItems.length === 0)) {
+                      // No snapshot yet - show message
+                      return (
+                        <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+                          <Text style={{ fontSize: 32, marginBottom: 12 }}>📊</Text>
+                          <Text style={{ color: colors.muted, textAlign: 'center', fontSize: scaledFonts.normal }}>
+                            {silverItems.length === 0 && goldItems.length === 0
+                              ? 'Add some holdings to see your portfolio analytics!'
+                              : 'Not enough data for 1D view yet.\nCheck back after midnight!'}
+                          </Text>
+                        </View>
+                      );
+                    }
+
+                    // Calculate baseline from midnight snapshot
+                    const midnightValue = (midnightSnapshot.silverOzt * midnightSnapshot.silverSpot) +
+                                        (midnightSnapshot.goldOzt * midnightSnapshot.goldSpot);
+                    const currentValue = totalMeltValue;
+
+                    // Create 2-point chart data
+                    const chartLabels = ['12 AM', 'Now'];
+                    const chartData = [midnightValue, currentValue];
+
+                    // Calculate day change
+                    const dayChange = currentValue - midnightValue;
+                    const dayChangePercent = midnightValue > 0 ? ((dayChange / midnightValue) * 100) : 0;
+
+                    return (
+                      <>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                          <LineChart
+                            key={`chart-1D-${currentValue}`}
+                            data={{
+                              labels: chartLabels,
+                              datasets: [{
+                                data: chartData,
+                                color: (opacity = 1) => `rgba(251, 191, 36, ${opacity})`,
+                                strokeWidth: 2,
+                              }],
+                            }}
+                            width={SCREEN_WIDTH - 48}
+                            height={200}
+                            yAxisLabel="$"
+                            yAxisSuffix=""
+                            chartConfig={{
+                              backgroundColor: colors.cardBg,
+                              backgroundGradientFrom: colors.cardBg,
+                              backgroundGradientTo: colors.cardBg,
+                              decimalPlaces: 0,
+                              color: (opacity = 1) => `rgba(251, 191, 36, ${opacity})`,
+                              labelColor: (opacity = 1) => colors.muted,
+                              style: { borderRadius: 8 },
+                              propsForDots: {
+                                r: '5',
+                                strokeWidth: '2',
+                                stroke: colors.gold,
+                              },
+                              formatYLabel: (value) => {
+                                const num = parseFloat(value);
+                                if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+                                if (num >= 1000) return `${(num / 1000).toFixed(0)}k`;
+                                return num.toFixed(0);
+                              },
+                            }}
+                            fromZero={false}
+                            segments={4}
+                            bezier
+                            style={{ borderRadius: 8 }}
+                          />
+                        </ScrollView>
+                        {/* Daily change summary */}
+                        <View style={{ marginTop: 12, paddingHorizontal: 8, flexDirection: 'row', justifyContent: 'space-between' }}>
+                          <Text style={{ color: colors.muted, fontSize: scaledFonts.small }}>Today's Change:</Text>
+                          <Text style={{
+                            color: dayChange >= 0 ? colors.success : colors.error,
+                            fontSize: scaledFonts.small,
+                            fontWeight: '600'
+                          }}>
+                            {dayChange >= 0 ? '+' : ''}{formatCurrency(dayChange)} ({dayChangePercent >= 0 ? '+' : ''}{dayChangePercent.toFixed(2)}%)
+                          </Text>
+                        </View>
+                      </>
+                    );
+                  })() : analyticsSnapshots.length > 1 ? (() => {
                     // Sample down to 6-8 evenly spaced data points for clean chart display
                     const maxPoints = 7;
                     const step = Math.max(1, Math.floor((analyticsSnapshots.length - 1) / (maxPoints - 1)));
@@ -5848,6 +6104,167 @@ function AppContent() {
           <Text style={{ color: colors.error, fontSize: 11, textAlign: 'center', marginTop: 12 }}>
             Push notifications not enabled. Enable notifications in Settings to receive alerts.
           </Text>
+        )}
+      </ModalWrapper>
+
+      {/* Edit Milestones Modal */}
+      <ModalWrapper
+        visible={showMilestoneModal}
+        onClose={() => {
+          setShowMilestoneModal(false);
+          setTempSilverMilestone('');
+          setTempGoldMilestone('');
+        }}
+        title="Edit Stack Milestones"
+        colors={colors}
+        isDarkMode={isDarkMode}
+      >
+        <View style={{ marginBottom: 20 }}>
+          <Text style={{ color: colors.muted, marginBottom: 16, fontSize: scaledFonts.small }}>
+            Set custom goals for your stack. Leave blank to use default milestones.
+          </Text>
+
+          {/* Current Progress Summary */}
+          <View style={{
+            backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+            padding: 12,
+            borderRadius: 8,
+            marginBottom: 20
+          }}>
+            <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny, marginBottom: 4 }}>Current Stack</Text>
+            <Text style={{ color: colors.silver, fontWeight: '600', fontSize: scaledFonts.normal }}>
+              🥈 Silver: {totalSilverOzt.toFixed(1)} oz
+            </Text>
+            <Text style={{ color: colors.gold, fontWeight: '600', fontSize: scaledFonts.normal }}>
+              🥇 Gold: {totalGoldOzt.toFixed(3)} oz
+            </Text>
+          </View>
+
+          {/* Silver Milestone Input */}
+          <Text style={{ color: colors.text, fontWeight: '600', marginBottom: 8, fontSize: scaledFonts.normal }}>Silver Goal (oz)</Text>
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: isDarkMode ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.05)',
+            borderRadius: 8,
+            paddingHorizontal: 12,
+            borderWidth: 1,
+            borderColor: colors.border,
+            marginBottom: 12,
+          }}>
+            <TextInput
+              style={{ flex: 1, color: colors.text, fontSize: scaledFonts.medium, paddingVertical: 14 }}
+              value={tempSilverMilestone}
+              onChangeText={setTempSilverMilestone}
+              keyboardType="decimal-pad"
+              placeholder={`Default: ${defaultSilverMilestones.find(m => totalSilverOzt < m) || 1000}`}
+              placeholderTextColor={colors.muted}
+            />
+            <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>oz</Text>
+          </View>
+
+          {/* Quick Silver Suggestions */}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+            {[100, 250, 500, 1000].map((val) => (
+              <TouchableOpacity
+                key={`silver-${val}`}
+                style={{
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  borderRadius: 16,
+                  backgroundColor: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                }}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setTempSilverMilestone(val.toString());
+                }}
+              >
+                <Text style={{ color: colors.silver, fontSize: scaledFonts.small }}>{val} oz</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Gold Milestone Input */}
+          <Text style={{ color: colors.text, fontWeight: '600', marginBottom: 8, fontSize: scaledFonts.normal }}>Gold Goal (oz)</Text>
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: isDarkMode ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.05)',
+            borderRadius: 8,
+            paddingHorizontal: 12,
+            borderWidth: 1,
+            borderColor: colors.border,
+            marginBottom: 12,
+          }}>
+            <TextInput
+              style={{ flex: 1, color: colors.text, fontSize: scaledFonts.medium, paddingVertical: 14 }}
+              value={tempGoldMilestone}
+              onChangeText={setTempGoldMilestone}
+              keyboardType="decimal-pad"
+              placeholder={`Default: ${defaultGoldMilestones.find(m => totalGoldOzt < m) || 100}`}
+              placeholderTextColor={colors.muted}
+            />
+            <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>oz</Text>
+          </View>
+
+          {/* Quick Gold Suggestions */}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 20 }}>
+            {[5, 10, 25, 50].map((val) => (
+              <TouchableOpacity
+                key={`gold-${val}`}
+                style={{
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  borderRadius: 16,
+                  backgroundColor: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                }}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setTempGoldMilestone(val.toString());
+                }}
+              >
+                <Text style={{ color: colors.gold, fontSize: scaledFonts.small }}>{val} oz</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* Save Button */}
+        <TouchableOpacity
+          style={{
+            backgroundColor: colors.gold,
+            padding: 16,
+            borderRadius: 10,
+            alignItems: 'center',
+            marginBottom: 12,
+          }}
+          onPress={saveMilestones}
+        >
+          <Text style={{ color: '#000', fontWeight: '700', fontSize: scaledFonts.medium }}>Save Goals</Text>
+        </TouchableOpacity>
+
+        {/* Reset to Defaults Button */}
+        {(customSilverMilestone || customGoldMilestone) && (
+          <TouchableOpacity
+            style={{
+              padding: 12,
+              borderRadius: 10,
+              alignItems: 'center',
+              backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+            }}
+            onPress={async () => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setCustomSilverMilestone(null);
+              setCustomGoldMilestone(null);
+              setTempSilverMilestone('');
+              setTempGoldMilestone('');
+              await AsyncStorage.removeItem('stack_silver_milestone');
+              await AsyncStorage.removeItem('stack_gold_milestone');
+              setShowMilestoneModal(false);
+            }}
+          >
+            <Text style={{ color: colors.muted, fontWeight: '500', fontSize: scaledFonts.normal }}>Reset to Default Milestones</Text>
+          </TouchableOpacity>
         )}
       </ModalWrapper>
 
