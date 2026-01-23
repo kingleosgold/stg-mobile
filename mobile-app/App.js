@@ -9,7 +9,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput,
   Alert, Modal, Platform, SafeAreaView, StatusBar, ActivityIndicator,
   Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView, Dimensions, AppState, FlatList, Clipboard, Linking,
-  useColorScheme, RefreshControl, Switch,
+  useColorScheme, RefreshControl, Switch, Image,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
@@ -1047,7 +1047,7 @@ function AppContent() {
 
         if (hasHardware && isEnrolled) {
           const result = await LocalAuthentication.authenticateAsync({
-            promptMessage: 'Unlock Stack Tracker Pro',
+            promptMessage: 'Unlock Stack Tracker Gold',
             fallbackLabel: 'Use Passcode',
           });
           shouldAuthenticate = result?.success === true;
@@ -3705,8 +3705,8 @@ function AppContent() {
   if (!isAuthenticated) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <Text style={{ fontSize: 48, marginBottom: 16 }}>🪙</Text>
-        <Text style={{ color: colors.text, fontSize: 24, fontWeight: '700', marginBottom: 8 }}>Stack Tracker Pro</Text>
+        <Image source={require('./assets/icon.png')} style={{ width: 80, height: 80, borderRadius: 16, marginBottom: 16 }} />
+        <Text style={{ color: colors.text, fontSize: 24, fontWeight: '700', marginBottom: 8 }}>Stack Tracker Gold</Text>
         <Text style={{ color: colors.muted, marginBottom: 32 }}>Authenticate to continue</Text>
         <TouchableOpacity style={[styles.button, { backgroundColor: colors.silver }]} onPress={authenticate}>
           <Text style={{ color: '#000', fontWeight: '600' }}>Unlock</Text>
@@ -3731,12 +3731,10 @@ function AppContent() {
       <View style={[styles.header, { backgroundColor: isDarkMode ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.8)', borderBottomColor: colors.border }]}>
         <View style={styles.headerContent}>
           <View style={styles.logo}>
-            <View style={[styles.logoIcon, { backgroundColor: colors.gold }]}>
-              <Text style={{ fontSize: 20 }}>🪙</Text>
-            </View>
+            <Image source={require('./assets/icon.png')} style={{ width: 40, height: 40, borderRadius: 8 }} />
             <View>
-              <Text style={[styles.logoTitle, { color: colors.text }]}>Stack Tracker Pro</Text>
-              <Text style={[styles.logoSubtitle, { color: colors.muted }]}>Make Stacking Great Again 🚀</Text>
+              <Text style={[styles.logoTitle, { color: colors.text }]}>Stack Tracker Gold</Text>
+              <Text style={[styles.logoSubtitle, { color: colors.muted }]}>Make Stacking Great Again</Text>
             </View>
           </View>
           <TouchableOpacity style={[styles.privacyBadge, { backgroundColor: isDarkMode ? 'rgba(34,197,94,0.15)' : 'rgba(34,197,94,0.1)', borderColor: isDarkMode ? 'rgba(34,197,94,0.3)' : 'rgba(34,197,94,0.2)' }]} onPress={() => setShowPrivacyModal(true)}>
@@ -3897,7 +3895,7 @@ function AppContent() {
 
             {/* Live Spot Prices */}
             <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-              <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.large, marginBottom: 12 }]}>💹 Live Spot Prices</Text>
+              <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.large, marginBottom: 12 }]}>🪙 Live Spot Prices</Text>
               <View style={{ flexDirection: 'row', gap: 12 }}>
                 <View style={{ flex: 1, backgroundColor: `${colors.silver}22`, padding: 16, borderRadius: 12 }}>
                   <Text style={{ color: colors.silver, fontSize: scaledFonts.small }}>🥈 Silver</Text>
@@ -5001,7 +4999,7 @@ function AppContent() {
                       marginBottom: 12,
                     }}>
                       <Text style={{ color: colors.gold, fontSize: 11, fontWeight: '600', marginBottom: 8 }}>
-                        Stack Tracker Pro
+                        Stack Tracker Gold
                       </Text>
                       <Text style={{ color: '#fff', fontSize: 20, fontWeight: 'bold', marginBottom: 4 }}>
                         {formatCurrency(totalMeltValue, 0)}
@@ -5155,7 +5153,7 @@ function AppContent() {
 
             <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
               <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>About</Text>
-              <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>Stack Tracker Pro v1.0.1</Text>
+              <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>Stack Tracker Gold v1.1.0</Text>
               <Text style={{ color: colors.gold, fontStyle: 'italic', marginTop: 8, fontSize: scaledFonts.normal }}>"We CAN'T access your data."</Text>
 
               {hasLifetimeAccess && (
@@ -5391,10 +5389,10 @@ function AppContent() {
                     <Text style={{ color: colors.text, fontWeight: '600', marginBottom: 12, fontSize: scaledFonts.normal }}>📷 AI Receipt Scanner</Text>
                     <View style={{ flexDirection: 'row', gap: 8 }}>
                       <TouchableOpacity style={[styles.button, { backgroundColor: colors.gold, flex: 1 }]} onPress={() => showScanningTips('camera')}>
-                        <Text style={{ color: '#000', fontSize: scaledFonts.normal }}>📷 Take Photo</Text>
+                        <Text style={{ color: '#000', fontSize: scaledFonts.normal }} numberOfLines={1} adjustsFontSizeToFit={true}>📷 Camera</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={[styles.button, { backgroundColor: colors.gold, flex: 1 }]} onPress={() => showScanningTips('gallery')}>
-                        <Text style={{ color: '#000', fontSize: scaledFonts.normal }}>🖼️ Upload Photos</Text>
+                        <Text style={{ color: '#000', fontSize: scaledFonts.normal }} numberOfLines={1} adjustsFontSizeToFit={true}>🖼️ Upload</Text>
                       </TouchableOpacity>
                     </View>
                     {!hasGold && !hasLifetimeAccess && (
@@ -5669,7 +5667,7 @@ function AppContent() {
             <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>Home Screen Widgets</Text>
             <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>• Add widgets to see your stack at a glance</Text>
             <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>• Long-press your home screen → tap "+"</Text>
-            <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>• Search for "Stack Tracker Pro"</Text>
+            <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>• Search for "Stack Tracker Gold"</Text>
             <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>• Choose small, medium, or large widget size</Text>
           </View>
         )}
@@ -6430,7 +6428,7 @@ function AppContent() {
 
               {/* Watermark */}
               <View style={{ alignItems: 'center', paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)' }}>
-                <Text style={{ color: '#52525b', fontSize: 11 }}>Tracked with Stack Tracker Pro</Text>
+                <Text style={{ color: '#52525b', fontSize: 11 }}>Tracked with Stack Tracker Gold</Text>
               </View>
             </View>
           </ViewShot>
