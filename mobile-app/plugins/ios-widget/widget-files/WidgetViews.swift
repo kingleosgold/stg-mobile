@@ -25,20 +25,15 @@ struct SmallWidgetView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            // Header
-            HStack {
-                Text("Stack Tracker Gold")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(Color(hex: "#fbbf24"))
-                Spacer()
-            }
-
-            Spacer()
-
-            // Portfolio Value - LARGE and prominent
             if data.hasSubscription {
+                // Portfolio Label
+                Text("Portfolio")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(Color(hex: "#71717a"))
+
+                // Portfolio Value - LARGE and prominent
                 Text(formatCurrency(data.portfolioValue))
-                    .font(.system(size: 32, weight: .bold))
+                    .font(.system(size: 36, weight: .bold))
                     .foregroundColor(.white)
                     .minimumScaleFactor(0.5)
                     .lineLimit(1)
@@ -46,19 +41,33 @@ struct SmallWidgetView: View {
                 // Daily Change
                 HStack(spacing: 4) {
                     Text(data.dailyChangeAmount >= 0 ? "▲" : "▼")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.system(size: 12, weight: .bold))
                         .foregroundColor(portfolioChangeColor)
 
                     Text(formatChange(data.dailyChangeAmount))
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(portfolioChangeColor)
 
                     Text("(\(formatPercent(data.dailyChangePercent)))")
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundColor(portfolioChangeColor)
+                }
+
+                Spacer()
+
+                // Branding and timestamp at bottom
+                HStack {
+                    Text("Stack Tracker Gold")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundColor(Color(hex: "#fbbf24").opacity(0.7))
+                    Spacer()
+                    Text(timeAgoString)
+                        .font(.system(size: 9))
+                        .foregroundColor(Color(hex: "#71717a"))
                 }
             } else {
                 // Not subscribed message
+                Spacer()
                 VStack(spacing: 4) {
                     Text("Upgrade to Gold")
                         .font(.system(size: 14, weight: .semibold))
@@ -67,14 +76,8 @@ struct SmallWidgetView: View {
                         .font(.system(size: 11))
                         .foregroundColor(Color(hex: "#71717a"))
                 }
+                Spacer()
             }
-
-            Spacer()
-
-            // Last Updated
-            Text(timeAgoString)
-                .font(.system(size: 9))
-                .foregroundColor(Color(hex: "#71717a"))
         }
         .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -92,14 +95,14 @@ struct SmallWidgetView: View {
         let minutes = Int(interval / 60)
 
         if minutes < 1 {
-            return "Updated just now"
+            return "Just now"
         } else if minutes == 1 {
-            return "Updated 1m ago"
+            return "1m ago"
         } else if minutes < 60 {
-            return "Updated \(minutes)m ago"
+            return "\(minutes)m ago"
         } else {
             let hours = minutes / 60
-            return hours == 1 ? "Updated 1h ago" : "Updated \(hours)h ago"
+            return hours == 1 ? "1h ago" : "\(hours)h ago"
         }
     }
 }
@@ -113,90 +116,96 @@ struct MediumWidgetView: View {
         Group {
             if data.hasSubscription {
                 VStack(alignment: .leading, spacing: 6) {
-                    // Header
-                    HStack {
-                        Text("Stack Tracker Gold")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(Color(hex: "#fbbf24"))
-                        Spacer()
-                        // Last Updated
-                        Text(timeAgoString)
-                            .font(.system(size: 9))
-                            .foregroundColor(Color(hex: "#71717a"))
-                    }
-
-                    Spacer()
-
-                    // Portfolio Value - LARGE and prominent
-                    HStack(alignment: .bottom) {
-                        Text(formatCurrency(data.portfolioValue))
-                            .font(.system(size: 36, weight: .bold))
-                            .foregroundColor(.white)
-                            .minimumScaleFactor(0.6)
-                            .lineLimit(1)
+                    // Portfolio section at top
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Portfolio")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(Color(hex: "#71717a"))
+                            Text(formatCurrency(data.portfolioValue))
+                                .font(.system(size: 42, weight: .bold))
+                                .foregroundColor(.white)
+                                .minimumScaleFactor(0.6)
+                                .lineLimit(1)
+                        }
 
                         Spacer()
 
                         // Daily Change
                         VStack(alignment: .trailing, spacing: 2) {
                             Text("Today")
-                                .font(.system(size: 10))
+                                .font(.system(size: 11))
                                 .foregroundColor(Color(hex: "#71717a"))
                             HStack(spacing: 3) {
                                 Text(data.dailyChangeAmount >= 0 ? "▲" : "▼")
-                                    .font(.system(size: 12, weight: .bold))
+                                    .font(.system(size: 14, weight: .bold))
                                     .foregroundColor(portfolioChangeColor)
                                 Text(formatChange(data.dailyChangeAmount))
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundColor(portfolioChangeColor)
-                                Text("(\(formatPercent(data.dailyChangePercent)))")
-                                    .font(.system(size: 11))
+                                    .font(.system(size: 16, weight: .semibold))
                                     .foregroundColor(portfolioChangeColor)
                             }
+                            Text(formatPercent(data.dailyChangePercent))
+                                .font(.system(size: 12))
+                                .foregroundColor(portfolioChangeColor)
                         }
                     }
 
                     Spacer()
 
-                    // Spot Prices Row with color coding
-                    HStack(spacing: 16) {
+                    // Spot Prices Row - LARGER
+                    HStack(spacing: 24) {
                         // Gold
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: 3) {
                             Text("Gold")
-                                .font(.system(size: 10))
+                                .font(.system(size: 11, weight: .medium))
                                 .foregroundColor(Color(hex: "#fbbf24"))
-                            HStack(spacing: 4) {
+                            HStack(spacing: 6) {
                                 Text(formatSpotPrice(data.goldSpot))
-                                    .font(.system(size: 13, weight: .semibold))
+                                    .font(.system(size: 18, weight: .bold))
                                     .foregroundColor(.white)
-                                Text(data.goldChangeAmount >= 0 ? "▲" : "▼")
-                                    .font(.system(size: 9, weight: .bold))
-                                    .foregroundColor(goldChangeColor)
-                                Text(formatSmallChange(data.goldChangeAmount))
-                                    .font(.system(size: 10))
-                                    .foregroundColor(goldChangeColor)
+                                HStack(spacing: 2) {
+                                    Text(data.goldChangeAmount >= 0 ? "▲" : "▼")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundColor(goldChangeColor)
+                                    Text(formatSmallChange(data.goldChangeAmount))
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundColor(goldChangeColor)
+                                }
                             }
                         }
 
                         // Silver
-                        VStack(alignment: .leading, spacing: 2) {
+                        VStack(alignment: .leading, spacing: 3) {
                             Text("Silver")
-                                .font(.system(size: 10))
+                                .font(.system(size: 11, weight: .medium))
                                 .foregroundColor(Color(hex: "#9ca3af"))
-                            HStack(spacing: 4) {
+                            HStack(spacing: 6) {
                                 Text(formatSpotPrice(data.silverSpot))
-                                    .font(.system(size: 13, weight: .semibold))
+                                    .font(.system(size: 18, weight: .bold))
                                     .foregroundColor(.white)
-                                Text(data.silverChangeAmount >= 0 ? "▲" : "▼")
-                                    .font(.system(size: 9, weight: .bold))
-                                    .foregroundColor(silverChangeColor)
-                                Text(formatSmallChange(data.silverChangeAmount))
-                                    .font(.system(size: 10))
-                                    .foregroundColor(silverChangeColor)
+                                HStack(spacing: 2) {
+                                    Text(data.silverChangeAmount >= 0 ? "▲" : "▼")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundColor(silverChangeColor)
+                                    Text(formatSmallChange(data.silverChangeAmount))
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundColor(silverChangeColor)
+                                }
                             }
                         }
 
                         Spacer()
+                    }
+
+                    // Branding and timestamp at bottom
+                    HStack {
+                        Text("Stack Tracker Gold")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundColor(Color(hex: "#fbbf24").opacity(0.7))
+                        Spacer()
+                        Text(timeAgoString)
+                            .font(.system(size: 9))
+                            .foregroundColor(Color(hex: "#71717a"))
                     }
                 }
                 .padding(14)
@@ -242,12 +251,12 @@ struct MediumWidgetView: View {
         if minutes < 1 {
             return "Just now"
         } else if minutes == 1 {
-            return "1 min ago"
+            return "1m ago"
         } else if minutes < 60 {
-            return "\(minutes) min ago"
+            return "\(minutes)m ago"
         } else {
             let hours = minutes / 60
-            return hours == 1 ? "1 hour ago" : "\(hours) hours ago"
+            return hours == 1 ? "1h ago" : "\(hours)h ago"
         }
     }
 }
