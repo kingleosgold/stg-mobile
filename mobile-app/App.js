@@ -11,6 +11,7 @@ import {
   Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView, Dimensions, AppState, FlatList, Clipboard, Linking,
   useColorScheme, RefreshControl, Switch, Image,
 } from 'react-native';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import * as ImagePicker from 'expo-image-picker';
@@ -577,6 +578,9 @@ const ModalWrapper = ({ visible, onClose, title, children, colors, isDarkMode })
 
 // Main app content (wrapped by ErrorBoundary below)
 function AppContent() {
+  // Safe area insets for proper spacing around system UI (navigation bar, notch, etc.)
+  const insets = useSafeAreaInsets();
+
   // Theme
   const systemColorScheme = useColorScheme();
   const [themePreference, setThemePreference] = useState('system'); // 'system', 'light', 'dark'
@@ -5669,7 +5673,7 @@ function AppContent() {
       )}
 
       {/* Bottom Tabs */}
-      <View style={[styles.bottomTabs, { backgroundColor: isDarkMode ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.95)', borderTopColor: colors.border }]}>
+      <View style={[styles.bottomTabs, { backgroundColor: isDarkMode ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.95)', borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom, 10) }]}>
         {[
           { key: 'dashboard', icon: '📊', label: 'Dashboard' },
           { key: 'holdings', icon: '🪙', label: 'Holdings' },
@@ -6990,12 +6994,14 @@ function AppContent() {
   );
 }
 
-// Export App wrapped with ErrorBoundary to catch any crashes
+// Export App wrapped with SafeAreaProvider and ErrorBoundary
 export default function App() {
   return (
-    <ErrorBoundary>
-      <AppContent />
-    </ErrorBoundary>
+    <SafeAreaProvider>
+      <ErrorBoundary>
+        <AppContent />
+      </ErrorBoundary>
+    </SafeAreaProvider>
   );
 }
 
@@ -7025,7 +7031,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 8,
   },
-  bottomTabs: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.8)', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)', paddingBottom: Platform.OS === 'ios' ? 20 : 10, paddingTop: 10 },
+  bottomTabs: { flexDirection: 'row', backgroundColor: 'rgba(0,0,0,0.8)', borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)', paddingTop: 10 },
   bottomTab: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   metalTabs: { flexDirection: 'row', gap: 8, marginBottom: 16 },
   metalTab: { flex: 1, padding: 12, borderRadius: 12, borderWidth: 2, borderColor: 'rgba(255,255,255,0.1)', alignItems: 'center' },
