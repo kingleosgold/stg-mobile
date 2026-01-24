@@ -2555,13 +2555,34 @@ function AppContent() {
   }, [dataLoaded, spotPricesLive, revenueCatUserId, hasGold, hasLifetimeAccess]);
 
   // Fetch analytics when tab opens (data is cached, so only fetches once per session)
+  // This effect triggers when: user navigates to Analytics tab, OR RevenueCat values become available while on Analytics
   useEffect(() => {
-    if (tab === 'analytics' && revenueCatUserId && (hasGold || hasLifetimeAccess)) {
-      fetchAnalyticsSnapshots(); // Uses cache if available
+    // Early exit if not on analytics tab
+    if (tab !== 'analytics') return;
+
+    // Need userId and subscription to fetch
+    if (!revenueCatUserId || (!hasGold && !hasLifetimeAccess)) {
+      if (__DEV__) console.log('📊 Analytics: waiting for subscription info...', { revenueCatUserId: !!revenueCatUserId, hasGold, hasLifetimeAccess });
+      return;
     }
 
-    // Cleanup: cancel any in-progress fetch when dependencies change or unmount
+    // Check if we already have cached data
+    const cache = snapshotsCacheRef.current;
+    if (cache.fetched && cache.primaryData && cache.primaryData.length > 0) {
+      if (__DEV__) console.log('📊 Analytics: using cached data');
+      applyRangeFilter(analyticsRange);
+      return;
+    }
+
+    // Trigger fetch - use small delay to ensure state is settled after React batch updates
+    if (__DEV__) console.log('📊 Analytics: triggering fetch...');
+    const fetchTimeout = setTimeout(() => {
+      fetchAnalyticsSnapshots();
+    }, 100);
+
+    // Cleanup: cancel timeout and any in-progress fetch
     return () => {
+      clearTimeout(fetchTimeout);
       if (analyticsAbortRef.current) {
         analyticsAbortRef.current.abort();
       }
@@ -4684,7 +4705,11 @@ function AppContent() {
                         {analyticsSnapshots.length === 0
                           ? (silverItems.length === 0 && goldItems.length === 0
                             ? 'Add some holdings to see your portfolio analytics!'
-                            : 'Loading historical data...')
+                            : (!revenueCatUserId
+                              ? 'Initializing...'
+                              : (analyticsLoading
+                                ? 'Loading historical data...'
+                                : 'Pull down to refresh')))
                           : 'Need at least 2 data points to show a chart.'}
                       </Text>
                     </View>
