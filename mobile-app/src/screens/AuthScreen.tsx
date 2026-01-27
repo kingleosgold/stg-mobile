@@ -12,10 +12,14 @@ import {
   Alert,
   Keyboard,
   TouchableWithoutFeedback,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { useAuth } from '../contexts/AuthContext';
+
+// App icon
+const AppIcon = require('../../assets/icon.png');
 
 type AuthMode = 'signIn' | 'signUp';
 
@@ -146,7 +150,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
           >
             {/* Logo Section */}
             <View style={styles.logoSection}>
-              <Text style={styles.logoEmoji}>🪙</Text>
+              <Image source={AppIcon} style={styles.logoImage} />
               <Text style={styles.logoTitle}>Stack Tracker Gold</Text>
               <Text style={styles.logoSubtitle}>Make Stacking Great Again</Text>
             </View>
@@ -259,20 +263,21 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
                 onPress={handleGoogleAuth}
                 disabled={loading}
               >
-                <Text style={styles.socialButtonIcon}>G</Text>
+                <View style={styles.googleIconContainer}>
+                  <Text style={styles.googleG}>G</Text>
+                </View>
                 <Text style={styles.socialButtonText}>Continue with Google</Text>
               </TouchableOpacity>
 
-              {/* Apple Button (iOS only) */}
+              {/* Apple Button (iOS only) - Native Apple Sign In Button */}
               {Platform.OS === 'ios' && isAppleAvailable && (
-                <TouchableOpacity
-                  style={[styles.socialButton, styles.appleButton]}
+                <AppleAuthentication.AppleAuthenticationButton
+                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+                  buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+                  cornerRadius={12}
+                  style={styles.appleNativeButton}
                   onPress={handleAppleAuth}
-                  disabled={loading}
-                >
-                  <Text style={styles.appleButtonIcon}></Text>
-                  <Text style={styles.appleButtonText}>Continue with Apple</Text>
-                </TouchableOpacity>
+                />
               )}
             </View>
 
@@ -320,8 +325,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 32,
   },
-  logoEmoji: {
-    fontSize: 64,
+  logoImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 16,
     marginBottom: 16,
   },
   logoTitle: {
@@ -437,28 +444,27 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     gap: 12,
   },
-  socialButtonIcon: {
-    fontSize: 20,
+  googleIconContainer: {
+    width: 20,
+    height: 20,
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  googleG: {
+    fontSize: 14,
     fontWeight: '700',
-    color: '#e4e4e7',
+    color: '#4285F4',
   },
   socialButtonText: {
     color: '#e4e4e7',
     fontSize: 15,
     fontWeight: '600',
   },
-  appleButton: {
-    backgroundColor: '#ffffff',
-    borderColor: '#ffffff',
-  },
-  appleButtonIcon: {
-    fontSize: 20,
-    color: '#000000',
-  },
-  appleButtonText: {
-    color: '#000000',
-    fontSize: 15,
-    fontWeight: '600',
+  appleNativeButton: {
+    width: '100%',
+    height: 50,
   },
   switchContainer: {
     flexDirection: 'row',
