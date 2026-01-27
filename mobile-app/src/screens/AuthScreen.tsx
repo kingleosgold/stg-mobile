@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { useAuth } from '../contexts/AuthContext';
+import GoogleLogo from '../components/icons/GoogleLogo';
 
 // App icon
 const AppIcon = require('../../assets/icon.png');
@@ -263,9 +264,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
                 onPress={handleGoogleAuth}
                 disabled={loading}
               >
-                <View style={styles.googleIconContainer}>
-                  <Text style={styles.googleG}>G</Text>
-                </View>
+                <GoogleLogo size={20} />
                 <Text style={styles.socialButtonText}>Continue with Google</Text>
               </TouchableOpacity>
 
@@ -443,19 +442,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 14,
     gap: 12,
-  },
-  googleIconContainer: {
-    width: 20,
-    height: 20,
-    backgroundColor: '#ffffff',
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  googleG: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#4285F4',
   },
   socialButtonText: {
     color: '#e4e4e7',
