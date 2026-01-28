@@ -3086,7 +3086,7 @@ function AppContent() {
       if (result.price) {
         const currentSpotPrice = parseFloat(form.spotPrice) || 0;
 
-        // Store the historical price as a suggestion for comparison
+        // Always store the historical price as a suggestion (enables warning display)
         setHistoricalSpotSuggestion({
           price: result.price,
           source: result.source,
@@ -3097,15 +3097,8 @@ function AppContent() {
         if (currentSpotPrice === 0) {
           setForm(prev => ({ ...prev, spotPrice: result.price.toString() }));
           setSpotPriceSource(result.source);
-        } else {
-          // User has a value - check if it differs significantly (>10%)
-          const difference = Math.abs(currentSpotPrice - result.price);
-          const percentDiff = (difference / result.price) * 100;
-          if (percentDiff > 10) {
-            // Keep user's value but show the source for the suggestion warning
-            setSpotPriceSource('user_differs');
-          }
         }
+        // If user has a value, the warning will auto-show if difference > 10%
 
         // Log daily range info if available (for debugging)
         if (__DEV__ && result.dailyRange) {
@@ -4123,32 +4116,26 @@ function AppContent() {
     setHistoricalSpotSuggestion(null); // Clear any previous suggestion
     setShowAddModal(true);
 
-    // Auto-fetch historical spot price if spotPrice is 0 or empty AND date is present
+    // Always fetch historical spot price if date is present (for comparison/auto-fill)
     const spotPrice = item.spotPrice || 0;
     const hasDate = item.datePurchased && item.datePurchased.length === 10;
 
     if (hasDate) {
       const result = await fetchHistoricalSpot(item.datePurchased, metal);
       if (result.price) {
-        // Store suggestion for comparison
+        // Always store suggestion for comparison (enables warning display)
         setHistoricalSpotSuggestion({
           price: result.price,
           source: result.source,
           date: item.datePurchased,
         });
 
+        // Auto-fill only if no spot price recorded
         if (spotPrice === 0) {
-          // Auto-fill if no spot price recorded
           setForm(prev => ({ ...prev, spotPrice: result.price.toString() }));
           setSpotPriceSource(result.source);
-        } else {
-          // Check if existing value differs significantly
-          const difference = Math.abs(spotPrice - result.price);
-          const percentDiff = (difference / result.price) * 100;
-          if (percentDiff > 10) {
-            setSpotPriceSource('user_differs');
-          }
         }
+        // If spotPrice exists, the warning will auto-show if difference > 10%
       }
     }
   };
@@ -6359,11 +6346,13 @@ function AppContent() {
                   )}
 
                   {/* Warning when user's spot price differs significantly from historical */}
-                  {spotPriceSource === 'user_differs' && historicalSpotSuggestion && (() => {
+                  {historicalSpotSuggestion && (() => {
                     const userSpot = parseFloat(form.spotPrice) || 0;
                     const histSpot = historicalSpotSuggestion.price;
                     const diff = Math.abs(userSpot - histSpot);
-                    const pctDiff = (diff / histSpot) * 100;
+                    const pctDiff = histSpot > 0 ? (diff / histSpot) * 100 : 0;
+                    // Only show warning if difference > 10% and user has entered a value
+                    if (pctDiff <= 10 || userSpot === 0) return null;
                     return (
                       <View style={{ backgroundColor: 'rgba(251, 191, 36, 0.15)', padding: 10, borderRadius: 8, marginTop: -4, marginBottom: 8, borderWidth: 1, borderColor: 'rgba(251, 191, 36, 0.3)' }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
