@@ -894,18 +894,34 @@ function AppContent() {
   // Helper function to parse various date formats into YYYY-MM-DD
   // Handles: 2023-03-21, Mar 21 2023, 03/21/2023, 21/03/2023, March 21, 2023, Excel serial numbers, etc.
   const parseDate = (dateStr) => {
-    if (!dateStr) return '';
-    const str = String(dateStr).trim();
-    if (!str) return '';
+    if (dateStr === null || dateStr === undefined || dateStr === '') return '';
 
-    // Excel serial number detection (5 digit number between ~25000-55000 for years 1968-2050)
-    // Excel dates are days since Jan 1, 1900 (with leap year bug - Excel thinks 1900 was leap year)
-    if (/^\d{5}$/.test(str)) {
-      const serial = parseInt(str);
+    // Handle numeric input directly (Excel serial numbers from XLSX)
+    if (typeof dateStr === 'number') {
+      const serial = Math.floor(dateStr); // Ignore time portion (decimal)
       if (serial >= 25000 && serial <= 55000) {
         // Convert Excel serial to JS date
         // Excel epoch is Jan 1, 1900, but has a bug counting Feb 29, 1900 (which didn't exist)
-        // For dates after Feb 28, 1900, subtract 1 day to account for this
+        const excelEpoch = new Date(1899, 11, 30); // Dec 30, 1899 (Excel's actual day 0)
+        const jsDate = new Date(excelEpoch.getTime() + serial * 24 * 60 * 60 * 1000);
+        const y = jsDate.getFullYear();
+        const m = String(jsDate.getMonth() + 1).padStart(2, '0');
+        const d = String(jsDate.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+      }
+      return ''; // Invalid serial number
+    }
+
+    const str = String(dateStr).trim();
+    if (!str) return '';
+
+    // Excel serial number as string (integer or float like "46035" or "46035.791666")
+    // Range ~25000-55000 covers years 1968-2050
+    const serialMatch = str.match(/^(\d{4,5})(\.\d+)?$/);
+    if (serialMatch) {
+      const serial = parseInt(serialMatch[1]);
+      if (serial >= 25000 && serial <= 55000) {
+        // Convert Excel serial to JS date
         const excelEpoch = new Date(1899, 11, 30); // Dec 30, 1899 (Excel's actual day 0)
         const jsDate = new Date(excelEpoch.getTime() + serial * 24 * 60 * 60 * 1000);
         const y = jsDate.getFullYear();
@@ -1011,8 +1027,8 @@ function AppContent() {
       // Ignore parse errors
     }
 
-    // Return original if we couldn't parse it
-    return str;
+    // Return empty string if we couldn't parse it (prevents invalid data in Supabase)
+    return '';
   };
 
   // ============================================
@@ -3423,10 +3439,10 @@ function AppContent() {
         bytes[i] = binaryString.charCodeAt(i);
       }
 
-      // Parse with XLSX
-      const workbook = XLSX.read(bytes, { type: 'array' });
+      // Parse with XLSX - use raw:true to prevent date conversion to serial numbers
+      const workbook = XLSX.read(bytes, { type: 'array', cellDates: true, raw: false });
       const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+      const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, raw: false, dateNF: 'yyyy-mm-dd' });
 
       if (rows.length < 2) {
         Alert.alert('Invalid Spreadsheet', "Spreadsheet must have at least a header row and one data row. This didn't count against your scan limit.");
@@ -3580,6 +3596,23 @@ function AppContent() {
         return;
       }
 
+      // Deduplicate within the CSV (same product name, quantity, unit price, date)
+      const uniqueParsedData = [];
+      const seenItems = new Set();
+      let duplicatesInFile = 0;
+      for (const item of parsedData) {
+        const key = `${item.productName}|${item.quantity}|${item.unitPrice}|${item.datePurchased}`;
+        if (!seenItems.has(key)) {
+          seenItems.add(key);
+          uniqueParsedData.push(item);
+        } else {
+          duplicatesInFile++;
+        }
+      }
+      if (duplicatesInFile > 0 && __DEV__) {
+        console.log(`🔄 Removed ${duplicatesInFile} duplicate rows from CSV`);
+      }
+
       // Only increment scan count on successful parsing
       await incrementScanCount();
 
@@ -3589,12 +3622,12 @@ function AppContent() {
       setSelectedDealer(null);
 
       // Show preview
-      setImportData(parsedData);
+      setImportData(uniqueParsedData);
       setShowImportPreview(true);
 
       const message = skippedCount > 0
-        ? `📊 Parsed ${parsedData.length} items from ${template.name} (${skippedCount} skipped)`
-        : `📊 Parsed ${parsedData.length} items from ${template.name}`;
+        ? `📊 Parsed ${uniqueParsedData.length} items from ${template.name} (${skippedCount} skipped${duplicatesInFile > 0 ? `, ${duplicatesInFile} duplicates removed` : ''})`
+        : `📊 Parsed ${uniqueParsedData.length} items from ${template.name}${duplicatesInFile > 0 ? ` (${duplicatesInFile} duplicates removed)` : ''}`;
       if (__DEV__) console.log(message);
 
     } catch (error) {
@@ -3613,9 +3646,28 @@ function AppContent() {
     try {
       let silverCount = 0;
       let goldCount = 0;
+      let skippedDuplicates = 0;
       const newItems = [];
 
+      // Build a set of existing items for duplicate detection
+      const existingKeys = new Set();
+      silverItems.forEach(item => {
+        existingKeys.add(`silver|${item.productName}|${item.quantity}|${item.unitPrice}|${item.datePurchased || ''}`);
+      });
+      goldItems.forEach(item => {
+        existingKeys.add(`gold|${item.productName}|${item.quantity}|${item.unitPrice}|${item.datePurchased || ''}`);
+      });
+
       importData.forEach((item, index) => {
+        // Check for duplicate against existing holdings
+        const itemKey = `${item.metal}|${item.productName}|${item.quantity}|${item.unitPrice}|${item.datePurchased || ''}`;
+        if (existingKeys.has(itemKey)) {
+          skippedDuplicates++;
+          if (__DEV__) console.log(`⏭️ Skipping duplicate: ${item.productName}`);
+          return; // Skip this item
+        }
+        existingKeys.add(itemKey); // Prevent duplicates within the same import batch
+
         const newItem = {
           id: Date.now() + index,
           productName: item.productName,
@@ -3658,9 +3710,12 @@ function AppContent() {
       // Haptic feedback
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
+      const totalImported = silverCount + goldCount;
+      const duplicateMsg = skippedDuplicates > 0 ? `\n(${skippedDuplicates} duplicate${skippedDuplicates > 1 ? 's' : ''} skipped)` : '';
+
       Alert.alert(
         'Import Successful',
-        `Imported ${importData.length} items:\n${silverCount} Silver, ${goldCount} Gold`,
+        `Imported ${totalImported} items:\n${silverCount} Silver, ${goldCount} Gold${duplicateMsg}`,
         [{ text: 'Great!', onPress: () => {
           setShowImportPreview(false);
           setImportData([]);
