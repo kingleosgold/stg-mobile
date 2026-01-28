@@ -770,6 +770,7 @@ function AppContent() {
     targetPrice: '',
     direction: 'above', // 'above' or 'below'
   });
+  const [athAlerts, setAthAlerts] = useState({ silver: false, gold: false });
 
   // Analytics State (Gold/Lifetime feature)
   const [analyticsSnapshots, setAnalyticsSnapshots] = useState([]);
@@ -1902,6 +1903,10 @@ function AppContent() {
   useEffect(() => {
     if (revenueCatUserId && (hasGold || hasLifetimeAccess)) {
       fetchPriceAlerts();
+      // Load ATH alert preferences
+      AsyncStorage.getItem('stack_ath_alerts').then(val => {
+        if (val) try { setAthAlerts(JSON.parse(val)); } catch (e) {}
+      });
     }
   }, [revenueCatUserId, hasGold, hasLifetimeAccess]);
 
@@ -2181,6 +2186,20 @@ function AppContent() {
       console.error('❌ Error fetching price alerts:', error);
     } finally {
       setAlertsLoading(false);
+    }
+  };
+
+  // Toggle ATH alert preference
+  const toggleAthAlert = async (metal) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const updated = { ...athAlerts, [metal]: !athAlerts[metal] };
+    setAthAlerts(updated);
+    try {
+      await AsyncStorage.setItem('stack_ath_alerts', JSON.stringify(updated));
+      // TODO: Sync ATH preferences to backend so it can trigger push notifications
+      // POST to /api/alerts/ath with { userId: revenueCatUserId, metal, enabled: updated[metal], pushToken: expoPushToken }
+    } catch (error) {
+      console.error('Failed to save ATH alert preference:', error);
     }
   };
 
@@ -6947,12 +6966,54 @@ function AppContent() {
           setShowAddAlertModal(false);
           setNewAlert({ metal: 'silver', targetPrice: '', direction: 'above' });
         }}
-        title="Add Price Alert"
+        title="Price Alerts"
         colors={colors}
         isDarkMode={isDarkMode}
       >
+        {/* All-Time High Alerts */}
+        <View style={{ marginBottom: 24 }}>
+          <Text style={{ color: colors.text, fontWeight: '700', fontSize: 16, marginBottom: 12 }}>All-Time High Alerts</Text>
+          <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 12 }}>
+            Get notified when spot prices reach a new all-time high.
+          </Text>
+          {['silver', 'gold'].map((metal) => (
+            <View key={metal} style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingVertical: 12,
+              borderBottomWidth: metal === 'silver' ? 1 : 0,
+              borderBottomColor: colors.border,
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={{
+                  width: 28, height: 28, borderRadius: 6,
+                  backgroundColor: metal === 'gold' ? 'rgba(251,191,36,0.2)' : 'rgba(156,163,175,0.2)',
+                  alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: metal === 'gold' ? '#fbbf24' : '#9ca3af' }} />
+                </View>
+                <Text style={{ color: colors.text, fontSize: 15 }}>
+                  {metal === 'gold' ? 'Gold' : 'Silver'} All-Time High
+                </Text>
+              </View>
+              <Switch
+                value={athAlerts[metal]}
+                onValueChange={() => toggleAthAlert(metal)}
+                trackColor={{ false: isDarkMode ? '#39393d' : '#e5e5ea', true: colors.gold }}
+                thumbColor="#fff"
+              />
+            </View>
+          ))}
+        </View>
+
+        {/* Divider */}
+        <View style={{ height: 1, backgroundColor: colors.border, marginBottom: 20 }} />
+
+        {/* Custom Price Alert */}
         <View style={{ marginBottom: 20 }}>
-          <Text style={{ color: colors.muted, marginBottom: 16 }}>
+          <Text style={{ color: colors.text, fontWeight: '700', fontSize: 16, marginBottom: 12 }}>Custom Price Alert</Text>
+          <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 16 }}>
             Get notified when spot prices reach your target. Current prices: Gold ${goldSpot.toFixed(2)}, Silver ${silverSpot.toFixed(2)}
           </Text>
 
