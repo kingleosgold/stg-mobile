@@ -1267,7 +1267,9 @@ function AppContent() {
 
       // Delay fetchSpotPrices to not block the main thread
       setTimeout(() => {
-        fetchSpotPrices().catch(err => console.error('fetchSpotPrices failed:', err?.message));
+        fetchSpotPrices().catch(err => {
+          if (err?.name !== 'AbortError') console.error('fetchSpotPrices failed:', err?.message);
+        });
       }, 100);
     } catch (error) {
       console.error('Error loading data:', error?.message || error);
@@ -1929,7 +1931,10 @@ function AppContent() {
         if (__DEV__) console.log('▶️  App came to foreground - fetching fresh prices immediately');
         // ALWAYS fetch fresh prices when app comes to foreground
         fetchSpotPrices(true).catch(err => {
-          if (__DEV__) console.error('Foreground price fetch failed:', err?.message);
+          // Ignore AbortError, only log actual errors
+          if (err?.name !== 'AbortError' && __DEV__) {
+            console.error('Foreground price fetch failed:', err?.message);
+          }
         });
         startPriceRefresh();
       } else if (nextAppState !== 'active') {
@@ -3002,6 +3007,12 @@ function AppContent() {
         setPriceSource('cached');
       }
     } catch (error) {
+      // Silently ignore AbortError (happens on timeout or component unmount)
+      if (error.name === 'AbortError') {
+        if (__DEV__) console.log('⏱️ Spot prices fetch aborted (timeout or unmount)');
+        return;
+      }
+      // Log actual network errors
       console.error('❌ Error fetching spot prices:', error.message);
       if (__DEV__) console.error('   Error details:', error);
       setPriceSource('cached');
