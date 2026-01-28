@@ -2322,6 +2322,10 @@ function AppContent() {
         goldChangePercent: spotChange?.gold?.percent || 0,
         silverChangeAmount: spotChange?.silver?.amount || 0,
         silverChangePercent: spotChange?.silver?.percent || 0,
+        goldValue: totalGoldOzt * goldSpot,
+        silverValue: totalSilverOzt * silverSpot,
+        goldOzt: totalGoldOzt,
+        silverOzt: totalSilverOzt,
         hasSubscription: hasGold || hasLifetimeAccess,
       };
 

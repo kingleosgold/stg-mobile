@@ -19,7 +19,7 @@ struct StackTrackerWidget: Widget {
         }
         .configurationDisplayName("Stack Tracker Gold")
         .description("View your precious metals portfolio value and live spot prices.")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }
 
@@ -243,6 +243,12 @@ struct StackTrackerWidget_Previews: PreviewProvider {
                 data: WidgetData.preview
             ))
             .previewContext(WidgetPreviewContext(family: .systemMedium))
+
+            StackTrackerWidgetEntryView(entry: WidgetEntry(
+                date: Date(),
+                data: WidgetData.preview
+            ))
+            .previewContext(WidgetPreviewContext(family: .systemLarge))
         }
     }
 }
