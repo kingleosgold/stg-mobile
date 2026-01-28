@@ -36,6 +36,14 @@ import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import AuthScreen from './src/screens/AuthScreen';
 import AccountScreen from './src/screens/AccountScreen';
 import { AppleLogo, GoogleLogo, ProfileIcon } from './src/components/icons';
+import {
+  fetchHoldings,
+  addHolding,
+  updateHolding,
+  deleteHolding as deleteHoldingFromSupabase,
+  fullSync,
+  findHoldingByLocalId,
+} from './src/services/supabaseHoldings';
 
 // Configure notifications behavior
 Notifications.setNotificationHandler({
@@ -590,6 +598,11 @@ function AppContent() {
   const [guestMode, setGuestMode] = useState(null); // null = loading, true = guest, false = require auth
   const [showAuthScreen, setShowAuthScreen] = useState(false);
   const [showAccountScreen, setShowAccountScreen] = useState(false);
+
+  // Supabase Holdings Sync
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncError, setSyncError] = useState(null);
+  const [hasSyncedOnce, setHasSyncedOnce] = useState(false);
 
   // Theme
   const systemColorScheme = useColorScheme();
@@ -1460,6 +1473,61 @@ function AppContent() {
     // Only save after initial data has been loaded to prevent overwriting with empty arrays
     if (isAuthenticated && dataLoaded) saveData('stack_gold', goldItems);
   }, [goldItems, isAuthenticated, dataLoaded]);
+
+  // Supabase Holdings Sync - sync when user signs in
+  useEffect(() => {
+    const syncWithSupabase = async () => {
+      // Only sync if:
+      // 1. User is signed in with Supabase
+      // 2. Data has been loaded from local storage
+      // 3. Haven't synced yet this session
+      if (!supabaseUser || !dataLoaded || hasSyncedOnce) return;
+
+      setIsSyncing(true);
+      setSyncError(null);
+
+      try {
+        if (__DEV__) console.log('Starting Supabase holdings sync...');
+
+        const { silverItems: remoteSilver, goldItems: remoteGold, syncedToCloud, error } = await fullSync(
+          supabaseUser.id,
+          silverItems,
+          goldItems
+        );
+
+        if (error) {
+          console.error('Supabase sync error:', error);
+          setSyncError(error.message);
+        } else {
+          // Update local state with synced data
+          if (remoteSilver.length > 0 || remoteGold.length > 0) {
+            setSilverItems(remoteSilver);
+            setGoldItems(remoteGold);
+          }
+
+          if (__DEV__) {
+            console.log(`Supabase sync complete: ${syncedToCloud} items uploaded, ${remoteSilver.length} silver, ${remoteGold.length} gold loaded`);
+          }
+        }
+
+        setHasSyncedOnce(true);
+      } catch (err) {
+        console.error('Supabase sync failed:', err);
+        setSyncError(err.message || 'Sync failed');
+      } finally {
+        setIsSyncing(false);
+      }
+    };
+
+    syncWithSupabase();
+  }, [supabaseUser, dataLoaded, hasSyncedOnce]);
+
+  // Reset sync flag when user signs out
+  useEffect(() => {
+    if (!supabaseUser) {
+      setHasSyncedOnce(false);
+    }
+  }, [supabaseUser]);
 
   // Milestone Reached Detection
   useEffect(() => {
@@ -3454,6 +3522,7 @@ function AppContent() {
     try {
       let silverCount = 0;
       let goldCount = 0;
+      const newItems = [];
 
       importData.forEach((item, index) => {
         const newItem = {
@@ -3473,11 +3542,27 @@ function AppContent() {
         if (item.metal === 'silver') {
           setSilverItems(prev => [...prev, newItem]);
           silverCount++;
+          newItems.push({ ...newItem, metal: 'silver' });
         } else {
           setGoldItems(prev => [...prev, newItem]);
           goldCount++;
+          newItems.push({ ...newItem, metal: 'gold' });
         }
       });
+
+      // Sync to Supabase if signed in
+      if (supabaseUser && newItems.length > 0) {
+        (async () => {
+          try {
+            for (const item of newItems) {
+              await addHolding(supabaseUser.id, item, item.metal);
+            }
+            if (__DEV__) console.log(`Synced ${newItems.length} imported items to Supabase`);
+          } catch (err) {
+            console.error('Failed to sync imported items to Supabase:', err);
+          }
+        })();
+      }
 
       // Haptic feedback
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -3502,6 +3587,7 @@ function AppContent() {
     try {
       let silverCount = 0;
       let goldCount = 0;
+      const newItems = [];
 
       scannedItems.forEach((item, index) => {
         const newItem = {
@@ -3521,11 +3607,27 @@ function AppContent() {
         if (item.metal === 'silver') {
           setSilverItems(prev => [...prev, newItem]);
           silverCount++;
+          newItems.push({ ...newItem, metal: 'silver' });
         } else {
           setGoldItems(prev => [...prev, newItem]);
           goldCount++;
+          newItems.push({ ...newItem, metal: 'gold' });
         }
       });
+
+      // Sync to Supabase if signed in
+      if (supabaseUser && newItems.length > 0) {
+        (async () => {
+          try {
+            for (const item of newItems) {
+              await addHolding(supabaseUser.id, item, item.metal);
+            }
+            if (__DEV__) console.log(`Synced ${newItems.length} scanned items to Supabase`);
+          } catch (err) {
+            console.error('Failed to sync scanned items to Supabase:', err);
+          }
+        })();
+      }
 
       // Haptic feedback
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -3764,6 +3866,37 @@ function AppContent() {
       }
     }
 
+    // Sync to Supabase if signed in
+    if (supabaseUser) {
+      (async () => {
+        try {
+          if (editingItem && editingItem.supabase_id) {
+            // Update existing item in Supabase
+            await updateHolding(editingItem.supabase_id, item, targetMetal);
+            if (__DEV__) console.log('Updated holding in Supabase');
+          } else if (editingItem) {
+            // Editing a local item that might exist in Supabase - find it first
+            const existingHolding = await findHoldingByLocalId(supabaseUser.id, item.id, targetMetal);
+            if (existingHolding) {
+              await updateHolding(existingHolding.id, item, targetMetal);
+              if (__DEV__) console.log('Updated existing holding in Supabase');
+            } else {
+              // Not in Supabase yet, add it
+              const { data } = await addHolding(supabaseUser.id, item, targetMetal);
+              if (data && __DEV__) console.log('Added holding to Supabase (was local only)');
+            }
+          } else {
+            // New item - add to Supabase
+            const { data } = await addHolding(supabaseUser.id, item, targetMetal);
+            if (data && __DEV__) console.log('Added new holding to Supabase');
+          }
+        } catch (err) {
+          console.error('Failed to sync holding to Supabase:', err);
+          // Don't block the user - local save already succeeded
+        }
+      })();
+    }
+
     // Haptic feedback on successful add
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
@@ -3785,6 +3918,10 @@ function AppContent() {
     // Haptic feedback
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
+    // Find the item to get its supabase_id if it exists
+    const items = metal === 'silver' ? silverItems : goldItems;
+    const itemToDelete = items.find(i => i.id === id);
+
     Alert.alert(
       'Delete Item',
       'Are you sure you want to delete this item? This action cannot be undone.',
@@ -3793,12 +3930,32 @@ function AppContent() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
+          onPress: async () => {
             // Haptic feedback on delete
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
 
             if (metal === 'silver') setSilverItems(prev => prev.filter(i => i.id !== id));
             else setGoldItems(prev => prev.filter(i => i.id !== id));
+
+            // Delete from Supabase if signed in
+            if (supabaseUser && itemToDelete) {
+              try {
+                if (itemToDelete.supabase_id) {
+                  await deleteHoldingFromSupabase(itemToDelete.supabase_id);
+                  if (__DEV__) console.log('Deleted holding from Supabase');
+                } else {
+                  // Find in Supabase by local_id
+                  const existingHolding = await findHoldingByLocalId(supabaseUser.id, id, metal);
+                  if (existingHolding) {
+                    await deleteHoldingFromSupabase(existingHolding.id);
+                    if (__DEV__) console.log('Deleted holding from Supabase (found by local_id)');
+                  }
+                }
+              } catch (err) {
+                console.error('Failed to delete holding from Supabase:', err);
+                // Don't block - local delete already succeeded
+              }
+            }
 
             // Close detail view if open
             if (showDetailView) {
@@ -4032,6 +4189,20 @@ function AppContent() {
           <View style={styles.logo}>
             <Image source={require('./assets/icon.png')} style={{ width: 40, height: 40, borderRadius: 8 }} />
             <Text style={[styles.logoTitle, { color: colors.text }]}>Stack Tracker Gold</Text>
+            {/* Sync Status Indicator */}
+            {isSyncing && (
+              <View style={{ marginLeft: 8, flexDirection: 'row', alignItems: 'center' }}>
+                <ActivityIndicator size="small" color={colors.gold} />
+              </View>
+            )}
+            {syncError && !isSyncing && (
+              <TouchableOpacity
+                style={{ marginLeft: 8 }}
+                onPress={() => Alert.alert('Sync Error', syncError, [{ text: 'OK', onPress: () => setSyncError(null) }])}
+              >
+                <Text style={{ color: colors.error, fontSize: 16 }}>!</Text>
+              </TouchableOpacity>
+            )}
           </View>
           {supabaseUser ? (
             // Signed in - show profile icon that goes to Settings
