@@ -6465,7 +6465,7 @@ function AppContent() {
       <ModalWrapper
         visible={showSpeculationModal}
         onClose={() => setShowSpeculationModal(false)}
-        title="🔮 What If..."
+        title="What If..."
         colors={colors}
         isDarkMode={isDarkMode}
       >
@@ -6478,9 +6478,9 @@ function AppContent() {
         {/* Quick presets */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
           {[
-            { s: 100, g: 5000, label: 'Bull' },
-            { s: 150, g: 7500, label: 'Moon 🚀' },
-            { s: 500, g: 15000, label: 'Hyper' },
+            { s: 200, g: 7500, label: 'Bull' },
+            { s: 350, g: 10000, label: 'Moon' },
+            { s: 1000, g: 25000, label: 'Hyper' },
           ].map((preset, i) => (
             <TouchableOpacity key={i} style={{ backgroundColor: colors.border, padding: 12, borderRadius: 12, marginRight: 8 }} onPress={() => { setSpecSilverPrice(preset.s.toString()); setSpecGoldPrice(preset.g.toString()); Keyboard.dismiss(); }}>
               <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>{preset.label}</Text>
