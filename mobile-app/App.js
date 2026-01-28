@@ -1199,7 +1199,8 @@ function AppContent() {
 
     if (unitPrice > 0 && spotPrice > 0 && ozt > 0) {
       const calculatedPremium = unitPrice - (spotPrice * ozt);
-      setForm(prev => ({ ...prev, premium: calculatedPremium.toFixed(2) }));
+      // Only auto-fill positive premiums; negative means spot data is likely wrong
+      setForm(prev => ({ ...prev, premium: Math.max(0, calculatedPremium).toFixed(2) }));
     }
   }, [form.unitPrice, form.spotPrice, form.ozt]);
 
@@ -3168,11 +3169,12 @@ function AppContent() {
     } catch (error) {
       if (__DEV__) console.log('❌ Could not fetch historical spot:', error.message);
     }
-    // Return current spot as fallback with source indicator
+    // No historical data available - return null instead of current spot
+    // to prevent contaminating saved spotPrice with today's price
     return {
-      price: metal === 'gold' ? goldSpot : silverSpot,
-      source: 'client-fallback',
-      granularity: 'current'
+      price: null,
+      source: 'unavailable',
+      granularity: null
     };
   };
 
@@ -7564,21 +7566,19 @@ function AppContent() {
               </View>
               <View style={[styles.divider, { backgroundColor: colors.border }]} />
               {(() => {
-                // Always recalculate premium from unitPrice and spotPrice when possible
+                // Calculate premium from unitPrice and saved historical spotPrice only
+                // Do NOT use live spot — it would give a misleading premium for old purchases
                 const itemSpot = detailItem.spotPrice || 0;
                 let displayPremium = 0;
-                if (detailItem.unitPrice > 0 && detailItem.ozt > 0) {
-                  const spotForCalc = itemSpot > 0 ? itemSpot : (detailMetal === 'silver' ? silverSpot : goldSpot);
-                  if (spotForCalc > 0) {
-                    displayPremium = detailItem.unitPrice - (spotForCalc * detailItem.ozt);
-                  }
+                if (detailItem.unitPrice > 0 && detailItem.ozt > 0 && itemSpot > 0) {
+                  displayPremium = detailItem.unitPrice - (itemSpot * detailItem.ozt);
                 }
                 // Fall back to saved premium if we couldn't calculate
                 if (displayPremium === 0) {
                   displayPremium = parseFloat(detailItem.premium) || 0;
                 }
-                // Only hide if truly zero or negligible (< $0.01)
-                if (Math.abs(displayPremium) < 0.01) return null;
+                // Hide if zero/negligible or negative (negative means bad spot data)
+                if (displayPremium < 0.01) return null;
                 return (
                   <>
                     <View style={styles.statRow}>

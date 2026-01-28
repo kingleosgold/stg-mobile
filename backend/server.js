@@ -672,14 +672,19 @@ app.get('/api/historical-spot', async (req, res) => {
         }
       }
 
-      // Last resort: current spot price
+      // Last resort: return failure instead of contaminating with current spot
       if (!goldPrice) {
-        console.log(`   No historical data found, using current spot`);
-        goldPrice = spotPriceCache.prices.gold;
-        silverPrice = spotPriceCache.prices.silver;
-        granularity = 'current_fallback';
-        source = 'current-spot';
-        note = 'Historical price not available, using current spot price';
+        console.log(`   ❌ No historical data found for ${normalizedDate}`);
+        return res.json({
+          success: true,
+          date: normalizedDate,
+          gold: null,
+          silver: null,
+          price: null,
+          granularity: 'none',
+          source: 'unavailable',
+          note: 'Historical price not available for this date'
+        });
       }
     }
 
