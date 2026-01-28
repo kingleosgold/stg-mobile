@@ -691,7 +691,7 @@ function AppContent() {
     silver: { amount: null, percent: null, prevClose: null },
   });
   const [spotChangeDisplayMode, setSpotChangeDisplayMode] = useState('percent'); // 'percent' or 'amount'
-  const [holdingsGainMode, setHoldingsGainMode] = useState('amount'); // 'amount' or 'percent'
+
 
   // Portfolio Data
   const [silverItems, setSilverItems] = useState([]);
@@ -4485,6 +4485,23 @@ function AppContent() {
               </TouchableOpacity>
             )}
           </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {/* Global $/ % toggle */}
+            <TouchableOpacity
+              style={{
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+                borderRadius: 14,
+                backgroundColor: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                borderWidth: 1,
+                borderColor: isDarkMode ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)',
+              }}
+              onPress={toggleSpotChangeDisplayMode}
+            >
+              <Text style={{ color: colors.text, fontSize: 13, fontWeight: '700' }}>
+                {spotChangeDisplayMode === 'amount' ? '$' : '%'}
+              </Text>
+            </TouchableOpacity>
           {supabaseUser ? (
             // Signed in - show profile icon that goes to Settings
             <TouchableOpacity
@@ -4516,6 +4533,7 @@ function AppContent() {
               <Text style={{ color: '#18181b', fontSize: 13, fontWeight: '600' }}>Sign In</Text>
             </TouchableOpacity>
           )}
+          </View>
         </View>
       </View>
 
@@ -4558,41 +4576,32 @@ function AppContent() {
                 numberOfLines={1}
                 adjustsFontSizeToFit={true}
               >
-                {totalGainLoss >= 0 ? '▲' : '▼'} ${formatSmartCurrency(Math.abs(totalGainLoss))} ({totalGainLossPct >= 0 ? '+' : ''}{totalGainLossPct.toFixed(1)}%)
+                {totalGainLoss >= 0 ? '▲' : '▼'} {spotChangeDisplayMode === 'amount' ? `$${formatSmartCurrency(Math.abs(totalGainLoss))}` : `${totalGainLossPct >= 0 ? '+' : ''}${totalGainLossPct.toFixed(1)}%`}
               </Text>
             </View>
 
-            {/* Gold & Silver Holdings Card */}
+            {/* Holdings Card */}
             <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+              <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.large }]}>Holdings</Text>
               <View style={{ flexDirection: 'row', gap: 12 }}>
-                {/* Gold column */}
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: colors.gold, fontSize: scaledFonts.small, fontWeight: '600' }}>Gold Holdings</Text>
-                  <Text style={{ color: colors.text, fontSize: scaledFonts.xlarge, fontWeight: '700' }} numberOfLines={1} adjustsFontSizeToFit={true}>
+                  <Text style={{ color: colors.gold, fontSize: scaledFonts.small, fontWeight: '600' }}>Gold</Text>
+                  <Text style={{ color: colors.text, fontSize: scaledFonts.huge, fontWeight: '700' }} numberOfLines={1} adjustsFontSizeToFit={true}>
                     ${formatSmartCurrency(goldMeltValue)}
                   </Text>
-                  <TouchableOpacity activeOpacity={0.7} onPress={() => { setHoldingsGainMode(prev => prev === 'amount' ? 'percent' : 'amount'); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}>
-                    <Text style={{ color: goldGainLoss >= 0 ? colors.success : colors.error, fontSize: scaledFonts.small, fontWeight: '600', marginTop: 2 }} numberOfLines={1} adjustsFontSizeToFit={true}>
-                      {goldGainLoss >= 0 ? '▲' : '▼'} {holdingsGainMode === 'amount' ? `$${formatSmartCurrency(Math.abs(goldGainLoss))}` : `${goldGainLossPct >= 0 ? '+' : ''}${goldGainLossPct.toFixed(1)}%`}
-                    </Text>
-                  </TouchableOpacity>
+                  <Text style={{ color: goldGainLoss >= 0 ? colors.success : colors.error, fontSize: scaledFonts.small, marginTop: 2 }} numberOfLines={1} adjustsFontSizeToFit={true}>
+                    {goldGainLoss >= 0 ? '▲' : '▼'} {spotChangeDisplayMode === 'amount' ? `$${formatSmartCurrency(Math.abs(goldGainLoss))}` : `${goldGainLossPct >= 0 ? '+' : ''}${goldGainLossPct.toFixed(1)}%`}
+                  </Text>
                 </View>
-                {/* Silver column */}
                 <View style={{ flex: 1 }}>
-                  <Text style={{ color: colors.silver, fontSize: scaledFonts.small, fontWeight: '600' }}>Silver Holdings</Text>
-                  <Text style={{ color: colors.text, fontSize: scaledFonts.xlarge, fontWeight: '700' }} numberOfLines={1} adjustsFontSizeToFit={true}>
+                  <Text style={{ color: colors.silver, fontSize: scaledFonts.small, fontWeight: '600' }}>Silver</Text>
+                  <Text style={{ color: colors.text, fontSize: scaledFonts.huge, fontWeight: '700' }} numberOfLines={1} adjustsFontSizeToFit={true}>
                     ${formatSmartCurrency(silverMeltValue)}
                   </Text>
-                  <TouchableOpacity activeOpacity={0.7} onPress={() => { setHoldingsGainMode(prev => prev === 'amount' ? 'percent' : 'amount'); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}>
-                    <Text style={{ color: silverGainLoss >= 0 ? colors.success : colors.error, fontSize: scaledFonts.small, fontWeight: '600', marginTop: 2 }} numberOfLines={1} adjustsFontSizeToFit={true}>
-                      {silverGainLoss >= 0 ? '▲' : '▼'} {holdingsGainMode === 'amount' ? `$${formatSmartCurrency(Math.abs(silverGainLoss))}` : `${silverGainLossPct >= 0 ? '+' : ''}${silverGainLossPct.toFixed(1)}%`}
-                    </Text>
-                  </TouchableOpacity>
+                  <Text style={{ color: silverGainLoss >= 0 ? colors.success : colors.error, fontSize: scaledFonts.small, marginTop: 2 }} numberOfLines={1} adjustsFontSizeToFit={true}>
+                    {silverGainLoss >= 0 ? '▲' : '▼'} {spotChangeDisplayMode === 'amount' ? `$${formatSmartCurrency(Math.abs(silverGainLoss))}` : `${silverGainLossPct >= 0 ? '+' : ''}${silverGainLossPct.toFixed(1)}%`}
+                  </Text>
                 </View>
-              </View>
-              <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 4, marginTop: 8 }}>
-                <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: holdingsGainMode === 'amount' ? colors.text : colors.muted + '50' }} />
-                <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: holdingsGainMode === 'percent' ? colors.text : colors.muted + '50' }} />
               </View>
             </View>
 
@@ -4606,14 +4615,10 @@ function AppContent() {
                     numberOfLines={1}
                     adjustsFontSizeToFit={true}
                   >
-                    {isDailyChangePositive ? '+' : ''}{dailyChange >= 0 ? '' : '-'}${formatSmartCurrency(Math.abs(dailyChange))}
-                  </Text>
-                  <Text
-                    style={{ color: isDailyChangePositive ? colors.success : colors.error, fontSize: scaledFonts.medium }}
-                    numberOfLines={1}
-                    adjustsFontSizeToFit={true}
-                  >
-                    {isDailyChangePositive ? '▲' : '▼'} {isDailyChangePositive ? '+' : ''}{dailyChangePct.toFixed(2)}%
+                    {spotChangeDisplayMode === 'amount'
+                      ? `${isDailyChangePositive ? '+' : ''}${dailyChange >= 0 ? '' : '-'}$${formatSmartCurrency(Math.abs(dailyChange))}`
+                      : `${isDailyChangePositive ? '+' : ''}${dailyChangePct.toFixed(2)}%`
+                    }
                   </Text>
                   <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny, marginTop: 8 }}>
                     Baseline: ${formatSmartCurrency(midnightBaseline)} (@ Ag ${midnightSnapshot?.silverSpot}, Au ${midnightSnapshot?.goldSpot})
@@ -4645,19 +4650,17 @@ function AppContent() {
                     ${formatCurrency(silverSpot)}
                   </Text>
                   {spotChange.silver.percent != null && spotChange.silver.amount != null ? (
-                    <TouchableOpacity onPress={toggleSpotChangeDisplayMode} activeOpacity={0.7}>
-                      <Text style={{
-                        color: spotChange.silver.amount >= 0 ? '#22C55E' : '#EF4444',
-                        fontSize: scaledFonts.small,
-                        fontWeight: '600',
-                        marginTop: 4
-                      }} numberOfLines={1} adjustsFontSizeToFit={true}>
-                        {spotChangeDisplayMode === 'percent'
-                          ? `${spotChange.silver.percent >= 0 ? '+' : ''}${spotChange.silver.percent.toFixed(2)}%`
-                          : `${spotChange.silver.amount >= 0 ? '+' : ''}$${spotChange.silver.amount.toFixed(2)}`
-                        }
-                      </Text>
-                    </TouchableOpacity>
+                    <Text style={{
+                      color: spotChange.silver.amount >= 0 ? '#22C55E' : '#EF4444',
+                      fontSize: scaledFonts.small,
+                      fontWeight: '600',
+                      marginTop: 4
+                    }} numberOfLines={1} adjustsFontSizeToFit={true}>
+                      {spotChangeDisplayMode === 'percent'
+                        ? `${spotChange.silver.percent >= 0 ? '+' : ''}${spotChange.silver.percent.toFixed(2)}%`
+                        : `${spotChange.silver.amount >= 0 ? '+' : ''}$${spotChange.silver.amount.toFixed(2)}`
+                      }
+                    </Text>
                   ) : (
                     <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny, marginTop: 4 }}>Change: --</Text>
                   )}
@@ -4672,19 +4675,17 @@ function AppContent() {
                     ${formatCurrency(goldSpot)}
                   </Text>
                   {spotChange.gold.percent != null && spotChange.gold.amount != null ? (
-                    <TouchableOpacity onPress={toggleSpotChangeDisplayMode} activeOpacity={0.7}>
-                      <Text style={{
-                        color: spotChange.gold.amount >= 0 ? '#22C55E' : '#EF4444',
-                        fontSize: scaledFonts.small,
-                        fontWeight: '600',
-                        marginTop: 4
-                      }} numberOfLines={1} adjustsFontSizeToFit={true}>
-                        {spotChangeDisplayMode === 'percent'
-                          ? `${spotChange.gold.percent >= 0 ? '+' : ''}${spotChange.gold.percent.toFixed(2)}%`
-                          : `${spotChange.gold.amount >= 0 ? '+' : ''}$${spotChange.gold.amount.toFixed(2)}`
-                        }
-                      </Text>
-                    </TouchableOpacity>
+                    <Text style={{
+                      color: spotChange.gold.amount >= 0 ? '#22C55E' : '#EF4444',
+                      fontSize: scaledFonts.small,
+                      fontWeight: '600',
+                      marginTop: 4
+                    }} numberOfLines={1} adjustsFontSizeToFit={true}>
+                      {spotChangeDisplayMode === 'percent'
+                        ? `${spotChange.gold.percent >= 0 ? '+' : ''}${spotChange.gold.percent.toFixed(2)}%`
+                        : `${spotChange.gold.amount >= 0 ? '+' : ''}$${spotChange.gold.amount.toFixed(2)}`
+                      }
+                    </Text>
                   ) : (
                     <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny, marginTop: 4 }}>Change: --</Text>
                   )}
