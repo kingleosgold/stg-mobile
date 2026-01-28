@@ -357,7 +357,9 @@ class ErrorBoundary extends Component {
       return (
         <SafeAreaView style={{ flex: 1, backgroundColor: '#0f0f0f', justifyContent: 'center', alignItems: 'center', padding: 24 }}>
           <StatusBar barStyle="light-content" />
-          <Text style={{ fontSize: 48, marginBottom: 16 }}>⚠️</Text>
+          <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(239, 68, 68, 0.2)', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+            <Text style={{ fontSize: 32, fontWeight: '700', color: '#ef4444' }}>!</Text>
+          </View>
           <Text style={{ fontSize: 24, fontWeight: '700', color: '#fff', marginBottom: 12, textAlign: 'center' }}>
             Something went wrong
           </Text>
@@ -879,6 +881,14 @@ function AppContent() {
       return item.costBasis;
     }
     return (item.unitPrice * item.quantity) + item.taxes + item.shipping;
+  };
+
+  // Helper function to format date for display (YYYY-MM-DD -> MM-DD-YYYY)
+  const formatDateDisplay = (dateStr) => {
+    if (!dateStr || dateStr.length !== 10) return dateStr || '';
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return dateStr;
+    return `${parts[1]}-${parts[2]}-${parts[0]}`;
   };
 
   // Helper function to parse various date formats into YYYY-MM-DD
@@ -4384,7 +4394,7 @@ function AppContent() {
           <>
             {/* Portfolio Value */}
             <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-              <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.large }]}>💰 Portfolio Value</Text>
+              <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.large }]}>Portfolio Value</Text>
               <Text
                 style={{ color: colors.text, fontSize: Math.round(36 * fontScale), fontWeight: '700', marginBottom: 4 }}
                 numberOfLines={1}
@@ -4403,7 +4413,7 @@ function AppContent() {
 
             {/* Today's Change */}
             <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-              <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.large }]}>📅 Today's Change</Text>
+              <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.large }]}>Today's Change</Text>
               {showDailyChange ? (
                 <>
                   <Text
@@ -4438,7 +4448,7 @@ function AppContent() {
 
             {/* Holdings Pie Chart */}
             <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-              <Text style={[styles.cardTitle, { color: colors.text }]}>📊 Holdings Breakdown</Text>
+              <Text style={[styles.cardTitle, { color: colors.text }]}>Holdings Breakdown</Text>
               <PieChart
                 data={[
                   { label: 'Gold', value: goldMeltValue, color: colors.gold },
@@ -4453,25 +4463,25 @@ function AppContent() {
 
             {/* Gold/Silver Ratio */}
             <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-              <Text style={[styles.cardTitle, { color: colors.text }]}>⚖️ Gold/Silver Ratio</Text>
+              <Text style={[styles.cardTitle, { color: colors.text }]}>Gold/Silver Ratio</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
                 <Text style={{ color: colors.text, fontSize: 36, fontWeight: '700' }}>{goldSilverRatio.toFixed(1)}</Text>
                 <Text style={{ color: colors.muted, marginLeft: 8 }}>:1</Text>
               </View>
               <View style={{ backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', padding: 12, borderRadius: 8 }}>
                 {goldSilverRatio > 80 ? (
-                  <Text style={{ color: colors.silver }}>📈 HIGH - Silver may be undervalued</Text>
+                  <Text style={{ color: colors.silver }}>HIGH - Silver may be undervalued</Text>
                 ) : goldSilverRatio < 60 ? (
-                  <Text style={{ color: colors.gold }}>📉 LOW - Gold may be undervalued</Text>
+                  <Text style={{ color: colors.gold }}>LOW - Gold may be undervalued</Text>
                 ) : (
-                  <Text style={{ color: colors.muted }}>⚖️ Normal range (60-80)</Text>
+                  <Text style={{ color: colors.muted }}>Normal range (60-80)</Text>
                 )}
               </View>
             </View>
 
             {/* Quick Stats */}
             <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-              <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>📈 Quick Stats</Text>
+              <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>Quick Stats</Text>
               <View style={styles.statRow}>
                 <Text style={[styles.statRowLabel, { fontSize: scaledFonts.small }]}>Silver Holdings</Text>
                 <Text style={[styles.statRowValue, { color: colors.silver, fontSize: scaledFonts.normal }]}>{totalSilverOzt.toFixed(2)} oz</Text>
@@ -4527,10 +4537,10 @@ function AppContent() {
 
             {/* Live Spot Prices */}
             <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-              <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.large, marginBottom: 12 }]}>🪙 Live Spot Prices</Text>
+              <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.large, marginBottom: 12 }]}>Live Spot Prices</Text>
               <View style={{ flexDirection: 'row', gap: 12 }}>
                 <View style={{ flex: 1, backgroundColor: `${colors.silver}22`, padding: 16, borderRadius: 12 }}>
-                  <Text style={{ color: colors.silver, fontSize: scaledFonts.small }}>🥈 Silver</Text>
+                  <Text style={{ color: colors.silver, fontSize: scaledFonts.small }}>Silver</Text>
                   <Text
                     style={{ color: colors.text, fontSize: scaledFonts.xlarge, fontWeight: '700' }}
                     numberOfLines={1}
@@ -4557,7 +4567,7 @@ function AppContent() {
                   )}
                 </View>
                 <View style={{ flex: 1, backgroundColor: `${colors.gold}22`, padding: 16, borderRadius: 12 }}>
-                  <Text style={{ color: colors.gold, fontSize: scaledFonts.small }}>🥇 Gold</Text>
+                  <Text style={{ color: colors.gold, fontSize: scaledFonts.small }}>Gold</Text>
                   <Text
                     style={{ color: colors.text, fontSize: scaledFonts.xlarge, fontWeight: '700' }}
                     numberOfLines={1}
@@ -4644,7 +4654,7 @@ function AppContent() {
                     setMetalTab('silver');
                   }}
                 >
-                  <Text style={{ color: metalTab === 'silver' ? colors.silver : colors.muted, fontWeight: '600', fontSize: 13 }}>🥈 Silver</Text>
+                  <Text style={{ color: metalTab === 'silver' ? colors.silver : colors.muted, fontWeight: '600', fontSize: 13 }}>Silver</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={{
@@ -4659,7 +4669,7 @@ function AppContent() {
                     setMetalTab('gold');
                   }}
                 >
-                  <Text style={{ color: metalTab === 'gold' ? colors.gold : colors.muted, fontWeight: '600', fontSize: 13 }}>🥇 Gold</Text>
+                  <Text style={{ color: metalTab === 'gold' ? colors.gold : colors.muted, fontWeight: '600', fontSize: 13 }}>Gold</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={{
@@ -4691,7 +4701,7 @@ function AppContent() {
                   setShowSortMenu(true);
                 }}
               >
-                <Text style={{ color: colors.muted, fontSize: 14 }}>↕️</Text>
+                <Text style={{ color: colors.muted, fontSize: 14, fontWeight: '600' }}>Sort</Text>
               </TouchableOpacity>
             </View>
 
@@ -4700,7 +4710,7 @@ function AppContent() {
                 <Text style={{ color: '#000', fontWeight: '600', fontSize: scaledFonts.normal }}>+ Add Purchase</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.buttonOutline, { flex: 1, borderColor: colors.gold, borderWidth: 1.5 }]} onPress={importSpreadsheet}>
-                <Text style={{ color: colors.gold, fontWeight: '600', fontSize: scaledFonts.normal }}>📊 Import CSV</Text>
+                <Text style={{ color: colors.gold, fontWeight: '600', fontSize: scaledFonts.normal }}>Import CSV</Text>
               </TouchableOpacity>
             </View>
 
@@ -4724,9 +4734,9 @@ function AppContent() {
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.itemTitle, { color: colors.text, fontSize: scaledFonts.normal }]} numberOfLines={1}>{item.productName}</Text>
                         {item.datePurchased && (
-                          <Text style={[styles.itemSubtitle, { fontSize: scaledFonts.tiny, marginBottom: 2 }]}>📅 {item.datePurchased}</Text>
+                          <Text style={[styles.itemSubtitle, { fontSize: scaledFonts.tiny, marginBottom: 2 }]}>{formatDateDisplay(item.datePurchased)}</Text>
                         )}
-                        <Text style={[styles.itemSubtitle, { fontSize: scaledFonts.small }]}>{item.quantity}x @ ${formatCurrency(item.unitPrice)} • {(item.ozt * item.quantity).toFixed(2)} oz</Text>
+                        <Text style={[styles.itemSubtitle, { fontSize: scaledFonts.small }]}>{item.quantity} qty @ ${formatCurrency(item.unitPrice)} • {(item.ozt * item.quantity).toFixed(2)} oz</Text>
                         <Text style={[styles.itemSubtitle, { fontSize: scaledFonts.small }]}>
                           Cost: ${formatCurrency(costBasis)}
                         </Text>
@@ -4743,7 +4753,7 @@ function AppContent() {
 
                 {items.length === 0 && (
                   <View style={styles.emptyState}>
-                    <Text style={{ fontSize: 48, marginBottom: 16 }}>🪙</Text>
+                    <Text style={{ fontSize: 32, marginBottom: 16, color: colors.muted }}>—</Text>
                     <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>No {metalTab} holdings yet</Text>
                   </View>
                 )}
@@ -4755,7 +4765,7 @@ function AppContent() {
                   <>
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, marginTop: 8 }}>
                       <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
-                      <Text style={{ color: colors.silver, fontWeight: '600', marginHorizontal: 12, fontSize: scaledFonts.normal }}>🥈 SILVER ({silverItems.length})</Text>
+                      <Text style={{ color: colors.silver, fontWeight: '600', marginHorizontal: 12, fontSize: scaledFonts.normal }}>SILVER ({silverItems.length})</Text>
                       <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
                     </View>
                     {sortItems(silverItems, 'silver').map((item, index) => {
@@ -4774,9 +4784,9 @@ function AppContent() {
                           <View style={{ flex: 1 }}>
                             <Text style={[styles.itemTitle, { color: colors.text, fontSize: scaledFonts.normal }]} numberOfLines={1}>{item.productName}</Text>
                             {item.datePurchased && (
-                              <Text style={[styles.itemSubtitle, { fontSize: scaledFonts.tiny, marginBottom: 2 }]}>📅 {item.datePurchased}</Text>
+                              <Text style={[styles.itemSubtitle, { fontSize: scaledFonts.tiny, marginBottom: 2 }]}>{formatDateDisplay(item.datePurchased)}</Text>
                             )}
-                            <Text style={[styles.itemSubtitle, { fontSize: scaledFonts.small }]}>{item.quantity}x @ ${formatCurrency(item.unitPrice)} • {(item.ozt * item.quantity).toFixed(2)} oz</Text>
+                            <Text style={[styles.itemSubtitle, { fontSize: scaledFonts.small }]}>{item.quantity} qty @ ${formatCurrency(item.unitPrice)} • {(item.ozt * item.quantity).toFixed(2)} oz</Text>
                             <Text style={[styles.itemSubtitle, { fontSize: scaledFonts.small }]}>
                               Cost: ${formatCurrency(costBasis)}
                             </Text>
@@ -4798,7 +4808,7 @@ function AppContent() {
                   <>
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, marginTop: silverItems.length > 0 ? 24 : 8 }}>
                       <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
-                      <Text style={{ color: colors.gold, fontWeight: '600', marginHorizontal: 12, fontSize: scaledFonts.normal }}>🥇 GOLD ({goldItems.length})</Text>
+                      <Text style={{ color: colors.gold, fontWeight: '600', marginHorizontal: 12, fontSize: scaledFonts.normal }}>GOLD ({goldItems.length})</Text>
                       <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
                     </View>
                     {sortItems(goldItems, 'gold').map((item, index) => {
@@ -4817,9 +4827,9 @@ function AppContent() {
                           <View style={{ flex: 1 }}>
                             <Text style={[styles.itemTitle, { color: colors.text, fontSize: scaledFonts.normal }]} numberOfLines={1}>{item.productName}</Text>
                             {item.datePurchased && (
-                              <Text style={[styles.itemSubtitle, { fontSize: scaledFonts.tiny, marginBottom: 2 }]}>📅 {item.datePurchased}</Text>
+                              <Text style={[styles.itemSubtitle, { fontSize: scaledFonts.tiny, marginBottom: 2 }]}>{formatDateDisplay(item.datePurchased)}</Text>
                             )}
-                            <Text style={[styles.itemSubtitle, { fontSize: scaledFonts.small }]}>{item.quantity}x @ ${formatCurrency(item.unitPrice)} • {(item.ozt * item.quantity).toFixed(2)} oz</Text>
+                            <Text style={[styles.itemSubtitle, { fontSize: scaledFonts.small }]}>{item.quantity} qty @ ${formatCurrency(item.unitPrice)} • {(item.ozt * item.quantity).toFixed(2)} oz</Text>
                             <Text style={[styles.itemSubtitle, { fontSize: scaledFonts.small }]}>
                               Cost: ${formatCurrency(costBasis)}
                             </Text>
@@ -4839,7 +4849,7 @@ function AppContent() {
                 {/* Empty state */}
                 {silverItems.length === 0 && goldItems.length === 0 && (
                   <View style={styles.emptyState}>
-                    <Text style={{ fontSize: 48, marginBottom: 16 }}>🪙</Text>
+                    <Text style={{ fontSize: 32, marginBottom: 16, color: colors.muted }}>—</Text>
                     <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>No holdings yet</Text>
                   </View>
                 )}
@@ -4862,14 +4872,14 @@ function AppContent() {
             </TouchableOpacity>
 
             <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-              <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>📊 Break-Even Analysis</Text>
+              <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>Break-Even Analysis</Text>
               <View style={{ backgroundColor: `${colors.silver}22`, padding: 12, borderRadius: 8, marginBottom: 8 }}>
                 <Text style={{ color: colors.silver, fontSize: scaledFonts.normal }}>Silver: ${formatCurrency(silverBreakeven)}/oz needed</Text>
-                <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny }}>{silverSpot >= silverBreakeven ? '✅ Profitable!' : `Need +$${formatCurrency(silverBreakeven - silverSpot)}`}</Text>
+                <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny }}>{silverSpot >= silverBreakeven ? 'Profitable!' : `Need +$${formatCurrency(silverBreakeven - silverSpot)}`}</Text>
               </View>
               <View style={{ backgroundColor: `${colors.gold}22`, padding: 12, borderRadius: 8 }}>
                 <Text style={{ color: colors.gold, fontSize: scaledFonts.normal }}>Gold: ${formatCurrency(goldBreakeven)}/oz needed</Text>
-                <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny }}>{goldSpot >= goldBreakeven ? '✅ Profitable!' : `Need +$${formatCurrency(goldBreakeven - goldSpot)}`}</Text>
+                <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny }}>{goldSpot >= goldBreakeven ? 'Profitable!' : `Need +$${formatCurrency(goldBreakeven - goldSpot)}`}</Text>
               </View>
             </View>
 
@@ -4887,10 +4897,10 @@ function AppContent() {
             <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>📈 Portfolio Analytics</Text>
+                  <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>Portfolio Analytics</Text>
                   {!hasGoldAccess && (
                     <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(251, 191, 36, 0.2)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 }}>
-                      <Text style={{ color: colors.gold, fontSize: scaledFonts.tiny, fontWeight: '600' }}>🔒 GOLD</Text>
+                      <Text style={{ color: colors.gold, fontSize: scaledFonts.tiny, fontWeight: '600' }}>GOLD</Text>
                     </View>
                   )}
                 </View>
@@ -4951,7 +4961,7 @@ function AppContent() {
                       // No snapshot yet - show message
                       return (
                         <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-                          <Text style={{ fontSize: 32, marginBottom: 12 }}>📊</Text>
+                          <Text style={{ fontSize: 24, marginBottom: 12, color: colors.muted }}>—</Text>
                           <Text style={{ color: colors.muted, textAlign: 'center', fontSize: scaledFonts.normal }}>
                             {silverItems.length === 0 && goldItems.length === 0
                               ? 'Add some holdings to see your portfolio analytics!'
@@ -5113,7 +5123,7 @@ function AppContent() {
                     );
                   })() : (
                     <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-                      <Text style={{ fontSize: 32, marginBottom: 12 }}>📊</Text>
+                      <Text style={{ fontSize: 24, marginBottom: 12, color: colors.muted }}>—</Text>
                       <Text style={{ color: colors.muted, textAlign: 'center', fontSize: scaledFonts.normal }}>
                         {analyticsSnapshots.length === 0
                           ? (silverItems.length === 0 && goldItems.length === 0
@@ -5156,7 +5166,7 @@ function AppContent() {
                     <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>Cost Basis Analysis</Text>
                     {!hasGoldAccess && (
                       <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(251, 191, 36, 0.2)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 }}>
-                        <Text style={{ color: colors.gold, fontSize: scaledFonts.tiny, fontWeight: '600' }}>🔒 GOLD</Text>
+                        <Text style={{ color: colors.gold, fontSize: scaledFonts.tiny, fontWeight: '600' }}>GOLD</Text>
                       </View>
                     )}
                   </View>
@@ -5250,7 +5260,7 @@ function AppContent() {
                     <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>Premium Analysis</Text>
                     {!hasGoldAccess && (
                       <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(251, 191, 36, 0.2)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 }}>
-                        <Text style={{ color: colors.gold, fontSize: scaledFonts.tiny, fontWeight: '600' }}>🔒 GOLD</Text>
+                        <Text style={{ color: colors.gold, fontSize: scaledFonts.tiny, fontWeight: '600' }}>GOLD</Text>
                       </View>
                     )}
                   </View>
@@ -5406,7 +5416,7 @@ function AppContent() {
                     shadowRadius: 8,
                     elevation: 5,
                   }}>
-                    <Text style={{ fontSize: 40, marginBottom: 12 }}>📊</Text>
+                    <Text style={{ fontSize: 24, marginBottom: 12, color: colors.muted }}>—</Text>
                     <Text style={{ color: colors.gold, fontSize: scaledFonts.large, fontWeight: '700', marginBottom: 8, textAlign: 'center' }}>
                       Unlock Portfolio Analytics
                     </Text>
@@ -5630,7 +5640,7 @@ function AppContent() {
                     }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                         <View style={{ width: 30, height: 30, borderRadius: 6, backgroundColor: '#007AFF', alignItems: 'center', justifyContent: 'center' }}>
-                          <Text style={{ color: '#fff', fontSize: 14 }}>☁️</Text>
+                          <View style={{ width: 12, height: 8, borderRadius: 4, backgroundColor: '#fff' }} />
                         </View>
                         <View>
                           <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>iCloud Sync</Text>
@@ -5670,7 +5680,7 @@ function AppContent() {
                 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                     <View style={{ width: 30, height: 30, borderRadius: 6, backgroundColor: '#FF9500', alignItems: 'center', justifyContent: 'center' }}>
-                      <Text style={{ color: '#fff', fontSize: 14 }}>🔔</Text>
+                      <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#fff' }} />
                     </View>
                     <View>
                       <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>Price Alerts</Text>
@@ -5746,7 +5756,7 @@ function AppContent() {
                   }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                       <View style={{ width: 30, height: 30, borderRadius: 6, backgroundColor: '#34C759', alignItems: 'center', justifyContent: 'center' }}>
-                        <Text style={{ color: '#fff', fontSize: 14 }}>📈</Text>
+                        <View style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: '#fff' }} />
                       </View>
                       <View>
                         <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>Portfolio Analytics</Text>
@@ -5793,7 +5803,10 @@ function AppContent() {
                               backgroundColor: alert.metal === 'gold' ? 'rgba(251,191,36,0.2)' : 'rgba(156,163,175,0.2)',
                               alignItems: 'center', justifyContent: 'center'
                             }}>
-                              <Text style={{ fontSize: 14 }}>{alert.metal === 'gold' ? '🥇' : '🥈'}</Text>
+                              <View style={{
+                                width: 12, height: 12, borderRadius: 6,
+                                backgroundColor: alert.metal === 'gold' ? '#fbbf24' : '#9ca3af',
+                              }} />
                             </View>
                             <View>
                               <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>
@@ -5823,9 +5836,9 @@ function AppContent() {
                 }}>
                   <View style={{ flexDirection: 'row', gap: 8 }}>
                     {[
-                      { key: 'light', label: 'Light', icon: '☀️' },
-                      { key: 'dark', label: 'Dark', icon: '🌙' },
-                      { key: 'system', label: 'Auto', icon: '⚙️' },
+                      { key: 'light', label: 'Light' },
+                      { key: 'dark', label: 'Dark' },
+                      { key: 'system', label: 'Auto' },
                     ].map((option) => (
                       <TouchableOpacity
                         key={option.key}
@@ -5844,11 +5857,10 @@ function AppContent() {
                           changeTheme(option.key);
                         }}
                       >
-                        <Text style={{ fontSize: 20, marginBottom: 4 }}>{option.icon}</Text>
                         <Text style={{
                           color: themePreference === option.key ? colors.text : colors.muted,
                           fontWeight: themePreference === option.key ? '600' : '400',
-                          fontSize: scaledFonts.small,
+                          fontSize: scaledFonts.normal,
                         }}>
                           {option.label}
                         </Text>
@@ -6193,15 +6205,14 @@ function AppContent() {
       {/* Bottom Tabs */}
       <View style={[styles.bottomTabs, { backgroundColor: isDarkMode ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.95)', borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom, 10) }]}>
         {[
-          { key: 'dashboard', icon: '📊', label: 'Dashboard' },
-          { key: 'holdings', icon: '🪙', label: 'Holdings' },
-          { key: 'analytics', icon: '📈', label: 'Analytics' },
-          { key: 'tools', icon: '🧮', label: 'Tools' },
-          { key: 'settings', icon: '⚙️', label: 'Settings' },
+          { key: 'dashboard', label: 'Dashboard' },
+          { key: 'holdings', label: 'Holdings' },
+          { key: 'analytics', label: 'Analytics' },
+          { key: 'tools', label: 'Tools' },
+          { key: 'settings', label: 'Settings' },
         ].map(t => (
           <TouchableOpacity key={t.key} style={styles.bottomTab} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setTab(t.key); }}>
-            <Text style={{ fontSize: scaledFonts.large, marginBottom: 2 }}>{t.icon}</Text>
-            <Text style={{ color: tab === t.key ? colors.text : colors.muted, fontSize: scaledFonts.tiny }}>{t.label}</Text>
+            <Text style={{ color: tab === t.key ? colors.gold : colors.muted, fontSize: scaledFonts.small, fontWeight: tab === t.key ? '600' : '400' }}>{t.label}</Text>
             {tab === t.key && <View style={{ position: 'absolute', bottom: -4, left: 8, right: 8, height: 2, backgroundColor: colors.gold, borderRadius: 1 }} />}
           </TouchableOpacity>
         ))}
@@ -6270,13 +6281,13 @@ function AppContent() {
                   )}
 
                   <View style={[styles.card, { backgroundColor: isDarkMode ? 'rgba(148,163,184,0.1)' : `${colors.gold}15` }]}>
-                    <Text style={{ color: colors.text, fontWeight: '600', marginBottom: 12, fontSize: scaledFonts.normal }}>📷 AI Receipt Scanner</Text>
+                    <Text style={{ color: colors.text, fontWeight: '600', marginBottom: 12, fontSize: scaledFonts.normal }}>AI Receipt Scanner</Text>
                     <View style={{ flexDirection: 'row', gap: 8 }}>
                       <TouchableOpacity style={[styles.button, { backgroundColor: colors.gold, flex: 1 }]} onPress={() => showScanningTips('camera')}>
-                        <Text style={{ color: '#000', fontSize: scaledFonts.normal }} numberOfLines={1} adjustsFontSizeToFit={true}>📷 Camera</Text>
+                        <Text style={{ color: '#000', fontSize: scaledFonts.normal }} numberOfLines={1} adjustsFontSizeToFit={true}>Camera</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={[styles.button, { backgroundColor: colors.gold, flex: 1 }]} onPress={() => showScanningTips('gallery')}>
-                        <Text style={{ color: '#000', fontSize: scaledFonts.normal }} numberOfLines={1} adjustsFontSizeToFit={true}>🖼️ Upload</Text>
+                        <Text style={{ color: '#000', fontSize: scaledFonts.normal }} numberOfLines={1} adjustsFontSizeToFit={true}>Upload</Text>
                       </TouchableOpacity>
                     </View>
                     {!hasGold && !hasLifetimeAccess && (
@@ -6302,10 +6313,10 @@ function AppContent() {
 
                   <View style={styles.metalTabs}>
                     <TouchableOpacity style={[styles.metalTab, { borderColor: metalTab === 'silver' ? colors.silver : colors.border, backgroundColor: metalTab === 'silver' ? `${colors.silver}22` : 'transparent' }]} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setMetalTab('silver'); }}>
-                      <Text style={{ color: metalTab === 'silver' ? colors.silver : colors.muted, fontSize: scaledFonts.normal }}>🥈 Silver</Text>
+                      <Text style={{ color: metalTab === 'silver' ? colors.silver : colors.muted, fontSize: scaledFonts.normal }}>Silver</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={[styles.metalTab, { borderColor: metalTab === 'gold' ? colors.gold : colors.border, backgroundColor: metalTab === 'gold' ? `${colors.gold}22` : 'transparent' }]} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setMetalTab('gold'); }}>
-                      <Text style={{ color: metalTab === 'gold' ? colors.gold : colors.muted, fontSize: scaledFonts.normal }}>🥇 Gold</Text>
+                      <Text style={{ color: metalTab === 'gold' ? colors.gold : colors.muted, fontSize: scaledFonts.normal }}>Gold</Text>
                     </TouchableOpacity>
                   </View>
 
@@ -6326,22 +6337,22 @@ function AppContent() {
                   {/* Accuracy indicators for historical spot prices */}
                   {spotPriceSource === 'price_log' && (
                     <Text style={{ color: '#22C55E', fontSize: scaledFonts.small, marginTop: -4, marginBottom: 4 }}>
-                      ✅ Exact price from our records
+                      Exact price from our records
                     </Text>
                   )}
                   {spotPriceSource === 'etf_derived' && (
                     <Text style={{ color: '#3B82F6', fontSize: scaledFonts.small, marginTop: -4, marginBottom: 4 }}>
-                      📊 Daily ETF-derived price. You can adjust if needed.
+                      Daily ETF-derived price. You can adjust if needed.
                     </Text>
                   )}
                   {(spotPriceSource === 'macrotrends' || spotPriceSource === 'static-json' || spotPriceSource === 'static-json-nearest') && (
                     <Text style={{ color: '#E69500', fontSize: scaledFonts.small, marginTop: -4, marginBottom: 4 }}>
-                      ⚠️ Monthly average (daily price unavailable). You can edit this manually.
+                      Monthly average (daily price unavailable). You can edit this manually.
                     </Text>
                   )}
                   {(spotPriceSource === 'current-spot' || spotPriceSource === 'current-fallback' || spotPriceSource === 'client-fallback' || spotPriceSource === 'current_fallback') && (
                     <Text style={{ color: '#E69500', fontSize: scaledFonts.small, marginTop: -4, marginBottom: 4 }}>
-                      ⚠️ Historical price unavailable - using today's spot. You can edit this manually.
+                      Historical price unavailable - using today's spot. You can edit this manually.
                     </Text>
                   )}
 
@@ -6358,7 +6369,7 @@ function AppContent() {
                         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                           <View style={{ flex: 1 }}>
                             <Text style={{ color: '#E69500', fontSize: scaledFonts.small, fontWeight: '600' }}>
-                              ⚠️ Your price differs by {pctDiff.toFixed(0)}%
+                              Your price differs by {pctDiff.toFixed(0)}%
                             </Text>
                             <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny, marginTop: 2 }}>
                               Historical spot was ${formatCurrency(histSpot)} on {historicalSpotSuggestion.date}
@@ -6539,12 +6550,12 @@ function AppContent() {
       <ModalWrapper
         visible={showPrivacyModal}
         onClose={() => setShowPrivacyModal(false)}
-        title="🔒 Privacy & Security"
+        title="Privacy & Security"
         colors={colors}
         isDarkMode={isDarkMode}
       >
         <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-          <Text style={[styles.cardTitle, { color: colors.success }]}>✅ What We Do</Text>
+          <Text style={[styles.cardTitle, { color: colors.success }]}>What We Do</Text>
           <Text style={[styles.privacyItem, { color: colors.text }]}>• Store data locally on YOUR device (when not signed in)</Text>
           <Text style={[styles.privacyItem, { color: colors.text }]}>• Sync securely to the cloud (when signed in)</Text>
           <Text style={[styles.privacyItem, { color: colors.text }]}>• Encrypt all data in transit and at rest</Text>
@@ -6552,7 +6563,7 @@ function AppContent() {
           <Text style={[styles.privacyItem, { color: colors.text }]}>• Delete images immediately after scanning</Text>
         </View>
         <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-          <Text style={[styles.cardTitle, { color: colors.error }]}>❌ What We DON'T Do</Text>
+          <Text style={[styles.cardTitle, { color: colors.error }]}>What We DON'T Do</Text>
           <Text style={[styles.privacyItem, { color: colors.text }]}>• Sell your data to third parties</Text>
           <Text style={[styles.privacyItem, { color: colors.text }]}>• Share your information with advertisers</Text>
           <Text style={[styles.privacyItem, { color: colors.text }]}>• Track your browsing or behavior</Text>
@@ -6568,7 +6579,7 @@ function AppContent() {
       <ModalWrapper
         visible={showHelpModal}
         onClose={() => setShowHelpModal(false)}
-        title="📖 Help & Tips"
+        title="Help & Tips"
         colors={colors}
         isDarkMode={isDarkMode}
       >
@@ -6585,7 +6596,7 @@ function AppContent() {
           <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>• Tap "Upload Photo" to select an existing image</Text>
           <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>• The AI extracts product name, quantity, price, dealer, and date</Text>
           <View style={{ backgroundColor: 'rgba(251, 191, 36, 0.15)', padding: 10, borderRadius: 8, marginTop: 8 }}>
-            <Text style={{ color: colors.gold, fontSize: scaledFonts.small, fontWeight: '600' }}>💡 Tip: Digital screenshots of online receipts work best!</Text>
+            <Text style={{ color: colors.gold, fontSize: scaledFonts.small, fontWeight: '600' }}>Tip: Digital screenshots of online receipts work best!</Text>
             <Text style={{ color: colors.muted, fontSize: scaledFonts.small, marginTop: 4 }}>Clear text and good lighting improve accuracy</Text>
           </View>
           <Text style={[styles.privacyItem, { marginTop: 8, color: colors.text, fontSize: scaledFonts.small }]}>• Free users: 5 scans per month</Text>
@@ -6702,7 +6713,7 @@ function AppContent() {
                   color: newAlert.metal === metal ? '#000' : colors.text,
                   fontWeight: '600',
                 }}>
-                  {metal === 'gold' ? '🥇 Gold' : '🥈 Silver'}
+                  {metal === 'gold' ? 'Gold' : 'Silver'}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -6813,10 +6824,10 @@ function AppContent() {
           }}>
             <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny, marginBottom: 4 }}>Current Stack</Text>
             <Text style={{ color: colors.silver, fontWeight: '600', fontSize: scaledFonts.normal }}>
-              🥈 Silver: {totalSilverOzt.toFixed(1)} oz
+              Silver: {totalSilverOzt.toFixed(1)} oz
             </Text>
             <Text style={{ color: colors.gold, fontWeight: '600', fontSize: scaledFonts.normal }}>
-              🥇 Gold: {totalGoldOzt.toFixed(3)} oz
+              Gold: {totalGoldOzt.toFixed(3)} oz
             </Text>
           </View>
 
@@ -6962,7 +6973,7 @@ function AppContent() {
       >
         <View style={{ marginBottom: 16 }}>
           <Text style={{ color: colors.success, fontSize: 18, fontWeight: '600', marginBottom: 4 }}>
-            ✅ Found {scannedItems.length} Item{scannedItems.length > 1 ? 's' : ''}
+            Found {scannedItems.length} Item{scannedItems.length > 1 ? 's' : ''}
           </Text>
           {scannedMetadata.dealer && (
             <Text style={{ color: colors.muted, fontSize: 12 }}>Dealer: {scannedMetadata.dealer}</Text>
@@ -7033,7 +7044,7 @@ function AppContent() {
               {/* Price warning for suspicious values */}
               {item.priceWarning && (
                 <View style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', padding: 8, borderRadius: 6, marginTop: 8 }}>
-                  <Text style={{ color: colors.error, fontSize: 11 }}>⚠️ {item.priceWarning}</Text>
+                  <Text style={{ color: colors.error, fontSize: 11 }}>{item.priceWarning}</Text>
                 </View>
               )}
 
@@ -7048,7 +7059,7 @@ function AppContent() {
                 }}
                 onPress={() => editScannedItem(index)}
               >
-                <Text style={{ color: colors.gold, fontSize: 12, fontWeight: '600' }}>✏️ Edit All Details</Text>
+                <Text style={{ color: colors.gold, fontSize: 12, fontWeight: '600' }}>Edit All Details</Text>
               </TouchableOpacity>
             </View>
           );
@@ -7066,8 +7077,8 @@ function AppContent() {
           >
             <Text style={{ color: '#000', fontWeight: '600', fontSize: 16 }}>
               {scannedItems.length === 1
-                ? '✅ Add Item'
-                : `✅ Add All ${scannedItems.length} Items`}
+                ? 'Add Item'
+                : `Add All ${scannedItems.length} Items`}
             </Text>
           </TouchableOpacity>
 
@@ -7247,7 +7258,7 @@ function AppContent() {
                       }}
                       onPress={() => editImportedItem(index)}
                     >
-                      <Text style={{ color: colors.gold, fontSize: 12, fontWeight: '600' }}>✏️ Edit</Text>
+                      <Text style={{ color: colors.gold, fontSize: 12, fontWeight: '600' }}>Edit</Text>
                     </TouchableOpacity>
                   </View>
                 );
@@ -7294,8 +7305,8 @@ function AppContent() {
               <Text style={[styles.cardTitle, { fontSize: scaledFonts.xlarge, color: colors.text }]}>{detailItem.productName}</Text>
               {detailItem.datePurchased && (
                 <View style={styles.statRow}>
-                  <Text style={[styles.statRowLabel, { fontSize: scaledFonts.small }]}>📅 Purchase Date</Text>
-                  <Text style={[styles.statRowValue, { color: colors.text, fontSize: scaledFonts.normal }]}>{detailItem.datePurchased}</Text>
+                  <Text style={[styles.statRowLabel, { fontSize: scaledFonts.small }]}>Purchase Date</Text>
+                  <Text style={[styles.statRowValue, { color: colors.text, fontSize: scaledFonts.normal }]}>{formatDateDisplay(detailItem.datePurchased)}</Text>
                 </View>
               )}
               {detailItem.source && (
@@ -7307,7 +7318,7 @@ function AppContent() {
               <View style={[styles.divider, { backgroundColor: colors.border }]} />
               <View style={styles.statRow}>
                 <Text style={[styles.statRowLabel, { fontSize: scaledFonts.small }]}>Quantity</Text>
-                <Text style={[styles.statRowValue, { color: colors.text, fontSize: scaledFonts.normal }]}>{detailItem.quantity}x</Text>
+                <Text style={[styles.statRowValue, { color: colors.text, fontSize: scaledFonts.normal }]}>{detailItem.quantity}</Text>
               </View>
               <View style={styles.statRow}>
                 <Text style={[styles.statRowLabel, { fontSize: scaledFonts.small }]}>Unit Price</Text>
@@ -7385,13 +7396,13 @@ function AppContent() {
                   editItem(detailItem, detailMetal);
                 }}
               >
-                <Text style={{ color: '#000', fontWeight: '600', fontSize: scaledFonts.normal }}>✏️ Edit</Text>
+                <Text style={{ color: '#000', fontWeight: '600', fontSize: scaledFonts.normal }}>Edit</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.buttonOutline, { flex: 1, borderColor: colors.error }]}
                 onPress={() => deleteItem(detailItem.id, detailMetal)}
               >
-                <Text style={{ color: colors.error, fontWeight: '600', fontSize: scaledFonts.normal }}>🗑 Delete</Text>
+                <Text style={{ color: colors.error, fontWeight: '600', fontSize: scaledFonts.normal }}>Delete</Text>
               </TouchableOpacity>
             </View>
           </>
@@ -7414,7 +7425,7 @@ function AppContent() {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           }}
         >
-          <Text style={[styles.cardTitle, { marginBottom: 0, color: colors.text }]}>📅 Date (Newest First)</Text>
+          <Text style={[styles.cardTitle, { marginBottom: 0, color: colors.text }]}>Date (Newest First)</Text>
           <Text style={{ color: colors.muted, fontSize: 12, marginTop: 4 }}>Most recent purchases first</Text>
         </TouchableOpacity>
 
@@ -7426,7 +7437,7 @@ function AppContent() {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           }}
         >
-          <Text style={[styles.cardTitle, { marginBottom: 0, color: colors.text }]}>📅 Date (Oldest First)</Text>
+          <Text style={[styles.cardTitle, { marginBottom: 0, color: colors.text }]}>Date (Oldest First)</Text>
           <Text style={{ color: colors.muted, fontSize: 12, marginTop: 4 }}>Earliest purchases first</Text>
         </TouchableOpacity>
 
@@ -7438,7 +7449,7 @@ function AppContent() {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           }}
         >
-          <Text style={[styles.cardTitle, { marginBottom: 0, color: colors.text }]}>💰 Value (High to Low)</Text>
+          <Text style={[styles.cardTitle, { marginBottom: 0, color: colors.text }]}>Value (High to Low)</Text>
           <Text style={{ color: colors.muted, fontSize: 12, marginTop: 4 }}>Highest melt value first</Text>
         </TouchableOpacity>
 
@@ -7450,7 +7461,7 @@ function AppContent() {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           }}
         >
-          <Text style={[styles.cardTitle, { marginBottom: 0, color: colors.text }]}>💰 Value (Low to High)</Text>
+          <Text style={[styles.cardTitle, { marginBottom: 0, color: colors.text }]}>Value (Low to High)</Text>
           <Text style={{ color: colors.muted, fontSize: 12, marginTop: 4 }}>Lowest melt value first</Text>
         </TouchableOpacity>
 
@@ -7484,7 +7495,14 @@ function AppContent() {
             }}>
               {/* Header */}
               <View style={{ alignItems: 'center', marginBottom: 20 }}>
-                <Text style={{ fontSize: 24, marginBottom: 8 }}>🪙</Text>
+                <View style={{
+                  width: 40, height: 40, borderRadius: 20,
+                  backgroundColor: 'rgba(251, 191, 36, 0.2)',
+                  alignItems: 'center', justifyContent: 'center',
+                  marginBottom: 8,
+                }}>
+                  <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: '#fbbf24' }} />
+                </View>
                 <Text style={{ color: '#fbbf24', fontSize: 18, fontWeight: '700' }}>My Precious Metals Stack</Text>
               </View>
 
@@ -7513,7 +7531,7 @@ function AppContent() {
                   borderWidth: 1,
                   borderColor: 'rgba(251, 191, 36, 0.15)',
                 }}>
-                  <Text style={{ fontSize: 20, marginBottom: 4 }}>🥇</Text>
+                  <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#fbbf24', marginBottom: 4 }} />
                   <Text style={{ color: '#fbbf24', fontWeight: '600', marginBottom: 8 }}>Gold</Text>
                   <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>{formatOunces(totalGoldOzt, 3)} oz</Text>
                   <Text style={{ color: '#71717a', fontSize: 12, marginTop: 4 }}>${formatCurrency(totalGoldOzt * goldSpot, 0)}</Text>
@@ -7528,7 +7546,7 @@ function AppContent() {
                   borderWidth: 1,
                   borderColor: 'rgba(156, 163, 175, 0.15)',
                 }}>
-                  <Text style={{ fontSize: 20, marginBottom: 4 }}>🥈</Text>
+                  <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#9ca3af', marginBottom: 4 }} />
                   <Text style={{ color: '#9ca3af', fontWeight: '600', marginBottom: 8 }}>Silver</Text>
                   <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>{formatOunces(totalSilverOzt, 2)} oz</Text>
                   <Text style={{ color: '#71717a', fontSize: 12, marginTop: 4 }}>${formatCurrency(totalSilverOzt * silverSpot, 0)}</Text>
