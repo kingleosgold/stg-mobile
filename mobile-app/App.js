@@ -6729,6 +6729,12 @@ function AppContent() {
           <Text style={{ color: colors.success, fontWeight: '600' }}>Your Data, Your Control</Text>
           <Text style={{ color: colors.muted, fontStyle: 'italic' }}>"Your data is private and secure. We store it only to power your experience - never to sell or share."</Text>
         </View>
+        <TouchableOpacity
+          style={{ alignItems: 'center', paddingVertical: 16 }}
+          onPress={() => Linking.openURL('https://stack-tracker-pro-production.up.railway.app/privacy')}
+        >
+          <Text style={{ color: '#007AFF', fontSize: scaledFonts.normal }}>View Complete Privacy Policy</Text>
+        </TouchableOpacity>
       </ModalWrapper>
 
       {/* Help & Tips Modal */}

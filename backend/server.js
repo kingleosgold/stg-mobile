@@ -1697,9 +1697,9 @@ If a field is unreadable, use null. Metal must be: gold, silver, platinum, or pa
  */
 app.get('/api/privacy', (req, res) => {
   res.json({
-    version: '1.0.0',
-    lastUpdated: '2024-12-26',
-    summary: 'Stack Tracker Pro is built with privacy as the foundation. We cannot access your data.',
+    version: '2.0.0',
+    lastUpdated: '2026-01-28',
+    summary: 'Your data is stored on your device by default. Cloud sync is optional and encrypted. We never sell or share your data.',
     principles: [
       {
         title: 'Memory-Only Image Processing',
@@ -1843,10 +1843,10 @@ app.get('/privacy', (req, res) => {
   <div class="container">
     <h1>🪙 Privacy Policy</h1>
     <p class="tagline">Stack Tracker Pro - Privacy-First Precious Metals Portfolio</p>
-    <p class="last-updated">Last Updated: December 26, 2024</p>
+    <p class="last-updated">Last Updated: January 28, 2026</p>
 
     <div class="summary">
-      <strong>TL;DR:</strong> Stack Tracker Pro is built with privacy as the foundation. All your portfolio data is stored locally on your device only. We do NOT collect, store, or transmit your personal data to our servers.
+      <strong>TL;DR:</strong> Your portfolio data is stored on your device by default. If you create an account and enable cloud sync, your data is encrypted and stored securely on our servers. We never sell or share your data. Receipt images are deleted immediately after processing.
     </div>
 
     <h2>Our Privacy Principles</h2>
@@ -1854,14 +1854,28 @@ app.get('/privacy', (req, res) => {
     <div class="principle">
       <h3><span class="icon">📱</span> Local-First Data Storage</h3>
       <p>
-        All your portfolio data—your precious metals holdings, purchase history, and preferences—is stored exclusively on your device using encrypted local storage. We have <strong>zero access</strong> to your portfolio data because it never leaves your device.
+        By default, all your portfolio data—your precious metals holdings, purchase history, and preferences—is stored on your device using encrypted local storage. You can use Stack Tracker Pro without an account, and your data stays entirely on your device.
+      </p>
+    </div>
+
+    <div class="principle">
+      <h3><span class="icon">☁️</span> Optional Cloud Sync</h3>
+      <p>
+        Gold and Lifetime subscribers can optionally create an account and enable cloud sync. When enabled, your portfolio data is encrypted and stored on our secure servers to sync across your devices. Cloud sync is entirely optional—you can use all features without it. You can delete your cloud account and all associated data at any time from the app settings.
       </p>
     </div>
 
     <div class="principle">
       <h3><span class="icon">📷</span> Memory-Only Image Processing</h3>
       <p>
-        When you use our AI receipt scanning feature, images are processed entirely in RAM and <strong>never written to disk</strong>. The image is sent to our server, processed in memory, analyzed by AI, and immediately discarded. No receipts, photos, or scanned data are ever stored on our servers.
+        When you use our AI receipt scanning feature, images are processed in memory and <strong>deleted immediately</strong> after analysis. No receipts, photos, or scanned images are ever stored on our servers. Only the extracted text data (item descriptions, prices, quantities) is returned to your device.
+      </p>
+    </div>
+
+    <div class="principle">
+      <h3><span class="icon">📊</span> Portfolio Snapshots</h3>
+      <p>
+        To power analytics charts and historical tracking, we store daily portfolio value snapshots on our servers. These snapshots contain aggregate values only (total portfolio value, metal totals) and are tied to your anonymous user ID. They do not contain individual item details.
       </p>
     </div>
 
@@ -1875,34 +1889,44 @@ app.get('/privacy', (req, res) => {
     <div class="principle">
       <h3><span class="icon">🔑</span> No Account Required</h3>
       <p>
-        You can use Stack Tracker Pro fully without creating an account. No email, no password, no personal information required. Your data stays on your device, under your control.
+        You can use Stack Tracker Pro fully without creating an account (Guest Mode). No email, no password, no personal information required. Your data stays on your device, under your control. Accounts are only needed for optional cloud sync.
       </p>
     </div>
 
     <div class="principle">
-      <h3><span class="icon">💰</span> Third-Party Price Data</h3>
+      <h3><span class="icon">💰</span> Third-Party Services</h3>
       <p>
-        We use <strong>MetalPriceAPI</strong> and <strong>GoldAPI.io</strong> to fetch live precious metals spot prices. These API requests do not include any personal information or portfolio data—only anonymous requests for current market prices. Your holdings are never shared with these services.
+        We use <strong>MetalPriceAPI</strong> and <strong>GoldAPI.io</strong> for live spot prices—these requests contain no personal data. Subscriptions are managed by <strong>RevenueCat</strong> and processed through the Apple App Store. We do not directly handle payment information.
+      </p>
+    </div>
+
+    <h2>Data We Collect</h2>
+    <div class="principle">
+      <h3><span class="icon">📋</span> What We Store</h3>
+      <p>
+        ✅ Anonymous user ID (for subscription and sync features)<br>
+        ✅ Portfolio snapshots for analytics (aggregate values only)<br>
+        ✅ Cloud sync data if you opt in (encrypted portfolio data)<br>
+        ✅ Price alert preferences (target prices and notification settings)
       </p>
     </div>
 
     <div class="principle">
-      <h3><span class="icon">☁️</span> Optional Cloud Backup (Future Feature)</h3>
+      <h3><span class="icon">🚫</span> What We Never Collect</h3>
       <p>
-        If we implement cloud backup in the future, it will be entirely optional and use end-to-end encryption with user-held keys. Your data would be encrypted on your device before transmission, and we would only store encrypted ciphertext that we cannot decrypt.
-      </p>
-    </div>
-
-    <h2>Data We Do NOT Collect</h2>
-    <div class="principle">
-      <h3><span class="icon">✅</span> We Do Not Collect</h3>
-      <p>
-        ❌ Your precious metals holdings or portfolio data<br>
-        ❌ Receipt images or scanned documents<br>
-        ❌ Personal information (name, email, address)<br>
+        ❌ Receipt images or scanned documents (deleted immediately)<br>
+        ❌ Personal information (name, address, phone number)<br>
         ❌ Location data or device identifiers<br>
         ❌ Usage analytics or behavioral tracking<br>
-        ❌ Financial information or payment details
+        ❌ Payment details (handled by Apple/Google)
+      </p>
+    </div>
+
+    <h2>Data Sharing</h2>
+    <div class="principle">
+      <h3><span class="icon">🔒</span> We Never Sell Your Data</h3>
+      <p>
+        Your data is never sold, shared with advertisers, or provided to third parties for marketing purposes. Data is only shared with service providers essential to app functionality (payment processing, price data APIs) and only the minimum data necessary.
       </p>
     </div>
 
@@ -1910,7 +1934,7 @@ app.get('/privacy', (req, res) => {
     <div class="principle">
       <h3><span class="icon">🛡️</span> Complete Control</h3>
       <p>
-        Since all data is stored locally on your device, you have complete control. You can export your data anytime as CSV or JSON, and delete all data with one tap in the app settings. There's nothing for us to delete from our servers because we don't store your data.
+        You can export your data anytime as CSV. If you have a cloud account, you can delete your account and all server-side data from Settings → Danger Zone. Guest mode users have all data stored locally—simply deleting the app removes all data. You can also reset all data from within the app settings.
       </p>
     </div>
 
@@ -2032,7 +2056,7 @@ app.get('/terms', (req, res) => {
   <div class="container">
     <h1>📜 Terms of Use</h1>
     <p class="tagline">Stack Tracker Pro - Privacy-First Precious Metals Portfolio</p>
-    <p class="last-updated">Last Updated: January 4, 2026</p>
+    <p class="last-updated">Last Updated: January 28, 2026</p>
 
     <div class="summary">
       By using Stack Tracker Pro, you agree to these terms. Please read them carefully.
@@ -2065,7 +2089,7 @@ app.get('/terms', (req, res) => {
 
     <h2>4. Data and Privacy</h2>
     <p>
-      Your portfolio data is stored locally on your device. We do not collect, store, or have access to your personal portfolio information. For details on how we handle data, please review our <a href="/privacy">Privacy Policy</a>.
+      Your portfolio data is stored locally on your device by default. If you create an account and enable cloud sync, your data is encrypted and stored on our servers. Receipt images are deleted immediately after AI processing. For full details, please review our <a href="/privacy">Privacy Policy</a>.
     </p>
 
     <h2>5. Subscriptions and Payments</h2>
