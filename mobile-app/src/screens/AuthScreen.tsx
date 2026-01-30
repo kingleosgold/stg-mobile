@@ -13,6 +13,7 @@ import {
   Keyboard,
   TouchableWithoutFeedback,
   Image,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as AppleAuthentication from 'expo-apple-authentication';
@@ -29,7 +30,7 @@ interface AuthScreenProps {
 }
 
 export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
-  const { signIn, signUp, signInWithGoogle, signInWithApple, loading } = useAuth();
+  const { signIn, signUp, signInWithGoogle, signInWithApple, resetPassword, loading } = useAuth();
 
   const [mode, setMode] = useState<AuthMode>('signIn');
   const [email, setEmail] = useState('');
@@ -37,6 +38,11 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isAppleAvailable, setIsAppleAvailable] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [resetSuccess, setResetSuccess] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
 
   // Check Apple auth availability
   React.useEffect(() => {
@@ -133,6 +139,42 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
     }
   };
 
+  const handleForgotPassword = async () => {
+    setResetError(null);
+    Keyboard.dismiss();
+
+    const trimmed = resetEmail.trim();
+    if (!trimmed) {
+      setResetError('Please enter your email address');
+      return;
+    }
+    if (!validateEmail(trimmed)) {
+      setResetError('Please enter a valid email address');
+      return;
+    }
+
+    setResetLoading(true);
+    try {
+      const { error } = await resetPassword(trimmed);
+      if (error) {
+        setResetError(error.message);
+      } else {
+        setResetSuccess(true);
+      }
+    } catch (err: any) {
+      setResetError(err.message || 'An unexpected error occurred');
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  const openForgotPassword = () => {
+    setResetEmail(email.trim());
+    setResetError(null);
+    setResetSuccess(false);
+    setShowForgotPassword(true);
+  };
+
   const switchMode = () => {
     setMode(mode === 'signIn' ? 'signUp' : 'signIn');
     setError(null);
@@ -217,6 +259,18 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
                 editable={!loading}
               />
             </View>
+
+            {/* Forgot Password Link (Sign In only) */}
+            {mode === 'signIn' && (
+              <TouchableOpacity
+                style={{ alignSelf: 'flex-end', marginTop: -8, marginBottom: 8 }}
+                onPress={openForgotPassword}
+              >
+                <Text style={{ color: '#fbbf24', fontSize: 13, fontWeight: '500' }}>
+                  Forgot password?
+                </Text>
+              </TouchableOpacity>
+            )}
 
             {/* Confirm Password (Sign Up only) */}
             {mode === 'signUp' && (
@@ -303,6 +357,83 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
           </ScrollView>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
+
+      {/* Forgot Password Modal */}
+      <Modal
+        visible={showForgotPassword}
+        animationType="slide"
+        presentationStyle="formSheet"
+        onRequestClose={() => setShowForgotPassword(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: '#09090b', padding: 24, paddingTop: 20 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
+            <Text style={{ color: '#e4e4e7', fontSize: 22, fontWeight: '700' }}>Reset Password</Text>
+            <TouchableOpacity onPress={() => setShowForgotPassword(false)}>
+              <Text style={{ color: '#71717a', fontSize: 16 }}>Close</Text>
+            </TouchableOpacity>
+          </View>
+
+          {resetSuccess ? (
+            <View style={{ alignItems: 'center', paddingTop: 40 }}>
+              <Text style={{ fontSize: 48, marginBottom: 16 }}>✉️</Text>
+              <Text style={{ color: '#e4e4e7', fontSize: 18, fontWeight: '600', textAlign: 'center', marginBottom: 12 }}>
+                Check your email
+              </Text>
+              <Text style={{ color: '#71717a', fontSize: 14, textAlign: 'center', lineHeight: 22 }}>
+                We sent a password reset link to{'\n'}
+                <Text style={{ color: '#fbbf24', fontWeight: '500' }}>{resetEmail.trim()}</Text>
+              </Text>
+              <TouchableOpacity
+                style={{ backgroundColor: '#fbbf24', borderRadius: 12, paddingVertical: 14, paddingHorizontal: 32, marginTop: 32 }}
+                onPress={() => setShowForgotPassword(false)}
+              >
+                <Text style={{ color: '#18181b', fontSize: 15, fontWeight: '700' }}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              <Text style={{ color: '#71717a', fontSize: 14, lineHeight: 22, marginBottom: 24 }}>
+                Enter your email address and we'll send you a link to reset your password.
+              </Text>
+
+              {resetError && (
+                <View style={styles.errorContainer}>
+                  <Text style={styles.errorText}>{resetError}</Text>
+                </View>
+              )}
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>Email</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="your@email.com"
+                  placeholderTextColor="#52525b"
+                  value={resetEmail}
+                  onChangeText={setResetEmail}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="email-address"
+                  textContentType="emailAddress"
+                  autoFocus
+                  editable={!resetLoading}
+                />
+              </View>
+
+              <TouchableOpacity
+                style={[styles.primaryButton, resetLoading && styles.buttonDisabled]}
+                onPress={handleForgotPassword}
+                disabled={resetLoading}
+              >
+                {resetLoading ? (
+                  <ActivityIndicator color="#18181b" />
+                ) : (
+                  <Text style={styles.primaryButtonText}>Send Reset Link</Text>
+                )}
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

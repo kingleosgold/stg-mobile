@@ -35,6 +35,7 @@ import ViewShot from 'react-native-view-shot';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import AuthScreen from './src/screens/AuthScreen';
 import AccountScreen from './src/screens/AccountScreen';
+import ResetPasswordScreen from './src/screens/ResetPasswordScreen';
 import { AppleLogo, GoogleLogo, ProfileIcon, DashboardIcon, HoldingsIcon, AnalyticsIcon, ToolsIcon, SettingsIcon, SortIcon } from './src/components/icons';
 import {
   fetchHoldings,
@@ -44,6 +45,7 @@ import {
   fullSync,
   findHoldingByLocalId,
 } from './src/services/supabaseHoldings';
+import { supabase } from './src/lib/supabase';
 
 // Configure notifications behavior
 Notifications.setNotificationHandler({
@@ -641,6 +643,7 @@ function AppContent() {
   const [guestMode, setGuestMode] = useState(null); // null = loading, true = guest, false = require auth
   const [showAuthScreen, setShowAuthScreen] = useState(false);
   const [showAccountScreen, setShowAccountScreen] = useState(false);
+  const [showResetPasswordScreen, setShowResetPasswordScreen] = useState(false);
 
   // Supabase Holdings Sync
   const [isSyncing, setIsSyncing] = useState(false);
@@ -1891,6 +1894,44 @@ function AppContent() {
       setupBackgroundFetch();
     }
   }, []); // Run once on mount
+
+  // Deep link handler for password reset
+  useEffect(() => {
+    const handleDeepLink = async (url) => {
+      if (!url || !url.includes('auth/reset-password')) return;
+
+      try {
+        // Supabase appends tokens as hash fragments: #access_token=...&refresh_token=...
+        const hashIndex = url.indexOf('#');
+        if (hashIndex !== -1) {
+          const hash = url.substring(hashIndex + 1);
+          const params = {};
+          hash.split('&').forEach(pair => {
+            const [key, value] = pair.split('=');
+            if (key && value) params[decodeURIComponent(key)] = decodeURIComponent(value);
+          });
+
+          if (params.access_token && params.refresh_token) {
+            await supabase.auth.setSession({
+              access_token: params.access_token,
+              refresh_token: params.refresh_token,
+            });
+          }
+        }
+      } catch (err) {
+        console.log('Failed to parse reset password deep link:', err?.message);
+      }
+
+      setShowResetPasswordScreen(true);
+    };
+
+    const subscription = Linking.addEventListener('url', ({ url }) => handleDeepLink(url));
+    Linking.getInitialURL().then(url => {
+      if (url) handleDeepLink(url);
+    });
+
+    return () => subscription.remove();
+  }, []);
 
   // Fetch scan status when RevenueCat user ID is available
   useEffect(() => {
@@ -4371,6 +4412,16 @@ function AppContent() {
     setShowAuthScreen(false);
     disableGuestMode();
   };
+
+  // Show reset password screen when opened via deep link
+  if (showResetPasswordScreen) {
+    return (
+      <View style={[styles.container, { backgroundColor: '#09090b' }]}>
+        <StatusBar barStyle="light-content" />
+        <ResetPasswordScreen onComplete={() => setShowResetPasswordScreen(false)} />
+      </View>
+    );
+  }
 
   if (isLoading || authLoading || guestMode === null) {
     return (
