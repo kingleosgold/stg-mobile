@@ -6,6 +6,7 @@ export interface LocalHolding {
   productName: string;
   source: string;
   datePurchased: string;
+  timePurchased?: string; // Optional: HH:MM format for minute-level spot price lookup
   ozt: number;
   quantity: number;
   unitPrice: number;
@@ -38,6 +39,7 @@ export interface SupabaseHolding {
 interface HoldingNotes {
   local_id?: number;
   source?: string;
+  time_purchased?: string; // HH:MM format
   taxes?: number;
   shipping?: number;
   spot_price?: number;
@@ -84,6 +86,7 @@ export function localToSupabase(
   const notesData: HoldingNotes = {
     local_id: holding.id,
     source: holding.source || undefined,
+    time_purchased: holding.timePurchased || undefined,
     taxes: holding.taxes || undefined,
     shipping: holding.shipping || undefined,
     spot_price: holding.spotPrice || undefined,
@@ -122,6 +125,7 @@ export function supabaseToLocal(holding: SupabaseHolding): LocalHolding {
     productName: holding.type || '',
     source: notesData.source || '',
     datePurchased: holding.purchase_date || '',
+    timePurchased: notesData.time_purchased || '',
     ozt: holding.weight || 0,
     quantity: holding.quantity || 1,
     unitPrice: holding.purchase_price || 0,
@@ -206,6 +210,7 @@ export async function updateHolding(
     const notesData: HoldingNotes = {
       local_id: holding.id,
       source: holding.source || undefined,
+      time_purchased: holding.timePurchased || undefined,
       taxes: holding.taxes || undefined,
       shipping: holding.shipping || undefined,
       spot_price: holding.spotPrice || undefined,
