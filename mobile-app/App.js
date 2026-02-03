@@ -1781,8 +1781,8 @@ function AppContent() {
       const token = tokenData.data;
       console.log('📱 [Notifications] Push Token:', token);
 
-      // Configure for iOS
-      if (Platform.OS === 'ios') {
+      // Configure notification channel for Android
+      if (Platform.OS === 'android') {
         await Notifications.setNotificationChannelAsync('default', {
           name: 'default',
           importance: Notifications.AndroidImportance.MAX,
