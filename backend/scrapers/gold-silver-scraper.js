@@ -126,9 +126,35 @@ function getLatestCachedPrices() {
 }
 
 /**
+ * Get the last trading day (skips weekends)
+ * If today is Monday, returns Friday
+ * If today is Sunday, returns Friday
+ * Otherwise returns yesterday
+ * @returns {string} Date string in YYYY-MM-DD format
+ */
+function getLastTradingDay() {
+  const today = new Date();
+  let daysBack = 1;
+  
+  // If today is Monday (1), go back 3 days to Friday
+  // If today is Sunday (0), go back 2 days to Friday
+  if (today.getDay() === 0) {
+    daysBack = 2; // Sunday → Friday
+  } else if (today.getDay() === 1) {
+    daysBack = 3; // Monday → Friday
+  }
+  
+  const lastTrading = new Date(today);
+  lastTrading.setDate(today.getDate() - daysBack);
+  
+  return lastTrading.toISOString().split('T')[0];
+}
+
+/**
  * Get yesterday's prices for change calculation
  * Returns the stored prices only if they're from a PREVIOUS day
  * Falls back to price_log database if local file doesn't have data
+ * Handles weekends by looking back to Friday on Mondays
  */
 async function getYesterdayPrices() {
   const today = new Date().toISOString().split('T')[0];
@@ -138,23 +164,22 @@ async function getYesterdayPrices() {
     return previousDayPrices;
   }
 
-  // Fallback: check price_log database for yesterday's prices
+  // Fallback: check price_log database for last trading day's prices
   try {
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    const lastTradingDay = getLastTradingDay();
+    console.log(`📊 Looking for last trading day prices: ${lastTradingDay}`);
 
-    const loggedPrice = await findClosestLoggedPrice(yesterdayStr, '23:59'); // Get end of day price
+    const loggedPrice = await findClosestLoggedPrice(lastTradingDay, '23:59'); // Get end of day price
     if (loggedPrice && loggedPrice.gold && loggedPrice.silver) {
-      console.log(`📊 Using price_log for yesterday's prices: Gold $${loggedPrice.gold}, Silver $${loggedPrice.silver}`);
+      console.log(`📊 Using price_log for last trading day (${lastTradingDay}): Gold $${loggedPrice.gold}, Silver $${loggedPrice.silver}`);
       return {
         gold: loggedPrice.gold,
         silver: loggedPrice.silver,
-        date: yesterdayStr
+        date: lastTradingDay
       };
     }
   } catch (err) {
-    console.log('⚠️  Could not fetch yesterday prices from price_log:', err.message);
+    console.log('⚠️  Could not fetch last trading day prices from price_log:', err.message);
   }
 
   return null;
