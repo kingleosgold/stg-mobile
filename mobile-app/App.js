@@ -716,7 +716,7 @@ function AppContent() {
   const [pendingImportFile, setPendingImportFile] = useState(null);
   const [showScannedItemsPreview, setShowScannedItemsPreview] = useState(false);
   const [scannedItems, setScannedItems] = useState([]);
-  const [scannedMetadata, setScannedMetadata] = useState({ purchaseDate: '', dealer: '' });
+  const [scannedMetadata, setScannedMetadata] = useState({ purchaseDate: '', purchaseTime: '', dealer: '' });
   const [showDetailView, setShowDetailView] = useState(false);
   const [detailItem, setDetailItem] = useState(null);
   const [detailMetal, setDetailMetal] = useState(null);
@@ -809,7 +809,7 @@ function AppContent() {
 
   // Form State
   const [form, setForm] = useState({
-    productName: '', source: '', datePurchased: '', ozt: '',
+    productName: '', source: '', datePurchased: '', timePurchased: '', ozt: '',
     quantity: '1', unitPrice: '', taxes: '0', shipping: '0',
     spotPrice: '', premium: '0', costBasis: '',
   });
@@ -3206,7 +3206,8 @@ function AppContent() {
     setHistoricalSpotSuggestion(null); // Clear previous suggestion
 
     if (date.length === 10) {
-      const result = await fetchHistoricalSpot(date, metalTab);
+      // Include time if already entered
+      const result = await fetchHistoricalSpot(date, metalTab, form.timePurchased || null);
       if (result.price) {
         const currentSpotPrice = parseFloat(form.spotPrice) || 0;
 
@@ -3230,6 +3231,41 @@ function AppContent() {
         }
         if (__DEV__ && result.note) {
           console.log(`📝 ${result.note}`);
+        }
+      }
+    }
+  };
+
+  // Handle time change - refetch historical spot with time for minute-level precision
+  const handleTimeChange = async (time) => {
+    setForm(prev => ({ ...prev, timePurchased: time }));
+
+    // Validate time format (HH:MM)
+    const timeValid = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time);
+    const hasDate = form.datePurchased && form.datePurchased.length === 10;
+
+    if (timeValid && hasDate) {
+      setSpotPriceSource(null);
+      setHistoricalSpotSuggestion(null);
+
+      const result = await fetchHistoricalSpot(form.datePurchased, metalTab, time);
+      if (result.price) {
+        const currentSpotPrice = parseFloat(form.spotPrice) || 0;
+
+        setHistoricalSpotSuggestion({
+          price: result.price,
+          source: result.source,
+          date: form.datePurchased,
+        });
+
+        // Auto-fill if user hasn't entered a value
+        if (currentSpotPrice === 0) {
+          setForm(prev => ({ ...prev, spotPrice: result.price.toString() }));
+          setSpotPriceSource(result.source);
+        }
+
+        if (__DEV__) {
+          console.log(`⏰ Time-based spot price: $${result.price} (${result.source})`);
         }
       }
     }
@@ -3331,6 +3367,7 @@ function AppContent() {
       let allItems = [];
       let dealer = '';
       let purchaseDate = '';
+      let purchaseTime = '';
       let successCount = 0;
 
       for (let i = 0; i < result.assets.length; i++) {
@@ -3342,9 +3379,10 @@ function AppContent() {
 
           if (data.success && data.items && data.items.length > 0) {
             allItems = [...allItems, ...data.items];
-            // Use first found dealer/date
+            // Use first found dealer/date/time
             if (!dealer && data.dealer) dealer = data.dealer;
             if (!purchaseDate && data.purchaseDate) purchaseDate = parseDate(data.purchaseDate);
+            if (!purchaseTime && data.purchaseTime) purchaseTime = data.purchaseTime;
             successCount++;
             if (__DEV__) console.log(`✅ Image ${i + 1}: Found ${data.items.length} items`);
           } else {
@@ -3375,7 +3413,7 @@ function AppContent() {
         console.log(`🔄 Removed ${duplicatesRemoved} duplicate item(s)`);
       }
 
-      const data = { success: uniqueItems.length > 0, items: uniqueItems, dealer, purchaseDate };
+      const data = { success: uniqueItems.length > 0, items: uniqueItems, dealer, purchaseDate, purchaseTime };
       if (__DEV__) console.log(`📄 Combined results: ${uniqueItems.length} unique items from ${successCount}/${totalImages} images`);
 
       // Handle multi-item receipt response
@@ -3404,10 +3442,10 @@ function AppContent() {
         for (const item of items) {
           const extractedMetal = item.metal === 'gold' ? 'gold' : 'silver';
 
-          // Get historical spot price for this item
+          // Get historical spot price for this item (with time if available)
           let spotPrice = '';
           if (purchaseDate.length === 10) {
-            const result = await fetchHistoricalSpot(purchaseDate, extractedMetal);
+            const result = await fetchHistoricalSpot(purchaseDate, extractedMetal, purchaseTime || null);
             if (result.price) spotPrice = result.price.toString();
           }
 
@@ -3457,6 +3495,7 @@ function AppContent() {
             productName: item.description || '',
             source: dealer,
             datePurchased: purchaseDate,
+            timePurchased: purchaseTime || undefined,
             ozt: parseFloat(item.ozt) || 0,
             quantity: qty,
             unitPrice: unitPrice,
@@ -3471,7 +3510,7 @@ function AppContent() {
 
         // Store scanned items and metadata
         setScannedItems(processedItems);
-        setScannedMetadata({ purchaseDate, dealer });
+        setScannedMetadata({ purchaseDate, purchaseTime, dealer });
 
         // Show success message with haptic feedback
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -3785,6 +3824,7 @@ function AppContent() {
           productName: item.productName,
           source: item.source,
           datePurchased: item.datePurchased,
+          timePurchased: item.timePurchased || undefined,
           ozt: item.ozt,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
@@ -3853,6 +3893,7 @@ function AppContent() {
           productName: item.productName,
           source: item.source,
           datePurchased: item.datePurchased,
+          timePurchased: item.timePurchased || undefined,
           ozt: item.ozt,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
@@ -3896,7 +3937,7 @@ function AppContent() {
         [{ text: 'Great!', onPress: () => {
           setShowScannedItemsPreview(false);
           setScannedItems([]);
-          setScannedMetadata({ purchaseDate: '', dealer: '' });
+          setScannedMetadata({ purchaseDate: '', purchaseTime: '', dealer: '' });
           setMetalTab(silverCount > 0 && goldCount > 0 ? 'both' : silverCount > 0 ? 'silver' : 'gold');
           setTab('holdings');
         }}]
@@ -3915,6 +3956,7 @@ function AppContent() {
       productName: item.productName,
       source: item.source,
       datePurchased: item.datePurchased,
+      timePurchased: item.timePurchased || undefined,
       ozt: item.ozt,
       quantity: item.quantity,
       unitPrice: item.unitPrice,
@@ -4063,6 +4105,7 @@ function AppContent() {
     const item = {
       id: editingItem?.id || Date.now(),
       productName: form.productName, source: form.source, datePurchased: form.datePurchased,
+      timePurchased: form.timePurchased || undefined, // Optional time field
       ozt: parseFloat(form.ozt) || 0, quantity: parseInt(form.quantity) || 1,
       unitPrice: parseFloat(form.unitPrice) || 0, taxes: parseFloat(form.taxes) || 0,
       shipping: parseFloat(form.shipping) || 0, spotPrice: parseFloat(form.spotPrice) || 0,
@@ -4175,7 +4218,7 @@ function AppContent() {
 
   const resetForm = () => {
     setForm({
-      productName: '', source: '', datePurchased: '', ozt: '',
+      productName: '', source: '', datePurchased: '', timePurchased: '', ozt: '',
       quantity: '1', unitPrice: '', taxes: '0', shipping: '0',
       spotPrice: '', premium: '0', costBasis: '',
     });
@@ -4283,6 +4326,7 @@ function AppContent() {
     const defaultCostBasis = (item.unitPrice * item.quantity) + item.taxes + item.shipping;
     setForm({
       productName: item.productName, source: item.source, datePurchased: item.datePurchased,
+      timePurchased: item.timePurchased || '',
       ozt: item.ozt.toString(), quantity: item.quantity.toString(), unitPrice: item.unitPrice.toString(),
       taxes: item.taxes.toString(), shipping: item.shipping.toString(), spotPrice: item.spotPrice.toString(),
       premium: item.premium.toString(),
@@ -4298,7 +4342,7 @@ function AppContent() {
     const hasDate = item.datePurchased && item.datePurchased.length === 10;
 
     if (hasDate) {
-      const result = await fetchHistoricalSpot(item.datePurchased, metal);
+      const result = await fetchHistoricalSpot(item.datePurchased, metal, item.timePurchased);
       if (result.price) {
         // Always store suggestion for comparison (enables warning display)
         setHistoricalSpotSuggestion({
@@ -4331,9 +4375,9 @@ function AppContent() {
         return;
       }
 
-      const headers = 'Metal,Product,Source,Date,OZT,Qty,Unit Price,Taxes,Shipping,Spot,Premium,Total Premium\n';
+      const headers = 'Metal,Product,Source,Date,Time,OZT,Qty,Unit Price,Taxes,Shipping,Spot,Premium,Total Premium\n';
       const rows = all.map(i =>
-        `${i.metal},"${i.productName}","${i.source}",${i.datePurchased},${i.ozt},${i.quantity},${i.unitPrice},${i.taxes},${i.shipping},${i.spotPrice},${i.premium},${i.premium * i.quantity}`
+        `${i.metal},"${i.productName}","${i.source}",${i.datePurchased},${i.timePurchased || ''},${i.ozt},${i.quantity},${i.unitPrice},${i.taxes},${i.shipping},${i.spotPrice},${i.premium},${i.premium * i.quantity}`
       ).join('\n');
 
       const filepath = `${FileSystem.documentDirectory}stack-export-${Date.now()}.csv`;
@@ -6423,7 +6467,10 @@ function AppContent() {
 
                   <FloatingInput label="Product Name *" value={form.productName} onChangeText={v => setForm(p => ({ ...p, productName: v }))} placeholder="American Silver Eagle" colors={colors} isDarkMode={isDarkMode} scaledFonts={scaledFonts} />
                   <FloatingInput label="Dealer" value={form.source} onChangeText={v => setForm(p => ({ ...p, source: v }))} placeholder="APMEX" colors={colors} isDarkMode={isDarkMode} scaledFonts={scaledFonts} />
-                  <FloatingInput label="Date (YYYY-MM-DD)" value={form.datePurchased} onChangeText={handleDateChange} placeholder="2025-12-25" colors={colors} isDarkMode={isDarkMode} scaledFonts={scaledFonts} />
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <View style={{ flex: 2 }}><FloatingInput label="Date (YYYY-MM-DD)" value={form.datePurchased} onChangeText={handleDateChange} placeholder="2025-12-25" colors={colors} isDarkMode={isDarkMode} scaledFonts={scaledFonts} /></View>
+                    <View style={{ flex: 1 }}><FloatingInput label="Time (HH:MM)" value={form.timePurchased} onChangeText={handleTimeChange} placeholder="14:30" keyboardType="numbers-and-punctuation" colors={colors} isDarkMode={isDarkMode} scaledFonts={scaledFonts} /></View>
+                  </View>
 
                   <View style={{ flexDirection: 'row', gap: 8 }}>
                     <View style={{ flex: 1 }}><FloatingInput label="OZT per unit *" value={form.ozt} onChangeText={v => setForm(p => ({ ...p, ozt: v }))} placeholder="1" keyboardType="decimal-pad" colors={colors} isDarkMode={isDarkMode} scaledFonts={scaledFonts} /></View>
@@ -7263,7 +7310,7 @@ function AppContent() {
         onClose={() => {
           setShowScannedItemsPreview(false);
           setScannedItems([]);
-          setScannedMetadata({ purchaseDate: '', dealer: '' });
+          setScannedMetadata({ purchaseDate: '', purchaseTime: '', dealer: '' });
         }}
         title="Receipt Scanned"
         colors={colors}
@@ -7277,7 +7324,7 @@ function AppContent() {
             <Text style={{ color: colors.muted, fontSize: 12 }}>Dealer: {scannedMetadata.dealer}</Text>
           )}
           {scannedMetadata.purchaseDate && (
-            <Text style={{ color: colors.muted, fontSize: 12 }}>Date: {scannedMetadata.purchaseDate}</Text>
+            <Text style={{ color: colors.muted, fontSize: 12 }}>Date: {scannedMetadata.purchaseDate}{scannedMetadata.purchaseTime ? ` at ${scannedMetadata.purchaseTime}` : ''}</Text>
           )}
         </View>
 
@@ -7385,7 +7432,7 @@ function AppContent() {
             onPress={() => {
               setShowScannedItemsPreview(false);
               setScannedItems([]);
-              setScannedMetadata({ purchaseDate: '', dealer: '' });
+              setScannedMetadata({ purchaseDate: '', purchaseTime: '', dealer: '' });
             }}
           >
             <Text style={{ color: colors.text }}>Cancel</Text>
@@ -7606,7 +7653,9 @@ function AppContent() {
               {detailItem.datePurchased && (
                 <View style={styles.statRow}>
                   <Text style={[styles.statRowLabel, { fontSize: scaledFonts.small }]}>Purchase Date</Text>
-                  <Text style={[styles.statRowValue, { color: colors.text, fontSize: scaledFonts.normal }]}>{formatDateDisplay(detailItem.datePurchased)}</Text>
+                  <Text style={[styles.statRowValue, { color: colors.text, fontSize: scaledFonts.normal }]}>
+                    {formatDateDisplay(detailItem.datePurchased)}{detailItem.timePurchased ? ` at ${detailItem.timePurchased}` : ''}
+                  </Text>
                 </View>
               )}
               {detailItem.source && (

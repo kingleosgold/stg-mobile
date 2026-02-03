@@ -1465,11 +1465,13 @@ RULES:
 2. EXCLUDE accessories: tubes, capsules, boxes, cases, albums, flips, holders
 3. EXCLUDE items under $10 (accessories)
 4. Read prices EXACTLY - do not estimate
+5. Extract purchase TIME if visible (from timestamp, order time, transaction time, etc.)
 
 Return ONLY valid JSON (no markdown, no explanation):
 {
   "dealer": "dealer name",
   "purchaseDate": "YYYY-MM-DD",
+  "purchaseTime": "HH:MM",
   "items": [
     {
       "description": "product name exactly as printed",
@@ -1482,7 +1484,7 @@ Return ONLY valid JSON (no markdown, no explanation):
   ]
 }
 
-If a field is unreadable, use null. Metal must be: gold, silver, platinum, or palladium.`;
+If a field is unreadable, use null. Metal must be: gold, silver, platinum, or palladium. purchaseTime should be in 24-hour format (e.g., "14:30" for 2:30 PM).`;
 
     let responseText;
     let apiSource;
@@ -1639,6 +1641,7 @@ If a field is unreadable, use null. Metal must be: gold, silver, platinum, or pa
     console.log('─'.repeat(60));
     console.log(`   Dealer: "${extractedData.dealer || '(not found)'}"`);
     console.log(`   Purchase Date: "${extractedData.purchaseDate || '(not found)'}"`);
+    console.log(`   Purchase Time: "${extractedData.purchaseTime || '(not found)'}"`);
     console.log(`   Items Found: ${extractedData.items.length}`);
     console.log('');
 
@@ -1670,6 +1673,7 @@ If a field is unreadable, use null. Metal must be: gold, silver, platinum, or pa
       success: true,
       dealer: extractedData.dealer || '',
       purchaseDate: extractedData.purchaseDate || '',
+      purchaseTime: extractedData.purchaseTime || '',
       items: extractedData.items,
       itemCount: extractedData.items.length,
       apiSource: apiSource,
