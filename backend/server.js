@@ -93,6 +93,7 @@ const { checkPriceAlerts, startPriceAlertChecker } = require(path.join(__dirname
 
 // Import historical price services
 const { isSupabaseAvailable } = require('./supabaseClient');
+const { validate } = require('./middleware/validation');
 const { fetchETFHistorical, slvToSpotSilver, gldToSpotGold, hasETFDataForDate, fetchBothETFs } = require('./services/etfPrices');
 const { calibrateRatios, getRatioForDate, needsCalibration } = require('./services/calibrateRatios');
 const { logPriceFetch, findLoggedPrice, findClosestLoggedPrice, getLogStats } = require('./services/priceLogger');
@@ -2185,17 +2186,9 @@ app.get('/terms', (req, res) => {
  * Register or update a push token
  * POST /api/push-token/register
  */
-app.post('/api/push-token/register', async (req, res) => {
+app.post('/api/push-token/register', validate('pushTokenRegister'), async (req, res) => {
   try {
     const { expo_push_token, platform, app_version, user_id, device_id } = req.body;
-
-    if (!expo_push_token) {
-      return res.status(400).json({ success: false, error: 'expo_push_token is required' });
-    }
-
-    if (!user_id && !device_id) {
-      return res.status(400).json({ success: false, error: 'Either user_id or device_id is required' });
-    }
 
     if (!supabase) {
       return res.status(503).json({ success: false, error: 'Database not configured' });
@@ -2259,13 +2252,9 @@ app.post('/api/push-token/register', async (req, res) => {
 /**
  * Delete a push token
  */
-app.delete('/api/push-token/delete', async (req, res) => {
+app.delete('/api/push-token/delete', validate('pushTokenDelete'), async (req, res) => {
   try {
     const { expo_push_token } = req.body;
-
-    if (!expo_push_token) {
-      return res.status(400).json({ success: false, error: 'expo_push_token is required' });
-    }
 
     if (!supabase) {
       return res.status(503).json({ success: false, error: 'Database not configured' });
@@ -2292,17 +2281,9 @@ app.delete('/api/push-token/delete', async (req, res) => {
 /**
  * Sync price alerts from mobile app
  */
-app.post('/api/price-alerts/sync', async (req, res) => {
+app.post('/api/price-alerts/sync', validate('priceAlertsSync'), async (req, res) => {
   try {
     const { alerts, user_id, device_id } = req.body;
-
-    if (!alerts || !Array.isArray(alerts)) {
-      return res.status(400).json({ success: false, error: 'alerts array is required' });
-    }
-
-    if (!user_id && !device_id) {
-      return res.status(400).json({ success: false, error: 'Either user_id or device_id is required' });
-    }
 
     if (!supabase) {
       return res.status(503).json({ success: false, error: 'Database not configured' });
@@ -2373,13 +2354,9 @@ app.post('/api/price-alerts/sync', async (req, res) => {
 /**
  * Delete a price alert
  */
-app.delete('/api/price-alerts/delete', async (req, res) => {
+app.delete('/api/price-alerts/delete', validate('priceAlertDelete'), async (req, res) => {
   try {
     const { alert_id } = req.body;
-
-    if (!alert_id) {
-      return res.status(400).json({ success: false, error: 'alert_id is required' });
-    }
 
     if (!supabase) {
       return res.status(503).json({ success: false, error: 'Database not configured' });

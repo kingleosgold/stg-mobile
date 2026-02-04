@@ -12,6 +12,7 @@ import {
   useColorScheme, RefreshControl, Switch, Image,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import ErrorBoundary from './ErrorBoundary';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import * as ImagePicker from 'expo-image-picker';
