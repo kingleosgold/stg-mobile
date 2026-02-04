@@ -1792,6 +1792,33 @@ function AppContent() {
         });
       }
 
+      // Sync token to backend for price alert notifications
+      try {
+        let deviceId = await AsyncStorage.getItem('device_id');
+        if (!deviceId) {
+          deviceId = Constants.deviceId || `anon-${Date.now()}`;
+          await AsyncStorage.setItem('device_id', deviceId);
+        }
+
+        const response = await fetch(`${API_BASE_URL}/api/push-token/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            expo_push_token: token,
+            platform: Platform.OS,
+            app_version: Constants.expoConfig?.version,
+            user_id: user?.id || null,
+            device_id: deviceId,
+          }),
+        });
+
+        const result = await response.json();
+        console.log('✅ [Notifications] Push token registered with backend:', result);
+      } catch (backendError) {
+        console.error('❌ [Notifications] Failed to register token with backend:', backendError);
+        // Don't fail the whole registration if backend sync fails
+      }
+
       return token;
     } catch (error) {
       console.error('❌ [Notifications] Registration error:', error);
@@ -1809,6 +1836,26 @@ function AppContent() {
       });
     }
   }, [isAuthenticated]);
+
+  // Handle notification taps (when user taps on a push notification)
+  useEffect(() => {
+    const subscription = Notifications.addNotificationResponseReceivedListener(response => {
+      const data = response.notification.request.content.data;
+
+      if (data.type === 'price_alert') {
+        if (__DEV__) console.log('🔔 Price alert notification tapped:', data);
+
+        // Show alert details
+        Alert.alert(
+          `${data.metal ? data.metal.toUpperCase() : 'Price'} Alert`,
+          `Current price: $${data.current_price || 'N/A'}\nTarget: $${data.target_price || 'N/A'}`,
+          [{ text: 'OK' }]
+        );
+      }
+    });
+
+    return () => subscription.remove();
+  }, []);
 
   // Check entitlements function (can be called after purchase)
   const checkEntitlements = async () => {
@@ -2251,7 +2298,40 @@ function AppContent() {
     }
   };
 
-  // Create a new custom price alert (local only)
+  // Sync price alerts to backend for push notifications
+  const syncAlertsToBackend = async () => {
+    try {
+      let deviceId = await AsyncStorage.getItem('device_id');
+      if (!deviceId) {
+        deviceId = Constants.deviceId || `anon-${Date.now()}`;
+        await AsyncStorage.setItem('device_id', deviceId);
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/price-alerts/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          alerts: priceAlerts.map(alert => ({
+            id: alert.id,
+            metal: alert.metal,
+            target_price: alert.targetPrice,
+            direction: alert.direction,
+            enabled: true,
+          })),
+          user_id: user?.id || null,
+          device_id: deviceId,
+        }),
+      });
+
+      const result = await response.json();
+      if (__DEV__) console.log('✅ Price alerts synced to backend:', result);
+    } catch (error) {
+      console.error('❌ Failed to sync alerts to backend:', error);
+      // Don't fail the operation if backend sync fails
+    }
+  };
+
+  // Create a new custom price alert
   const createPriceAlert = async () => {
     const targetPrice = parseFloat(newAlert.targetPrice);
     if (isNaN(targetPrice) || targetPrice <= 0) {
@@ -2272,6 +2352,9 @@ function AppContent() {
     const updated = [alert, ...priceAlerts];
     setPriceAlerts(updated);
     await savePriceAlerts(updated);
+
+    // Sync to backend for push notifications
+    syncAlertsToBackend();
 
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setNewAlert({ metal: 'silver', targetPrice: '', direction: 'above' });
@@ -2297,6 +2380,10 @@ function AppContent() {
             const updated = priceAlerts.filter(a => a.id !== alertId);
             setPriceAlerts(updated);
             await savePriceAlerts(updated);
+
+            // Sync to backend after deletion
+            syncAlertsToBackend();
+
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           },
         },
