@@ -87,9 +87,9 @@ struct Provider: TimelineProvider {
 
             print("🔧 [Widget] Created \(entries.count) timeline entries (6 hours coverage)")
 
-            // Request a new timeline after 1 hour (more aggressive refresh)
-            // This fetches fresh data from backend even if app is closed
-            let nextRefresh = Calendar.current.date(byAdding: .hour, value: 1, to: currentDate)!
+            // Request a new timeline after 15 minutes to match app's background fetch
+            // This ensures widget stays as fresh as possible even when app is closed
+            let nextRefresh = Calendar.current.date(byAdding: .minute, value: 15, to: currentDate)!
             let timeline = Timeline(entries: entries, policy: .after(nextRefresh))
 
             // Complete on main thread
