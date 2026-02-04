@@ -93,7 +93,7 @@ const { checkPriceAlerts, startPriceAlertChecker } = require(path.join(__dirname
 
 // Import historical price services
 const { isSupabaseAvailable } = require('./supabaseClient');
-const { validate } = require('./middleware/validation');
+const { validate } = require(path.join(__dirname, 'middleware', 'validation'));
 const { fetchETFHistorical, slvToSpotSilver, gldToSpotGold, hasETFDataForDate, fetchBothETFs } = require('./services/etfPrices');
 const { calibrateRatios, getRatioForDate, needsCalibration } = require('./services/calibrateRatios');
 const { logPriceFetch, findLoggedPrice, findClosestLoggedPrice, getLogStats } = require('./services/priceLogger');
