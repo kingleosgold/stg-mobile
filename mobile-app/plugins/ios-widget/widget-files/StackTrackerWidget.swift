@@ -74,20 +74,23 @@ struct Provider: TimelineProvider {
                 print("⚠️ [Widget] Using cached App Group data (fetch failed or timed out)")
             }
 
-            // Create multiple timeline entries for the next 2 hours (every 15 min = 8 entries)
+            // Create multiple timeline entries for the next 6 hours (every 15 min = 24 entries)
+            // This ensures the widget stays fresh even when app is closed
             var entries: [WidgetEntry] = []
 
-            for minuteOffset in stride(from: 0, to: 120, by: 15) {
+            for minuteOffset in stride(from: 0, to: 360, by: 15) {
                 let entryDate = Calendar.current.date(byAdding: .minute, value: minuteOffset, to: currentDate)!
                 var entryData = data
                 entryData.lastUpdated = currentDate
                 entries.append(WidgetEntry(date: entryDate, data: entryData))
             }
 
-            print("🔧 [Widget] Created \(entries.count) timeline entries")
+            print("🔧 [Widget] Created \(entries.count) timeline entries (6 hours coverage)")
 
-            // After all entries expire, request a new timeline (triggers new fetch)
-            let timeline = Timeline(entries: entries, policy: .atEnd)
+            // Request a new timeline after 1 hour (more aggressive refresh)
+            // This fetches fresh data from backend even if app is closed
+            let nextRefresh = Calendar.current.date(byAdding: .hour, value: 1, to: currentDate)!
+            let timeline = Timeline(entries: entries, policy: .after(nextRefresh))
 
             // Complete on main thread
             DispatchQueue.main.async {
