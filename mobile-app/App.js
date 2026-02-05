@@ -373,66 +373,6 @@ const detectDealerFromHeaders = (headers, fileContent = '') => {
 };
 
 // ============================================
-// ERROR BOUNDARY - Catches crashes and shows error UI
-// ============================================
-class ErrorBoundary extends Component {
-  constructor(props) {
-    super(props);
-    this.state = { hasError: false, error: null, errorInfo: null };
-  }
-
-  static getDerivedStateFromError(error) {
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error, errorInfo) {
-    this.setState({ errorInfo });
-    // Log error for debugging (visible in Crashlytics/Sentry if added later)
-    console.error('ErrorBoundary caught error:', error);
-    console.error('Error info:', errorInfo);
-  }
-
-  handleRestart = async () => {
-    // Clear error state and try to re-render
-    this.setState({ hasError: false, error: null, errorInfo: null });
-  };
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#0f0f0f', justifyContent: 'center', alignItems: 'center', padding: 24 }}>
-          <StatusBar barStyle="light-content" />
-          <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(239, 68, 68, 0.2)', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-            <Text style={{ fontSize: 32, fontWeight: '700', color: '#ef4444' }}>!</Text>
-          </View>
-          <Text style={{ fontSize: 24, fontWeight: '700', color: '#fff', marginBottom: 12, textAlign: 'center' }}>
-            Something went wrong
-          </Text>
-          <Text style={{ fontSize: 14, color: '#a1a1aa', textAlign: 'center', marginBottom: 24, lineHeight: 20 }}>
-            The app encountered an unexpected error. Please try restarting.
-          </Text>
-          {!__DEV__ ? null : (
-            <View style={{ backgroundColor: '#1a1a2e', padding: 12, borderRadius: 8, marginBottom: 24, maxWidth: '100%' }}>
-              <Text style={{ fontSize: 10, color: '#ef4444', fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>
-                {this.state.error?.toString()?.substring(0, 200)}
-              </Text>
-            </View>
-          )}
-          <TouchableOpacity
-            onPress={this.handleRestart}
-            style={{ backgroundColor: '#fbbf24', paddingHorizontal: 32, paddingVertical: 14, borderRadius: 8 }}
-          >
-            <Text style={{ fontSize: 16, fontWeight: '700', color: '#1a1a2e' }}>Try Again</Text>
-          </TouchableOpacity>
-        </SafeAreaView>
-      );
-    }
-
-    return this.props.children;
-  }
-}
-
-// ============================================
 // REUSABLE COMPONENTS
 // ============================================
 
