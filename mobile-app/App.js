@@ -636,6 +636,7 @@ function AppContent() {
     silver: { amount: null, percent: null, prevClose: null },
   });
   const [spotChangeDisplayMode, setSpotChangeDisplayMode] = useState('percent'); // 'percent' or 'amount'
+  const [marketsClosed, setMarketsClosed] = useState(false); // True when markets are closed (Fri 5pm - Sun 6pm ET)
 
 
   // Portfolio Data
@@ -3134,6 +3135,12 @@ function AppContent() {
           if (__DEV__) console.log('📈 Change data:', data.change);
         }
 
+        // Capture markets closed status
+        setMarketsClosed(data.marketsClosed === true);
+        if (data.marketsClosed) {
+          if (__DEV__) console.log('🔒 Markets are closed (Fri 5pm - Sun 6pm ET)');
+        }
+
         if (__DEV__) console.log(`💰 Prices updated: Gold $${data.gold}, Silver $${data.silver} (Source: ${data.source})`);
       } else {
         if (__DEV__) console.log('⚠️  API returned success=false');
@@ -4727,7 +4734,17 @@ function AppContent() {
             {/* Today's Change */}
             <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
               <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.large }]}>Today's Change</Text>
-              {showDailyChange ? (
+              {marketsClosed ? (
+                <View style={{ paddingVertical: 12 }}>
+                  <Text style={{ color: colors.muted, fontSize: scaledFonts.xlarge, textAlign: 'center' }}>—</Text>
+                  <Text style={{ color: colors.muted, fontSize: scaledFonts.small, textAlign: 'center', marginTop: 4 }}>
+                    Markets Closed
+                  </Text>
+                  <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny, textAlign: 'center', marginTop: 4 }}>
+                    Opens Sunday 6pm ET
+                  </Text>
+                </View>
+              ) : showDailyChange ? (
                 <>
                   <Text
                     style={{ color: isDailyChangePositive ? colors.success : colors.error, fontSize: scaledFonts.huge, fontWeight: '700', marginBottom: 4 }}
@@ -4772,7 +4789,9 @@ function AppContent() {
                   >
                     ${formatCurrency(silverSpot)}
                   </Text>
-                  {spotChange.silver.percent != null && spotChange.silver.amount != null ? (
+                  {marketsClosed ? (
+                    <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny, marginTop: 4 }}>Markets Closed</Text>
+                  ) : spotChange.silver.percent != null && spotChange.silver.amount != null ? (
                     <Text style={{
                       color: spotChange.silver.amount >= 0 ? '#22C55E' : '#EF4444',
                       fontSize: scaledFonts.small,
@@ -4797,7 +4816,9 @@ function AppContent() {
                   >
                     ${formatCurrency(goldSpot)}
                   </Text>
-                  {spotChange.gold.percent != null && spotChange.gold.amount != null ? (
+                  {marketsClosed ? (
+                    <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny, marginTop: 4 }}>Markets Closed</Text>
+                  ) : spotChange.gold.percent != null && spotChange.gold.amount != null ? (
                     <Text style={{
                       color: spotChange.gold.amount >= 0 ? '#22C55E' : '#EF4444',
                       fontSize: scaledFonts.small,

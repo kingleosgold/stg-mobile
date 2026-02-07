@@ -13,6 +13,41 @@ const fs = require('fs');
 const path = require('path');
 const { findClosestLoggedPrice } = require('../services/priceLogger');
 
+/**
+ * Check if precious metals markets are currently closed
+ * Markets are open: Sunday 6pm ET through Friday 5pm ET
+ * Markets are closed: Friday 5pm ET through Sunday 6pm ET
+ * @returns {boolean} true if markets are closed
+ */
+function areMarketsClosed() {
+  // Get current time in Eastern Time
+  const now = new Date();
+  const etOptions = { timeZone: 'America/New_York', hour12: false };
+  const etString = now.toLocaleString('en-US', etOptions);
+  const etDate = new Date(etString);
+
+  const dayOfWeek = etDate.getDay(); // 0=Sunday, 5=Friday, 6=Saturday
+  const hour = etDate.getHours();
+
+  // Saturday: always closed
+  if (dayOfWeek === 6) {
+    return true;
+  }
+
+  // Sunday: closed before 6pm ET (hour < 18)
+  if (dayOfWeek === 0 && hour < 18) {
+    return true;
+  }
+
+  // Friday: closed after 5pm ET (hour >= 17)
+  if (dayOfWeek === 5 && hour >= 17) {
+    return true;
+  }
+
+  // All other times: markets are open
+  return false;
+}
+
 // Store yesterday's closing prices for calculating change when using MetalPriceAPI
 let previousDayPrices = {
   gold: null,
@@ -266,6 +301,7 @@ async function scrapeGoldSilverPrices() {
       // Save current prices for tomorrow's change calculation
       savePreviousDayPrices(goldPrice, silverPrice);
 
+      const marketsClosed = areMarketsClosed();
       const result = {
         gold: Math.round(goldPrice * 100) / 100,
         silver: Math.round(silverPrice * 100) / 100,
@@ -274,9 +310,10 @@ async function scrapeGoldSilverPrices() {
         timestamp: new Date().toISOString(),
         source: 'metalpriceapi',
         change: changeData,
+        marketsClosed,
       };
 
-      console.log(`💰 Gold Spot: $${result.gold}/oz (MetalPriceAPI)`);
+      console.log(`💰 Gold Spot: $${result.gold}/oz (MetalPriceAPI)${marketsClosed ? ' [MARKETS CLOSED]' : ''}`);
       console.log(`🥈 Silver Spot: $${result.silver}/oz (MetalPriceAPI)`);
       console.log('✅ Successfully fetched prices via MetalPriceAPI (primary source)');
 
@@ -350,6 +387,7 @@ async function scrapeGoldSilverPrices() {
       // Save prices for MetalPriceAPI fallback calculation
       savePreviousDayPrices(goldRes.data.price, silverRes.data.price);
 
+      const marketsClosed = areMarketsClosed();
       const result = {
         gold: Math.round(goldRes.data.price * 100) / 100,
         silver: Math.round(silverRes.data.price * 100) / 100,
@@ -358,9 +396,10 @@ async function scrapeGoldSilverPrices() {
         timestamp: new Date().toISOString(),
         source: 'goldapi-io',
         change: changeData,
+        marketsClosed,
       };
 
-      console.log(`💰 Gold Spot: $${result.gold}/oz (GoldAPI.io)`);
+      console.log(`💰 Gold Spot: $${result.gold}/oz (GoldAPI.io)${marketsClosed ? ' [MARKETS CLOSED]' : ''}`);
       console.log(`🥈 Silver Spot: $${result.silver}/oz (GoldAPI.io)`);
       console.log('✅ Successfully fetched prices via GoldAPI.io (fallback)');
 
@@ -387,6 +426,7 @@ async function scrapeGoldSilverPrices() {
       timestamp: new Date().toISOString(),
       source: 'cached-fallback',
       change: { gold: {}, silver: {}, source: 'unavailable' },
+      marketsClosed: areMarketsClosed(),
     };
   }
 
@@ -400,6 +440,7 @@ async function scrapeGoldSilverPrices() {
     timestamp: new Date().toISOString(),
     source: 'static-fallback',
     change: { gold: {}, silver: {}, source: 'unavailable' },
+    marketsClosed: areMarketsClosed(),
   };
 }
 
