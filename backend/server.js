@@ -92,7 +92,7 @@ const { scrapeGoldSilverPrices, fetchHistoricalPrices } = require(path.join(__di
 const { checkPriceAlerts, startPriceAlertChecker } = require(path.join(__dirname, 'services', 'priceAlertChecker.js'));
 
 // Import historical price services
-const { isSupabaseAvailable } = require('./supabaseClient');
+const { isSupabaseAvailable, getSupabase } = require('./supabaseClient');
 const { validate } = require(path.join(__dirname, 'middleware', 'validation'));
 const { fetchETFHistorical, slvToSpotSilver, gldToSpotGold, hasETFDataForDate, fetchBothETFs } = require('./services/etfPrices');
 const { calibrateRatios, getRatioForDate, needsCalibration } = require('./services/calibrateRatios');
@@ -2190,9 +2190,11 @@ app.post('/api/push-token/register', validate('pushTokenRegister'), async (req, 
   try {
     const { expo_push_token, platform, app_version, user_id, device_id } = req.body;
 
-    if (!supabase) {
+    if (!isSupabaseAvailable()) {
       return res.status(503).json({ success: false, error: 'Database not configured' });
     }
+
+    const supabase = getSupabase();
 
     // Check if token already exists
     const { data: existing, error: checkError } = await supabase
@@ -2256,9 +2258,11 @@ app.delete('/api/push-token/delete', validate('pushTokenDelete'), async (req, re
   try {
     const { expo_push_token } = req.body;
 
-    if (!supabase) {
+    if (!isSupabaseAvailable()) {
       return res.status(503).json({ success: false, error: 'Database not configured' });
     }
+
+    const supabase = getSupabase();
 
     const { error } = await supabase
       .from('push_tokens')
@@ -2285,10 +2289,11 @@ app.post('/api/price-alerts/sync', validate('priceAlertsSync'), async (req, res)
   try {
     const { alerts, user_id, device_id } = req.body;
 
-    if (!supabase) {
+    if (!isSupabaseAvailable()) {
       return res.status(503).json({ success: false, error: 'Database not configured' });
     }
 
+    const supabase = getSupabase();
     const results = [];
 
     for (const alert of alerts) {
@@ -2358,9 +2363,11 @@ app.delete('/api/price-alerts/delete', validate('priceAlertDelete'), async (req,
   try {
     const { alert_id } = req.body;
 
-    if (!supabase) {
+    if (!isSupabaseAvailable()) {
       return res.status(503).json({ success: false, error: 'Database not configured' });
     }
+
+    const supabase = getSupabase();
 
     const { error } = await supabase
       .from('price_alerts')
@@ -2391,10 +2398,11 @@ app.get('/api/price-alerts', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Either user_id or device_id is required' });
     }
 
-    if (!supabase) {
+    if (!isSupabaseAvailable()) {
       return res.status(503).json({ success: false, error: 'Database not configured' });
     }
 
+    const supabase = getSupabase();
     let query = supabase.from('price_alerts').select('*');
 
     if (user_id) {
