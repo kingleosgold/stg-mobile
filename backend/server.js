@@ -148,6 +148,7 @@ async function fetchLiveSpotPrices() {
       lastUpdated: new Date(),
       source: fetchedPrices.source,
       change: fetchedPrices.change || { gold: {}, silver: {}, source: 'unavailable' },
+      marketsClosed: fetchedPrices.marketsClosed || false,
     };
 
     console.log('✅ Spot prices updated:', spotPriceCache.prices);
@@ -347,6 +348,7 @@ app.get('/api/spot-prices', async (req, res) => {
       source: spotPriceCache.source || 'goldapi-io',
       cacheAgeMinutes: spotPriceCache.lastUpdated ? Math.round(cacheAge * 10) / 10 : 0,
       change: spotPriceCache.change || { gold: {}, silver: {}, source: 'unavailable' },
+      marketsClosed: spotPriceCache.marketsClosed || false,
     });
   } catch (error) {
     console.error('Spot price error:', error);
@@ -357,6 +359,7 @@ app.get('/api/spot-prices', async (req, res) => {
       source: 'cached',
       error: error.message,
       change: spotPriceCache.change || { gold: {}, silver: {}, source: 'unavailable' },
+      marketsClosed: spotPriceCache.marketsClosed || false,
     });
   }
 });
