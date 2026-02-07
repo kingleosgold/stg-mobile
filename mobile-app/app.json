@@ -2,7 +2,7 @@
   "expo": {
     "name": "Stack Tracker Pro",
     "slug": "stack-tracker-pro",
-    "version": "1.4.0",
+    "version": "1.4.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -19,11 +19,13 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.stacktrackerpro.app",
-      "buildNumber": "55",
+      "buildNumber": "56",
       "requireFullScreen": false,
       "appleTeamId": "3BKELS5FG9",
       "entitlements": {
-        "com.apple.security.application-groups": ["group.com.stacktrackerpro.shared"]
+        "com.apple.security.application-groups": [
+          "group.com.stacktrackerpro.shared"
+        ]
       },
       "infoPlist": {
         "NSCameraUsageDescription": "Stack Tracker Pro needs camera access to scan your precious metals purchase receipts using AI-powered OCR. Your photos are processed securely and never stored.",
