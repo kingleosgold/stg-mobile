@@ -346,7 +346,21 @@ app.get('/api/spot-prices', async (req, res) => {
 
     // If markets are closed, return Friday close data (frozen values)
     if (marketsClosed) {
-      const fridayClose = getFridayClose();
+      let fridayClose = getFridayClose();
+
+      // If no Friday close data exists, save current cache as Friday close
+      // This handles first-time setup or if we missed Friday's save
+      if (!fridayClose && spotPriceCache.lastUpdated) {
+        console.log('🔒 Markets closed but no Friday close data - saving current cache as Friday close');
+        saveFridayClose({
+          prices: spotPriceCache.prices,
+          timestamp: spotPriceCache.lastUpdated.toISOString(),
+          source: spotPriceCache.source,
+          change: spotPriceCache.change,
+        });
+        fridayClose = getFridayClose();
+      }
+
       if (fridayClose) {
         console.log('🔒 Markets closed - returning Friday close prices');
         return res.json({
@@ -359,8 +373,8 @@ app.get('/api/spot-prices', async (req, res) => {
           marketsClosed: true,
         });
       }
-      // No Friday close data saved - fall through to use cache
-      console.log('🔒 Markets closed but no Friday close data - using cache');
+      // No cache available - will need to fetch
+      console.log('🔒 Markets closed and no cache available - fetching prices');
     }
 
     // Refresh if cache is older than 10 minutes (only when markets are open)
