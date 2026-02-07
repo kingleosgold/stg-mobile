@@ -88,7 +88,7 @@ const fs = require('fs');
 const path = require('path');
 
 // Import web scraper for live spot prices and historical prices
-const { scrapeGoldSilverPrices, fetchHistoricalPrices } = require(path.join(__dirname, 'scrapers', 'gold-silver-scraper.js'));
+const { scrapeGoldSilverPrices, fetchHistoricalPrices, areMarketsClosed, saveFridayClose, getFridayClose } = require(path.join(__dirname, 'scrapers', 'gold-silver-scraper.js'));
 const { checkPriceAlerts, startPriceAlertChecker } = require(path.join(__dirname, 'services', 'priceAlertChecker.js'));
 
 // Import historical price services
@@ -153,6 +153,21 @@ async function fetchLiveSpotPrices() {
 
     console.log('✅ Spot prices updated:', spotPriceCache.prices);
     console.log(`📈 Total API requests: ${apiRequestCounter.total}`);
+
+    // Save as Friday close if it's Friday afternoon (after 4pm ET)
+    // This ensures we have frozen values for the weekend
+    const etOptions = { timeZone: 'America/New_York', hour12: false };
+    const etString = now.toLocaleString('en-US', etOptions);
+    const etDate = new Date(etString);
+    if (etDate.getDay() === 5 && etDate.getHours() >= 16) {
+      console.log('📅 Friday afternoon - saving as Friday close prices');
+      saveFridayClose({
+        prices: spotPriceCache.prices,
+        timestamp: spotPriceCache.lastUpdated.toISOString(),
+        source: spotPriceCache.source,
+        change: spotPriceCache.change,
+      });
+    }
 
     // Log price to database for historical minute-level data (non-blocking)
     logPriceFetch(spotPriceCache.prices, fetchedPrices.source).catch(err => {
@@ -327,7 +342,28 @@ app.get('/api/health', (req, res) => {
  */
 app.get('/api/spot-prices', async (req, res) => {
   try {
-    // Refresh if cache is older than 10 minutes
+    const marketsClosed = areMarketsClosed();
+
+    // If markets are closed, return Friday close data (frozen values)
+    if (marketsClosed) {
+      const fridayClose = getFridayClose();
+      if (fridayClose) {
+        console.log('🔒 Markets closed - returning Friday close prices');
+        return res.json({
+          success: true,
+          ...fridayClose.prices,
+          timestamp: fridayClose.timestamp,
+          source: fridayClose.source + ' (friday-close)',
+          cacheAgeMinutes: 0,
+          change: fridayClose.change || { gold: {}, silver: {}, source: 'unavailable' },
+          marketsClosed: true,
+        });
+      }
+      // No Friday close data saved - fall through to use cache
+      console.log('🔒 Markets closed but no Friday close data - using cache');
+    }
+
+    // Refresh if cache is older than 10 minutes (only when markets are open)
     const cacheAge = spotPriceCache.lastUpdated
       ? (Date.now() - spotPriceCache.lastUpdated.getTime()) / 1000 / 60
       : Infinity;
@@ -348,7 +384,7 @@ app.get('/api/spot-prices', async (req, res) => {
       source: spotPriceCache.source || 'goldapi-io',
       cacheAgeMinutes: spotPriceCache.lastUpdated ? Math.round(cacheAge * 10) / 10 : 0,
       change: spotPriceCache.change || { gold: {}, silver: {}, source: 'unavailable' },
-      marketsClosed: spotPriceCache.marketsClosed || false,
+      marketsClosed: marketsClosed,
     });
   } catch (error) {
     console.error('Spot price error:', error);
@@ -359,7 +395,7 @@ app.get('/api/spot-prices', async (req, res) => {
       source: 'cached',
       error: error.message,
       change: spotPriceCache.change || { gold: {}, silver: {}, source: 'unavailable' },
-      marketsClosed: spotPriceCache.marketsClosed || false,
+      marketsClosed: areMarketsClosed(),
     });
   }
 });

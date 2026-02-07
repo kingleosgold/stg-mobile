@@ -4734,17 +4734,7 @@ function AppContent() {
             {/* Today's Change */}
             <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
               <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.large }]}>Today's Change</Text>
-              {marketsClosed ? (
-                <View style={{ paddingVertical: 12 }}>
-                  <Text style={{ color: colors.muted, fontSize: scaledFonts.xlarge, textAlign: 'center' }}>—</Text>
-                  <Text style={{ color: colors.muted, fontSize: scaledFonts.small, textAlign: 'center', marginTop: 4 }}>
-                    Markets Closed
-                  </Text>
-                  <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny, textAlign: 'center', marginTop: 4 }}>
-                    Opens Sunday 6pm ET
-                  </Text>
-                </View>
-              ) : showDailyChange ? (
+              {showDailyChange ? (
                 <>
                   <Text
                     style={{ color: isDailyChangePositive ? colors.success : colors.error, fontSize: scaledFonts.huge, fontWeight: '700', marginBottom: 4 }}
@@ -4789,9 +4779,7 @@ function AppContent() {
                   >
                     ${formatCurrency(silverSpot)}
                   </Text>
-                  {marketsClosed ? (
-                    <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny, marginTop: 4 }}>Markets Closed</Text>
-                  ) : spotChange.silver.percent != null && spotChange.silver.amount != null ? (
+                  {spotChange.silver.percent != null && spotChange.silver.amount != null ? (
                     <Text style={{
                       color: spotChange.silver.amount >= 0 ? '#22C55E' : '#EF4444',
                       fontSize: scaledFonts.small,
@@ -4816,9 +4804,7 @@ function AppContent() {
                   >
                     ${formatCurrency(goldSpot)}
                   </Text>
-                  {marketsClosed ? (
-                    <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny, marginTop: 4 }}>Markets Closed</Text>
-                  ) : spotChange.gold.percent != null && spotChange.gold.amount != null ? (
+                  {spotChange.gold.percent != null && spotChange.gold.amount != null ? (
                     <Text style={{
                       color: spotChange.gold.amount >= 0 ? '#22C55E' : '#EF4444',
                       fontSize: scaledFonts.small,

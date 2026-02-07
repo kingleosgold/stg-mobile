@@ -58,6 +58,49 @@ let previousDayPrices = {
 // Store last successful API prices (for fallback before hardcoded values)
 let latestCachedPrices = null;
 
+// Friday close prices - frozen values to show during weekend
+const FRIDAY_CLOSE_FILE = path.join(__dirname, '..', 'data', 'friday-close.json');
+let fridayCloseData = null;
+
+// Load Friday close data on startup
+try {
+  if (fs.existsSync(FRIDAY_CLOSE_FILE)) {
+    fridayCloseData = JSON.parse(fs.readFileSync(FRIDAY_CLOSE_FILE, 'utf8'));
+    console.log('📊 Loaded Friday close prices:', fridayCloseData);
+  }
+} catch (err) {
+  console.log('⚠️  Could not load Friday close prices:', err.message);
+}
+
+/**
+ * Save current prices as Friday close (called when markets close)
+ */
+function saveFridayClose(priceData) {
+  try {
+    const dataDir = path.join(__dirname, '..', 'data');
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+
+    fridayCloseData = {
+      ...priceData,
+      savedAt: new Date().toISOString(),
+    };
+
+    fs.writeFileSync(FRIDAY_CLOSE_FILE, JSON.stringify(fridayCloseData, null, 2));
+    console.log('💾 Saved Friday close prices:', fridayCloseData);
+  } catch (err) {
+    console.log('⚠️  Could not save Friday close prices:', err.message);
+  }
+}
+
+/**
+ * Get Friday close prices (for use during weekend)
+ */
+function getFridayClose() {
+  return fridayCloseData;
+}
+
 // Load previous day prices from file on startup
 const PREV_PRICES_FILE = path.join(__dirname, '..', 'data', 'previous-day-prices.json');
 const LATEST_PRICES_FILE = path.join(__dirname, '..', 'data', 'latest-prices.json');
@@ -518,4 +561,7 @@ async function fetchHistoricalPrices(date) {
 module.exports = {
   scrapeGoldSilverPrices,
   fetchHistoricalPrices,
+  areMarketsClosed,
+  saveFridayClose,
+  getFridayClose,
 };
