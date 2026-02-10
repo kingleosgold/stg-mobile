@@ -79,7 +79,7 @@ function formatDateForSupabase(dateStr: string | undefined | null): string | nul
 // Convert local holding to Supabase format
 export function localToSupabase(
   holding: LocalHolding,
-  metal: 'silver' | 'gold',
+  metal: 'silver' | 'gold' | 'platinum' | 'palladium',
   userId: string
 ): Omit<SupabaseHolding, 'id' | 'created_at' | 'updated_at' | 'deleted_at'> {
   // Store extra fields in notes as JSON
@@ -141,6 +141,8 @@ export function supabaseToLocal(holding: SupabaseHolding): LocalHolding {
 export async function fetchHoldings(userId: string): Promise<{
   silverItems: LocalHolding[];
   goldItems: LocalHolding[];
+  platinumItems: LocalHolding[];
+  palladiumItems: LocalHolding[];
   error: Error | null;
 }> {
   try {
@@ -155,6 +157,8 @@ export async function fetchHoldings(userId: string): Promise<{
 
     const silverItems: LocalHolding[] = [];
     const goldItems: LocalHolding[] = [];
+    const platinumItems: LocalHolding[] = [];
+    const palladiumItems: LocalHolding[] = [];
 
     (data || []).forEach((holding: SupabaseHolding) => {
       const localHolding = supabaseToLocal(holding);
@@ -165,13 +169,17 @@ export async function fetchHoldings(userId: string): Promise<{
         silverItems.push(localHolding);
       } else if (holding.metal === 'gold') {
         goldItems.push(localHolding);
+      } else if (holding.metal === 'platinum') {
+        platinumItems.push(localHolding);
+      } else if (holding.metal === 'palladium') {
+        palladiumItems.push(localHolding);
       }
     });
 
-    return { silverItems, goldItems, error: null };
+    return { silverItems, goldItems, platinumItems, palladiumItems, error: null };
   } catch (err) {
     console.error('Error fetching holdings:', err);
-    return { silverItems: [], goldItems: [], error: err as Error };
+    return { silverItems: [], goldItems: [], platinumItems: [], palladiumItems: [], error: err as Error };
   }
 }
 
@@ -179,7 +187,7 @@ export async function fetchHoldings(userId: string): Promise<{
 export async function addHolding(
   userId: string,
   holding: LocalHolding,
-  metal: 'silver' | 'gold'
+  metal: 'silver' | 'gold' | 'platinum' | 'palladium'
 ): Promise<{ data: SupabaseHolding | null; error: Error | null }> {
   try {
     const supabaseHolding = localToSupabase(holding, metal, userId);
@@ -203,7 +211,7 @@ export async function addHolding(
 export async function updateHolding(
   supabaseId: string,
   holding: LocalHolding,
-  metal: 'silver' | 'gold'
+  metal: 'silver' | 'gold' | 'platinum' | 'palladium'
 ): Promise<{ data: SupabaseHolding | null; error: Error | null }> {
   try {
     // Store extra fields in notes as JSON
@@ -268,7 +276,7 @@ export async function deleteHolding(
 export async function findHoldingByLocalId(
   userId: string,
   localId: number,
-  metal: 'silver' | 'gold'
+  metal: 'silver' | 'gold' | 'platinum' | 'palladium'
 ): Promise<SupabaseHolding | null> {
   try {
     const { data, error } = await supabase
@@ -302,7 +310,9 @@ export async function findHoldingByLocalId(
 export async function syncLocalToSupabase(
   userId: string,
   silverItems: LocalHolding[],
-  goldItems: LocalHolding[]
+  goldItems: LocalHolding[],
+  platinumItems: LocalHolding[] = [],
+  palladiumItems: LocalHolding[] = []
 ): Promise<{
   syncedCount: number;
   skippedCount: number;
@@ -339,22 +349,21 @@ export async function syncLocalToSupabase(
     // Prepare holdings to insert
     const holdingsToInsert: any[] = [];
 
-    // Process silver items
-    for (const item of silverItems) {
-      if (existingLocalIds.has(item.id)) {
-        skippedCount++;
-        continue;
-      }
-      holdingsToInsert.push(localToSupabase(item, 'silver', userId));
-    }
+    const metalGroups: { items: LocalHolding[]; metal: 'silver' | 'gold' | 'platinum' | 'palladium' }[] = [
+      { items: silverItems, metal: 'silver' },
+      { items: goldItems, metal: 'gold' },
+      { items: platinumItems, metal: 'platinum' },
+      { items: palladiumItems, metal: 'palladium' },
+    ];
 
-    // Process gold items
-    for (const item of goldItems) {
-      if (existingLocalIds.has(item.id)) {
-        skippedCount++;
-        continue;
+    for (const { items, metal } of metalGroups) {
+      for (const item of items) {
+        if (existingLocalIds.has(item.id)) {
+          skippedCount++;
+          continue;
+        }
+        holdingsToInsert.push(localToSupabase(item, metal, userId));
       }
-      holdingsToInsert.push(localToSupabase(item, 'gold', userId));
     }
 
     // Batch insert
@@ -381,21 +390,25 @@ export async function fullSync(
   userId: string,
   localSilver: LocalHolding[],
   localGold: LocalHolding[],
-  isFirstSync: boolean = false
+  isFirstSync: boolean = false,
+  localPlatinum: LocalHolding[] = [],
+  localPalladium: LocalHolding[] = []
 ): Promise<{
   silverItems: LocalHolding[];
   goldItems: LocalHolding[];
+  platinumItems: LocalHolding[];
+  palladiumItems: LocalHolding[];
   syncedToCloud: number;
   error: Error | null;
 }> {
   try {
     // First, fetch what's in Supabase (source of truth)
-    const { silverItems: remoteSilver, goldItems: remoteGold, error: fetchError } = await fetchHoldings(userId);
+    const { silverItems: remoteSilver, goldItems: remoteGold, platinumItems: remotePlatinum, palladiumItems: remotePalladium, error: fetchError } = await fetchHoldings(userId);
 
     if (fetchError) throw fetchError;
 
-    const hasRemoteData = remoteSilver.length > 0 || remoteGold.length > 0;
-    const hasLocalData = localSilver.length > 0 || localGold.length > 0;
+    const hasRemoteData = remoteSilver.length > 0 || remoteGold.length > 0 || remotePlatinum.length > 0 || remotePalladium.length > 0;
+    const hasLocalData = localSilver.length > 0 || localGold.length > 0 || localPlatinum.length > 0 || localPalladium.length > 0;
 
     // If this is first sync AND Supabase is empty AND we have local data,
     // migrate local holdings to Supabase
@@ -405,7 +418,9 @@ export async function fullSync(
       const { syncedCount: uploaded, error: syncError } = await syncLocalToSupabase(
         userId,
         localSilver,
-        localGold
+        localGold,
+        localPlatinum,
+        localPalladium
       );
 
       if (syncError) {
@@ -413,10 +428,12 @@ export async function fullSync(
       } else {
         syncedCount = uploaded;
         // Re-fetch after migration to get the items with supabase_ids
-        const { silverItems: newSilver, goldItems: newGold } = await fetchHoldings(userId);
+        const { silverItems: newSilver, goldItems: newGold, platinumItems: newPlatinum, palladiumItems: newPalladium } = await fetchHoldings(userId);
         return {
           silverItems: newSilver,
           goldItems: newGold,
+          platinumItems: newPlatinum,
+          palladiumItems: newPalladium,
           syncedToCloud: syncedCount,
           error: null,
         };
@@ -428,6 +445,8 @@ export async function fullSync(
     return {
       silverItems: remoteSilver,
       goldItems: remoteGold,
+      platinumItems: remotePlatinum,
+      palladiumItems: remotePalladium,
       syncedToCloud: syncedCount,
       error: null,
     };
@@ -436,6 +455,8 @@ export async function fullSync(
     return {
       silverItems: localSilver,
       goldItems: localGold,
+      platinumItems: localPlatinum,
+      palladiumItems: localPalladium,
       syncedToCloud: 0,
       error: err as Error,
     };

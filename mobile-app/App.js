@@ -635,6 +635,8 @@ function AppContent() {
   // Spot Prices - Updated defaults for Dec 2025
   const [silverSpot, setSilverSpot] = useState(77);
   const [goldSpot, setGoldSpot] = useState(4530);
+  const [platinumSpot, setPlatinumSpot] = useState(2100);
+  const [palladiumSpot, setPalladiumSpot] = useState(1740);
   const [priceSource, setPriceSource] = useState('cached');
   const [priceTimestamp, setPriceTimestamp] = useState(null);
   const [spotPricesLive, setSpotPricesLive] = useState(false); // True after successful API fetch
@@ -643,6 +645,8 @@ function AppContent() {
   const [spotChange, setSpotChange] = useState({
     gold: { amount: null, percent: null, prevClose: null },
     silver: { amount: null, percent: null, prevClose: null },
+    platinum: { amount: null, percent: null, prevClose: null },
+    palladium: { amount: null, percent: null, prevClose: null },
   });
   const [spotChangeDisplayMode, setSpotChangeDisplayMode] = useState('percent'); // 'percent' or 'amount'
   const [marketsClosed, setMarketsClosed] = useState(false); // True when markets are closed (Fri 5pm - Sun 6pm ET)
@@ -651,6 +655,8 @@ function AppContent() {
   // Portfolio Data
   const [silverItems, setSilverItems] = useState([]);
   const [goldItems, setGoldItems] = useState([]);
+  const [platinumItems, setPlatinumItems] = useState([]);
+  const [palladiumItems, setPalladiumItems] = useState([]);
   const [dataLoaded, setDataLoaded] = useState(false); // Prevents saving until initial load completes
 
   // Modals
@@ -726,7 +732,7 @@ function AppContent() {
     targetPrice: '',
     direction: 'above', // 'above' or 'below'
   });
-  const [athAlerts, setAthAlerts] = useState({ silver: false, gold: false });
+  const [athAlerts, setAthAlerts] = useState({ silver: false, gold: false, platinum: false, palladium: false });
 
   // Analytics State (Gold/Lifetime feature)
   const [analyticsSnapshots, setAnalyticsSnapshots] = useState([]);
@@ -740,6 +746,8 @@ function AppContent() {
   const [spotHistoryError, setSpotHistoryError] = useState(null);
   const [spotHistoryShowGold, setSpotHistoryShowGold] = useState(true);
   const [spotHistoryShowSilver, setSpotHistoryShowSilver] = useState(true);
+  const [spotHistoryShowPlatinum, setSpotHistoryShowPlatinum] = useState(false);
+  const [spotHistoryShowPalladium, setSpotHistoryShowPalladium] = useState(false);
 
   // Share My Stack
   const shareViewRef = useRef(null);
@@ -782,6 +790,8 @@ function AppContent() {
   // Speculation State
   const [specSilverPrice, setSpecSilverPrice] = useState('100');
   const [specGoldPrice, setSpecGoldPrice] = useState('5000');
+  const [specPlatinumPrice, setSpecPlatinumPrice] = useState('2500');
+  const [specPalladiumPrice, setSpecPalladiumPrice] = useState('2000');
 
   // Junk Silver Calculator State
   const [junkType, setJunkType] = useState('90');
@@ -792,6 +802,8 @@ function AppContent() {
     // Dark mode colors
     silver: '#94a3b8',
     gold: '#fbbf24',
+    platinum: '#7BB3D4',
+    palladium: '#6BBF8A',
     success: '#22c55e',
     error: '#ef4444',
     text: '#e4e4e7',
@@ -803,6 +815,8 @@ function AppContent() {
     // Light mode colors
     silver: '#64748b',
     gold: '#fbbf24',
+    platinum: '#7BB3D4',
+    palladium: '#6BBF8A',
     success: '#16a34a',
     error: '#dc2626',
     text: '#18181b',
@@ -841,12 +855,16 @@ function AppContent() {
       // Reset all state to defaults
       setSilverItems([]);
       setGoldItems([]);
+      setPlatinumItems([]);
+      setPalladiumItems([]);
       setSilverSpot(77);
       setGoldSpot(4530);
+      setPlatinumSpot(2100);
+      setPalladiumSpot(1740);
       setPriceSource('cached');
       setPriceTimestamp(null);
       setSpotPricesLive(false);
-      setSpotChange({ gold: { amount: null, percent: null, prevClose: null }, silver: { amount: null, percent: null, prevClose: null } });
+      setSpotChange({ gold: { amount: null, percent: null, prevClose: null }, silver: { amount: null, percent: null, prevClose: null }, platinum: { amount: null, percent: null, prevClose: null }, palladium: { amount: null, percent: null, prevClose: null } });
       setSpotChangeDisplayMode('percent');
       setMidnightSnapshot(null);
       setThemePreference('system');
@@ -1067,18 +1085,26 @@ function AppContent() {
 
   const totalSilverOzt = silverItems.reduce((sum, i) => sum + (i.ozt * i.quantity), 0);
   const totalGoldOzt = goldItems.reduce((sum, i) => sum + (i.ozt * i.quantity), 0);
+  const totalPlatinumOzt = platinumItems.reduce((sum, i) => sum + (i.ozt * i.quantity), 0);
+  const totalPalladiumOzt = palladiumItems.reduce((sum, i) => sum + (i.ozt * i.quantity), 0);
 
   const silverMeltValue = totalSilverOzt * silverSpot;
   const goldMeltValue = totalGoldOzt * goldSpot;
-  const totalMeltValue = silverMeltValue + goldMeltValue;
+  const platinumMeltValue = totalPlatinumOzt * platinumSpot;
+  const palladiumMeltValue = totalPalladiumOzt * palladiumSpot;
+  const totalMeltValue = silverMeltValue + goldMeltValue + platinumMeltValue + palladiumMeltValue;
 
   const silverCostBasis = silverItems.reduce((sum, i) => sum + (i.unitPrice * i.quantity) + i.taxes + i.shipping, 0);
   const goldCostBasis = goldItems.reduce((sum, i) => sum + (i.unitPrice * i.quantity) + i.taxes + i.shipping, 0);
-  const totalCostBasis = silverCostBasis + goldCostBasis;
+  const platinumCostBasis = platinumItems.reduce((sum, i) => sum + (i.unitPrice * i.quantity) + i.taxes + i.shipping, 0);
+  const palladiumCostBasis = palladiumItems.reduce((sum, i) => sum + (i.unitPrice * i.quantity) + i.taxes + i.shipping, 0);
+  const totalCostBasis = silverCostBasis + goldCostBasis + platinumCostBasis + palladiumCostBasis;
 
   const silverPremiumsPaid = silverItems.reduce((sum, i) => sum + (i.premium * i.quantity), 0);
   const goldPremiumsPaid = goldItems.reduce((sum, i) => sum + (i.premium * i.quantity), 0);
-  const totalPremiumsPaid = silverPremiumsPaid + goldPremiumsPaid;
+  const platinumPremiumsPaid = platinumItems.reduce((sum, i) => sum + (i.premium * i.quantity), 0);
+  const palladiumPremiumsPaid = palladiumItems.reduce((sum, i) => sum + (i.premium * i.quantity), 0);
+  const totalPremiumsPaid = silverPremiumsPaid + goldPremiumsPaid + platinumPremiumsPaid + palladiumPremiumsPaid;
   const totalPremiumsPct = totalCostBasis > 0 ? ((totalPremiumsPaid / totalCostBasis) * 100) : 0;
 
   const totalGainLoss = totalMeltValue - totalCostBasis;
@@ -1088,11 +1114,17 @@ function AppContent() {
   const silverGainLossPct = silverCostBasis > 0 ? ((silverGainLoss / silverCostBasis) * 100) : 0;
   const goldGainLoss = goldMeltValue - goldCostBasis;
   const goldGainLossPct = goldCostBasis > 0 ? ((goldGainLoss / goldCostBasis) * 100) : 0;
+  const platinumGainLoss = platinumMeltValue - platinumCostBasis;
+  const platinumGainLossPct = platinumCostBasis > 0 ? ((platinumGainLoss / platinumCostBasis) * 100) : 0;
+  const palladiumGainLoss = palladiumMeltValue - palladiumCostBasis;
+  const palladiumGainLossPct = palladiumCostBasis > 0 ? ((palladiumGainLoss / palladiumCostBasis) * 100) : 0;
 
   const goldSilverRatio = silverSpot > 0 ? (goldSpot / silverSpot) : 0;
 
   const avgSilverCostPerOz = totalSilverOzt > 0 ? (silverCostBasis / totalSilverOzt) : 0;
   const avgGoldCostPerOz = totalGoldOzt > 0 ? (goldCostBasis / totalGoldOzt) : 0;
+  const avgPlatinumCostPerOz = totalPlatinumOzt > 0 ? (platinumCostBasis / totalPlatinumOzt) : 0;
+  const avgPalladiumCostPerOz = totalPalladiumOzt > 0 ? (palladiumCostBasis / totalPalladiumOzt) : 0;
 
   // Daily change calculation - uses holdings owned BEFORE today × spot price changes
   // Holdings purchased today should NOT affect Today's Change (user didn't own them at midnight)
@@ -1105,14 +1137,20 @@ function AppContent() {
   const preTodayGoldOzt = goldItems
     .filter(i => !i.datePurchased || i.datePurchased < todayStr)
     .reduce((sum, i) => sum + (i.ozt * i.quantity), 0);
+  const preTodayPlatinumOzt = platinumItems
+    .filter(i => !i.datePurchased || i.datePurchased < todayStr)
+    .reduce((sum, i) => sum + (i.ozt * i.quantity), 0);
+  const preTodayPalladiumOzt = palladiumItems
+    .filter(i => !i.datePurchased || i.datePurchased < todayStr)
+    .reduce((sum, i) => sum + (i.ozt * i.quantity), 0);
 
   // Midnight baseline = pre-today holdings × midnight spot prices
   const midnightBaseline = midnightSnapshot
-    ? (preTodaySilverOzt * midnightSnapshot.silverSpot) + (preTodayGoldOzt * midnightSnapshot.goldSpot)
+    ? (preTodaySilverOzt * midnightSnapshot.silverSpot) + (preTodayGoldOzt * midnightSnapshot.goldSpot) + (preTodayPlatinumOzt * (midnightSnapshot.platinumSpot || platinumSpot)) + (preTodayPalladiumOzt * (midnightSnapshot.palladiumSpot || palladiumSpot))
     : null;
 
   // Current value of pre-today holdings at live prices
-  const preTodayCurrentValue = (preTodaySilverOzt * silverSpot) + (preTodayGoldOzt * goldSpot);
+  const preTodayCurrentValue = (preTodaySilverOzt * silverSpot) + (preTodayGoldOzt * goldSpot) + (preTodayPlatinumOzt * platinumSpot) + (preTodayPalladiumOzt * palladiumSpot);
 
   const dailyChange = midnightBaseline !== null ? (preTodayCurrentValue - midnightBaseline) : 0;
   const dailyChangePct = (midnightBaseline !== null && midnightBaseline > 0) ? ((dailyChange / midnightBaseline) * 100) : 0;
@@ -1131,7 +1169,9 @@ function AppContent() {
   // Speculation
   const specSilverNum = parseFloat(specSilverPrice) || silverSpot;
   const specGoldNum = parseFloat(specGoldPrice) || goldSpot;
-  const specTotalValue = (totalSilverOzt * specSilverNum) + (totalGoldOzt * specGoldNum);
+  const specPlatinumNum = parseFloat(specPlatinumPrice) || platinumSpot;
+  const specPalladiumNum = parseFloat(specPalladiumPrice) || palladiumSpot;
+  const specTotalValue = (totalSilverOzt * specSilverNum) + (totalGoldOzt * specGoldNum) + (totalPlatinumOzt * specPlatinumNum) + (totalPalladiumOzt * specPalladiumNum);
   const specGainLoss = specTotalValue - totalCostBasis;
   const specGainLossPct = totalCostBasis > 0 ? ((specGainLoss / totalCostBasis) * 100) : 0;
 
@@ -1144,6 +1184,8 @@ function AppContent() {
   // Break-even
   const silverBreakeven = totalSilverOzt > 0 ? (silverCostBasis / totalSilverOzt) : 0;
   const goldBreakeven = totalGoldOzt > 0 ? (goldCostBasis / totalGoldOzt) : 0;
+  const platinumBreakeven = totalPlatinumOzt > 0 ? (platinumCostBasis / totalPlatinumOzt) : 0;
+  const palladiumBreakeven = totalPalladiumOzt > 0 ? (palladiumCostBasis / totalPalladiumOzt) : 0;
 
   // Milestones - use custom if set, otherwise use defaults
   const defaultSilverMilestones = [10, 50, 100, 250, 500, 1000];
@@ -1223,11 +1265,15 @@ function AppContent() {
 
   const loadData = async () => {
     try {
-      const [silver, gold, silverS, goldS, timestamp, hasSeenTutorial, storedMidnightSnapshot, storedTheme, storedChangeDisplayMode, storedLargeText, storedSilverMilestone, storedGoldMilestone, storedLastSilverReached, storedLastGoldReached, storedGuestMode] = await Promise.all([
+      const [silver, gold, platinum, palladium, silverS, goldS, platinumS, palladiumS, timestamp, hasSeenTutorial, storedMidnightSnapshot, storedTheme, storedChangeDisplayMode, storedLargeText, storedSilverMilestone, storedGoldMilestone, storedLastSilverReached, storedLastGoldReached, storedGuestMode] = await Promise.all([
         AsyncStorage.getItem('stack_silver'),
         AsyncStorage.getItem('stack_gold'),
+        AsyncStorage.getItem('stack_platinum'),
+        AsyncStorage.getItem('stack_palladium'),
         AsyncStorage.getItem('stack_silver_spot'),
         AsyncStorage.getItem('stack_gold_spot'),
+        AsyncStorage.getItem('stack_platinum_spot'),
+        AsyncStorage.getItem('stack_palladium_spot'),
         AsyncStorage.getItem('stack_price_timestamp'),
         AsyncStorage.getItem('stack_has_seen_tutorial'),
         AsyncStorage.getItem('stack_midnight_snapshot'),
@@ -1248,8 +1294,16 @@ function AppContent() {
       if (gold) {
         try { setGoldItems(JSON.parse(gold)); } catch (e) { console.error('Failed to parse gold data'); }
       }
+      if (platinum) {
+        try { setPlatinumItems(JSON.parse(platinum)); } catch (e) { console.error('Failed to parse platinum data'); }
+      }
+      if (palladium) {
+        try { setPalladiumItems(JSON.parse(palladium)); } catch (e) { console.error('Failed to parse palladium data'); }
+      }
       if (silverS) setSilverSpot(parseFloat(silverS) || 30);
       if (goldS) setGoldSpot(parseFloat(goldS) || 2600);
+      if (platinumS) setPlatinumSpot(parseFloat(platinumS) || 2100);
+      if (palladiumS) setPalladiumSpot(parseFloat(palladiumS) || 1740);
       if (timestamp) setPriceTimestamp(timestamp);
       if (storedMidnightSnapshot) {
         try {
@@ -1411,7 +1465,7 @@ function AppContent() {
   const hasGoldAccess = hasGold || hasLifetimeAccess;
 
   // Save holdings to iCloud
-  const syncToCloud = async (silver = silverItems, gold = goldItems) => {
+  const syncToCloud = async (silver = silverItems, gold = goldItems, platinum = platinumItems, palladium = palladiumItems) => {
     if (!hasGoldAccess || !iCloudSyncEnabled || !iCloudAvailable || Platform.OS !== 'ios') return;
 
     try {
@@ -1419,8 +1473,10 @@ function AppContent() {
       const cloudData = {
         silverItems: silver,
         goldItems: gold,
+        platinumItems: platinum,
+        palladiumItems: palladium,
         lastModified: new Date().toISOString(),
-        version: '1.0',
+        version: '1.1',
       };
 
       await CloudStorage.writeFile(
@@ -1482,7 +1538,7 @@ function AppContent() {
         const cloudTime = new Date(cloudData.lastModified).getTime();
         const localTime = localTimestamp ? new Date(localTimestamp).getTime() : 0;
 
-        if (cloudTime > localTime && (cloudData.silverItems?.length > 0 || cloudData.goldItems?.length > 0)) {
+        if (cloudTime > localTime && (cloudData.silverItems?.length > 0 || cloudData.goldItems?.length > 0 || cloudData.platinumItems?.length > 0 || cloudData.palladiumItems?.length > 0)) {
           // Cloud data is newer - ask user or auto-apply
           Alert.alert(
             'iCloud Data Found',
@@ -1494,6 +1550,8 @@ function AppContent() {
                 onPress: () => {
                   if (cloudData.silverItems) setSilverItems(cloudData.silverItems);
                   if (cloudData.goldItems) setGoldItems(cloudData.goldItems);
+                  if (cloudData.platinumItems) setPlatinumItems(cloudData.platinumItems);
+                  if (cloudData.palladiumItems) setPalladiumItems(cloudData.palladiumItems);
                   setLastSyncTime(cloudData.lastModified);
                   Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 }
@@ -1548,7 +1606,7 @@ function AppContent() {
     }, 2000); // Debounce 2 seconds
 
     return () => clearTimeout(timeout);
-  }, [silverItems, goldItems, iCloudSyncEnabled, isAuthenticated, dataLoaded, hasGoldAccess]);
+  }, [silverItems, goldItems, platinumItems, palladiumItems, iCloudSyncEnabled, isAuthenticated, dataLoaded, hasGoldAccess]);
 
   useEffect(() => {
     // Only save after initial data has been loaded to prevent overwriting with empty arrays
@@ -1559,6 +1617,14 @@ function AppContent() {
     // Only save after initial data has been loaded to prevent overwriting with empty arrays
     if (isAuthenticated && dataLoaded) saveData('stack_gold', goldItems);
   }, [goldItems, isAuthenticated, dataLoaded]);
+
+  useEffect(() => {
+    if (isAuthenticated && dataLoaded) saveData('stack_platinum', platinumItems);
+  }, [platinumItems, isAuthenticated, dataLoaded]);
+
+  useEffect(() => {
+    if (isAuthenticated && dataLoaded) saveData('stack_palladium', palladiumItems);
+  }, [palladiumItems, isAuthenticated, dataLoaded]);
 
   // Manual sync function - can be called on pull-to-refresh or button press
   const syncHoldingsWithSupabase = async (force = false) => {
@@ -1594,11 +1660,13 @@ function AppContent() {
       // fullSync will:
       // - If first sync AND Supabase empty: migrate local holdings to Supabase
       // - Otherwise: just fetch from Supabase (source of truth)
-      const { silverItems: remoteSilver, goldItems: remoteGold, syncedToCloud, error } = await fullSync(
+      const { silverItems: remoteSilver, goldItems: remoteGold, platinumItems: remotePlatinum, palladiumItems: remotePalladium, syncedToCloud, error } = await fullSync(
         supabaseUser.id,
         silverItems,
         goldItems,
-        isFirstSync
+        isFirstSync,
+        platinumItems,
+        palladiumItems
       );
 
       if (error) {
@@ -1612,9 +1680,11 @@ function AppContent() {
         // Replace local state with Supabase data (Supabase is source of truth)
         setSilverItems(remoteSilver);
         setGoldItems(remoteGold);
+        setPlatinumItems(remotePlatinum);
+        setPalladiumItems(remotePalladium);
 
         if (__DEV__) {
-          console.log(`Supabase sync complete: ${syncedToCloud} items migrated, ${remoteSilver.length} silver, ${remoteGold.length} gold from cloud`);
+          console.log(`Supabase sync complete: ${syncedToCloud} items migrated, ${remoteSilver.length} silver, ${remoteGold.length} gold, ${remotePlatinum.length} platinum, ${remotePalladium.length} palladium from cloud`);
         }
       }
 
@@ -2015,7 +2085,7 @@ function AppContent() {
 
       // Only update if we have actual portfolio data (items loaded)
       // If totalMeltValue is 0 with no items, that's valid - but if items exist, value should be > 0
-      const hasItems = silverItems.length > 0 || goldItems.length > 0;
+      const hasItems = silverItems.length > 0 || goldItems.length > 0 || platinumItems.length > 0 || palladiumItems.length > 0;
       if (hasItems && totalMeltValue === 0) {
         // Items exist but value is 0 - something is wrong, skip
         if (__DEV__) console.log('📸 Snapshot skipped: items exist but value is 0');
@@ -2031,12 +2101,18 @@ function AppContent() {
         // Fall back to current prices only if prevClose is not available
         const baselineSilverSpot = spotChange.silver.prevClose ?? silverSpot;
         const baselineGoldSpot = spotChange.gold.prevClose ?? goldSpot;
+        const baselinePlatinumSpot = spotChange.platinum?.prevClose ?? platinumSpot;
+        const baselinePalladiumSpot = spotChange.palladium?.prevClose ?? palladiumSpot;
 
         const snapshot = {
           silverOzt: totalSilverOzt,
           goldOzt: totalGoldOzt,
+          platinumOzt: totalPlatinumOzt,
+          palladiumOzt: totalPalladiumOzt,
           silverSpot: baselineSilverSpot,
           goldSpot: baselineGoldSpot,
+          platinumSpot: baselinePlatinumSpot,
+          palladiumSpot: baselinePalladiumSpot,
           date: today,
           timestamp: new Date().toISOString(),
         };
@@ -2044,7 +2120,7 @@ function AppContent() {
         await AsyncStorage.setItem('stack_midnight_snapshot', JSON.stringify(snapshot));
         setMidnightSnapshot(snapshot);
 
-        const snapshotValue = (totalSilverOzt * baselineSilverSpot) + (totalGoldOzt * baselineGoldSpot);
+        const snapshotValue = (totalSilverOzt * baselineSilverSpot) + (totalGoldOzt * baselineGoldSpot) + (totalPlatinumOzt * baselinePlatinumSpot) + (totalPalladiumOzt * baselinePalladiumSpot);
         const usingPrevClose = spotChange.silver.prevClose != null;
         console.log(`📸 Daily snapshot: ${totalSilverOzt.toFixed(2)}oz Ag @ $${baselineSilverSpot}, ${totalGoldOzt.toFixed(3)}oz Au @ $${baselineGoldSpot} = $${snapshotValue.toFixed(2)} (${usingPrevClose ? 'prev close' : 'current'})`);
       }
@@ -2052,7 +2128,7 @@ function AppContent() {
 
     // Check on app open and when prices are loaded
     checkAndUpdateMidnightSnapshot();
-  }, [isAuthenticated, dataLoaded, spotPricesLive, midnightSnapshot, totalSilverOzt, totalGoldOzt, silverSpot, goldSpot, totalMeltValue, silverItems.length, goldItems.length, spotChange]);
+  }, [isAuthenticated, dataLoaded, spotPricesLive, midnightSnapshot, totalSilverOzt, totalGoldOzt, totalPlatinumOzt, totalPalladiumOzt, silverSpot, goldSpot, platinumSpot, palladiumSpot, totalMeltValue, silverItems.length, goldItems.length, platinumItems.length, palladiumItems.length, spotChange]);
 
   // Auto-refresh spot prices every 1 minute (when app is active)
   // Track previous app state to detect foreground transitions
@@ -2119,7 +2195,7 @@ function AppContent() {
   // Free tier limit check
   const handleAddPurchase = () => {
     const FREE_TIER_LIMIT = 25;
-    const totalItems = silverItems.length + goldItems.length;
+    const totalItems = silverItems.length + goldItems.length + platinumItems.length + palladiumItems.length;
 
     if (!hasGold && !hasLifetimeAccess && totalItems >= FREE_TIER_LIMIT) {
       // User has reached free tier limit, show paywall
@@ -2138,8 +2214,8 @@ function AppContent() {
       // User can add more items
       resetForm();
       // Ensure a valid metal is selected (not 'both') when adding new items
-      if (metalTab === 'both') {
-        setMetalTab('silver'); // Default to silver when adding from "Both" view
+      if (metalTab === 'both' || metalTab === 'all') {
+        setMetalTab('silver'); // Default to silver when adding from "All" view
       }
       setShowAddModal(true);
     }
@@ -2375,7 +2451,7 @@ function AppContent() {
 
     Alert.alert(
       'Alert Created',
-      `You'll be notified when ${newAlert.metal === 'gold' ? 'gold' : 'silver'} goes ${newAlert.direction} $${targetPrice.toFixed(2)}/oz.`
+      `You'll be notified when ${newAlert.metal} goes ${newAlert.direction} $${targetPrice.toFixed(2)}/oz.`
     );
   };
 
@@ -2475,8 +2551,14 @@ function AppContent() {
         silverChangePercent: spotChange?.silver?.percent || 0,
         goldValue: totalGoldOzt * goldSpot,
         silverValue: totalSilverOzt * silverSpot,
+        platinumValue: totalPlatinumOzt * platinumSpot,
+        palladiumValue: totalPalladiumOzt * palladiumSpot,
         goldOzt: totalGoldOzt,
         silverOzt: totalSilverOzt,
+        platinumOzt: totalPlatinumOzt,
+        palladiumOzt: totalPalladiumOzt,
+        platinumSpot: platinumSpot,
+        palladiumSpot: palladiumSpot,
         hasSubscription: hasGold || hasLifetimeAccess,
       };
 
@@ -2495,7 +2577,7 @@ function AppContent() {
     if (dataLoaded && spotPricesLive && (hasGold || hasLifetimeAccess)) {
       syncWidget();
     }
-  }, [totalMeltValue, totalGoldOzt, totalSilverOzt, silverSpot, goldSpot, spotChange, dataLoaded, spotPricesLive, hasGold, hasLifetimeAccess]);
+  }, [totalMeltValue, totalGoldOzt, totalSilverOzt, totalPlatinumOzt, totalPalladiumOzt, silverSpot, goldSpot, platinumSpot, palladiumSpot, spotChange, dataLoaded, spotPricesLive, hasGold, hasLifetimeAccess]);
 
   // Sync widget when app comes to foreground
   useEffect(() => {
@@ -2535,7 +2617,9 @@ function AppContent() {
       // Calculate portfolio values
       const goldValue = totalGoldOzt * goldSpot;
       const silverValue = totalSilverOzt * silverSpot;
-      const totalValue = goldValue + silverValue;
+      const platinumValue = totalPlatinumOzt * platinumSpot;
+      const palladiumValue = totalPalladiumOzt * palladiumSpot;
+      const totalValue = goldValue + silverValue + platinumValue + palladiumValue;
 
       const response = await fetch(`${API_BASE_URL}/api/snapshots`, {
         method: 'POST',
@@ -2545,10 +2629,16 @@ function AppContent() {
           totalValue,
           goldValue,
           silverValue,
+          platinumValue,
+          palladiumValue,
           goldOz: totalGoldOzt,
           silverOz: totalSilverOzt,
+          platinumOz: totalPlatinumOzt,
+          palladiumOz: totalPalladiumOzt,
           goldSpot,
           silverSpot,
+          platinumSpot,
+          palladiumSpot,
         }),
       });
 
@@ -2568,7 +2658,7 @@ function AppContent() {
    * This generates chart data client-side without needing to persist every historical snapshot
    */
   const calculateHistoricalPortfolioData = async (range = '1M') => {
-    const allItems = [...silverItems, ...goldItems];
+    const allItems = [...silverItems, ...goldItems, ...platinumItems, ...palladiumItems];
     if (allItems.length === 0) return [];
 
     // Determine date range
@@ -2649,6 +2739,8 @@ function AppContent() {
       historicalPriceCache.current[today] = {
         gold: goldSpot,
         silver: silverSpot,
+        platinum: platinumSpot,
+        palladium: palladiumSpot,
       };
       console.log(`   📦 Pre-cached today's prices from live spot: Gold $${goldSpot}, Silver $${silverSpot}`);
     }
@@ -2713,20 +2805,34 @@ function AppContent() {
       const goldOz = ownedItems
         .filter(i => goldItems.includes(i))
         .reduce((sum, i) => sum + (i.ozt * i.quantity), 0);
+      const platinumOz = ownedItems
+        .filter(i => platinumItems.includes(i))
+        .reduce((sum, i) => sum + (i.ozt * i.quantity), 0);
+      const palladiumOz = ownedItems
+        .filter(i => palladiumItems.includes(i))
+        .reduce((sum, i) => sum + (i.ozt * i.quantity), 0);
 
       const silverSpotHist = cached.silver || silverSpot;
       const goldSpotHist = cached.gold || goldSpot;
-      const totalValue = (silverOz * silverSpotHist) + (goldOz * goldSpotHist);
+      const platinumSpotHist = cached.platinum || platinumSpot;
+      const palladiumSpotHist = cached.palladium || palladiumSpot;
+      const totalValue = (silverOz * silverSpotHist) + (goldOz * goldSpotHist) + (platinumOz * platinumSpotHist) + (palladiumOz * palladiumSpotHist);
 
       historicalData.push({
         date,
         total_value: totalValue,
         gold_value: goldOz * goldSpotHist,
         silver_value: silverOz * silverSpotHist,
+        platinum_value: platinumOz * platinumSpotHist,
+        palladium_value: palladiumOz * palladiumSpotHist,
         gold_oz: goldOz,
         silver_oz: silverOz,
+        platinum_oz: platinumOz,
+        palladium_oz: palladiumOz,
         gold_spot: goldSpotHist,
         silver_spot: silverSpotHist,
+        platinum_spot: platinumSpotHist,
+        palladium_spot: palladiumSpotHist,
       });
     }
 
@@ -2856,7 +2962,7 @@ function AppContent() {
     analyticsAbortRef.current = controller;
 
     setAnalyticsLoading(true);
-    const hasHoldings = silverItems.length > 0 || goldItems.length > 0;
+    const hasHoldings = silverItems.length > 0 || goldItems.length > 0 || platinumItems.length > 0 || palladiumItems.length > 0;
 
     try {
       let apiSnapshots = [];
@@ -3026,9 +3132,9 @@ function AppContent() {
   const createBackup = async () => {
     try {
       const backup = {
-        version: '1.0',
+        version: '1.1',
         timestamp: new Date().toISOString(),
-        data: { silverItems, goldItems }
+        data: { silverItems, goldItems, platinumItems, palladiumItems }
       };
 
       const json = JSON.stringify(backup, null, 2);
@@ -3082,6 +3188,8 @@ function AppContent() {
             onPress: async () => {
               if (backup.data.silverItems) setSilverItems(backup.data.silverItems);
               if (backup.data.goldItems) setGoldItems(backup.data.goldItems);
+              if (backup.data.platinumItems) setPlatinumItems(backup.data.platinumItems);
+              if (backup.data.palladiumItems) setPalladiumItems(backup.data.palladiumItems);
               Alert.alert('Success', 'Backup restored!');
             }
           }
@@ -3137,7 +3245,7 @@ function AppContent() {
 
       // Check trigger conditions
       if (trigger === 'holdings') {
-        const totalHoldings = silverItems.length + goldItems.length;
+        const totalHoldings = silverItems.length + goldItems.length + platinumItems.length + palladiumItems.length;
         if (totalHoldings < 10) {
           return; // Not enough holdings yet
         }
@@ -3227,6 +3335,14 @@ function AppContent() {
           setGoldSpot(data.gold);
           await AsyncStorage.setItem('stack_gold_spot', data.gold.toString());
         }
+        if (data.platinum && data.platinum > 100) {
+          setPlatinumSpot(data.platinum);
+          await AsyncStorage.setItem('stack_platinum_spot', data.platinum.toString());
+        }
+        if (data.palladium && data.palladium > 100) {
+          setPalladiumSpot(data.palladium);
+          await AsyncStorage.setItem('stack_palladium_spot', data.palladium.toString());
+        }
         setPriceSource(data.source || 'live');
         setPriceTimestamp(data.timestamp || new Date().toISOString());
         setSpotPricesLive(true); // Mark that we have live prices from API
@@ -3244,6 +3360,16 @@ function AppContent() {
               amount: data.change.silver?.amount ?? null,
               percent: data.change.silver?.percent ?? null,
               prevClose: data.change.silver?.prevClose ?? null,
+            },
+            platinum: {
+              amount: data.change.platinum?.amount ?? null,
+              percent: data.change.platinum?.percent ?? null,
+              prevClose: data.change.platinum?.prevClose ?? null,
+            },
+            palladium: {
+              amount: data.change.palladium?.amount ?? null,
+              percent: data.change.palladium?.percent ?? null,
+              prevClose: data.change.palladium?.prevClose ?? null,
             },
           });
           if (__DEV__) console.log('📈 Change data:', data.change);
@@ -4006,15 +4132,13 @@ function AppContent() {
           premium: item.premium || 0,
         };
 
-        if (item.metal === 'silver') {
-          setSilverItems(prev => [...prev, newItem]);
-          silverCount++;
-          newItems.push({ ...newItem, metal: 'silver' });
-        } else {
-          setGoldItems(prev => [...prev, newItem]);
-          goldCount++;
-          newItems.push({ ...newItem, metal: 'gold' });
-        }
+        const importSetters = { silver: setSilverItems, gold: setGoldItems, platinum: setPlatinumItems, palladium: setPalladiumItems };
+        const metalKey = (item.metal || 'silver').toLowerCase();
+        const setter = importSetters[metalKey] || setSilverItems;
+        setter(prev => [...prev, newItem]);
+        if (metalKey === 'silver') silverCount++;
+        else if (metalKey === 'gold') goldCount++;
+        newItems.push({ ...newItem, metal: metalKey });
       });
 
       // Sync to Supabase if signed in
@@ -4034,16 +4158,16 @@ function AppContent() {
       // Haptic feedback
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-      const totalImported = silverCount + goldCount;
+      const totalImported = newItems.length;
       const duplicateMsg = skippedDuplicates > 0 ? `\n(${skippedDuplicates} duplicate${skippedDuplicates > 1 ? 's' : ''} skipped)` : '';
 
       Alert.alert(
         'Import Successful',
-        `Imported ${totalImported} items:\n${silverCount} Silver, ${goldCount} Gold${duplicateMsg}`,
+        `Imported ${totalImported} items${duplicateMsg}`,
         [{ text: 'Great!', onPress: () => {
           setShowImportPreview(false);
           setImportData([]);
-          setMetalTab(silverCount > 0 && goldCount > 0 ? 'both' : silverCount > 0 ? 'silver' : 'gold');
+          setMetalTab('both');
         }}]
       );
     } catch (error) {
@@ -4075,15 +4199,13 @@ function AppContent() {
           premium: item.premium,
         };
 
-        if (item.metal === 'silver') {
-          setSilverItems(prev => [...prev, newItem]);
-          silverCount++;
-          newItems.push({ ...newItem, metal: 'silver' });
-        } else {
-          setGoldItems(prev => [...prev, newItem]);
-          goldCount++;
-          newItems.push({ ...newItem, metal: 'gold' });
-        }
+        const scanSetters = { silver: setSilverItems, gold: setGoldItems, platinum: setPlatinumItems, palladium: setPalladiumItems };
+        const metalKey = (item.metal || 'silver').toLowerCase();
+        const setter = scanSetters[metalKey] || setSilverItems;
+        setter(prev => [...prev, newItem]);
+        if (metalKey === 'silver') silverCount++;
+        else if (metalKey === 'gold') goldCount++;
+        newItems.push({ ...newItem, metal: metalKey });
       });
 
       // Sync to Supabase if signed in
@@ -4105,12 +4227,12 @@ function AppContent() {
 
       Alert.alert(
         'Items Added Successfully',
-        `Added ${scannedItems.length} item${scannedItems.length > 1 ? 's' : ''} from receipt:\n${silverCount} Silver, ${goldCount} Gold`,
+        `Added ${scannedItems.length} item${scannedItems.length > 1 ? 's' : ''} from receipt`,
         [{ text: 'Great!', onPress: () => {
           setShowScannedItemsPreview(false);
           setScannedItems([]);
           setScannedMetadata({ purchaseDate: '', purchaseTime: '', dealer: '' });
-          setMetalTab(silverCount > 0 && goldCount > 0 ? 'both' : silverCount > 0 ? 'silver' : 'gold');
+          setMetalTab('both');
           setTab('holdings');
         }}]
       );
@@ -4329,25 +4451,22 @@ function AppContent() {
     }
 
     // Normal add/edit flow for holdings
-    // IMPORTANT: metalTab can be 'silver', 'gold', or 'both' - we must check explicitly
+    // IMPORTANT: metalTab can be 'silver', 'gold', 'platinum', 'palladium', or 'both' - we must check explicitly
     const targetMetal = metalTab === 'both' ? 'silver' : metalTab; // Default to silver if 'both' (shouldn't happen but safety)
 
-    if (targetMetal === 'silver') {
-      if (editingItem) {
-        setSilverItems(prev => prev.map(i => i.id === editingItem.id ? item : i));
-      } else {
-        setSilverItems(prev => [...prev, item]);
-        // Check for review prompt after adding (not editing)
-        checkAndRequestReview('holdings');
-      }
+    const settersMap = {
+      silver: setSilverItems,
+      gold: setGoldItems,
+      platinum: setPlatinumItems,
+      palladium: setPalladiumItems,
+    };
+    const setter = settersMap[targetMetal] || setSilverItems;
+
+    if (editingItem) {
+      setter(prev => prev.map(i => i.id === editingItem.id ? item : i));
     } else {
-      if (editingItem) {
-        setGoldItems(prev => prev.map(i => i.id === editingItem.id ? item : i));
-      } else {
-        setGoldItems(prev => [...prev, item]);
-        // Check for review prompt after adding (not editing)
-        checkAndRequestReview('holdings');
-      }
+      setter(prev => [...prev, item]);
+      checkAndRequestReview('holdings');
     }
 
     // Sync to Supabase if signed in
@@ -4404,7 +4523,8 @@ function AppContent() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     // Find the item to get its supabase_id if it exists
-    const items = metal === 'silver' ? silverItems : goldItems;
+    const itemsMap = { silver: silverItems, gold: goldItems, platinum: platinumItems, palladium: palladiumItems };
+    const items = itemsMap[metal] || silverItems;
     const itemToDelete = items.find(i => i.id === id);
 
     Alert.alert(
@@ -4419,8 +4539,9 @@ function AppContent() {
             // Haptic feedback on delete
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
 
-            if (metal === 'silver') setSilverItems(prev => prev.filter(i => i.id !== id));
-            else setGoldItems(prev => prev.filter(i => i.id !== id));
+            const settersMap = { silver: setSilverItems, gold: setGoldItems, platinum: setPlatinumItems, palladium: setPalladiumItems };
+            const setter = settersMap[metal] || setSilverItems;
+            setter(prev => prev.filter(i => i.id !== id));
 
             // Delete from Supabase if signed in
             if (supabaseUser && itemToDelete) {
@@ -4463,7 +4584,8 @@ function AppContent() {
 
   const sortItems = (items, metal) => {
     const itemsWithMetal = items.map(item => ({ ...item, metal }));
-    const spot = metal === 'silver' ? silverSpot : goldSpot;
+    const spotMap = { silver: silverSpot, gold: goldSpot, platinum: platinumSpot, palladium: palladiumSpot };
+    const spot = spotMap[metal] || silverSpot;
 
     switch (sortBy) {
       case 'date-newest':
@@ -4540,6 +4662,8 @@ function AppContent() {
       const all = [
         ...silverItems.map(i => ({ ...i, metal: 'Silver' })),
         ...goldItems.map(i => ({ ...i, metal: 'Gold' })),
+        ...platinumItems.map(i => ({ ...i, metal: 'Platinum' })),
+        ...palladiumItems.map(i => ({ ...i, metal: 'Palladium' })),
       ];
 
       if (all.length === 0) {
@@ -4694,9 +4818,12 @@ function AppContent() {
     );
   }
 
-  const currentColor = metalTab === 'silver' ? colors.silver : metalTab === 'gold' ? colors.gold : colors.gold;
-  const items = metalTab === 'silver' ? silverItems : metalTab === 'gold' ? goldItems : [];
-  const spot = metalTab === 'silver' ? silverSpot : goldSpot;
+  const metalColorMap = { silver: colors.silver, gold: colors.gold, platinum: colors.platinum, palladium: colors.palladium };
+  const currentColor = metalColorMap[metalTab] || colors.gold;
+  const metalItemsMap = { silver: silverItems, gold: goldItems, platinum: platinumItems, palladium: palladiumItems };
+  const items = metalItemsMap[metalTab] || [];
+  const metalSpotMap = { silver: silverSpot, gold: goldSpot, platinum: platinumSpot, palladium: palladiumSpot };
+  const spot = metalSpotMap[metalTab] || goldSpot;
 
   // ============================================
   // MAIN RENDER
@@ -4823,8 +4950,8 @@ function AppContent() {
             {/* Holdings Card */}
             <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
               <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.large }]}>Holdings Value</Text>
-              <View style={{ flexDirection: 'row', gap: 12 }}>
-                <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+                <View style={{ flex: 1, minWidth: '40%' }}>
                   <Text style={{ color: colors.gold, fontSize: scaledFonts.small, fontWeight: '600' }}>Gold</Text>
                   <Text style={{ color: colors.text, fontSize: scaledFonts.xlarge, fontWeight: '700' }} numberOfLines={1} adjustsFontSizeToFit={true}>
                     ${formatSmartCurrency(goldMeltValue)}
@@ -4833,7 +4960,7 @@ function AppContent() {
                     {goldGainLoss >= 0 ? '▲' : '▼'} {spotChangeDisplayMode === 'amount' ? `$${formatSmartCurrency(Math.abs(goldGainLoss))}` : `${goldGainLossPct >= 0 ? '+' : ''}${goldGainLossPct.toFixed(1)}%`}
                   </Text>
                 </View>
-                <View style={{ flex: 1 }}>
+                <View style={{ flex: 1, minWidth: '40%' }}>
                   <Text style={{ color: colors.silver, fontSize: scaledFonts.small, fontWeight: '600' }}>Silver</Text>
                   <Text style={{ color: colors.text, fontSize: scaledFonts.xlarge, fontWeight: '700' }} numberOfLines={1} adjustsFontSizeToFit={true}>
                     ${formatSmartCurrency(silverMeltValue)}
@@ -4842,6 +4969,28 @@ function AppContent() {
                     {silverGainLoss >= 0 ? '▲' : '▼'} {spotChangeDisplayMode === 'amount' ? `$${formatSmartCurrency(Math.abs(silverGainLoss))}` : `${silverGainLossPct >= 0 ? '+' : ''}${silverGainLossPct.toFixed(1)}%`}
                   </Text>
                 </View>
+                {totalPlatinumOzt > 0 && (
+                  <View style={{ flex: 1, minWidth: '40%' }}>
+                    <Text style={{ color: colors.platinum, fontSize: scaledFonts.small, fontWeight: '600' }}>Platinum</Text>
+                    <Text style={{ color: colors.text, fontSize: scaledFonts.xlarge, fontWeight: '700' }} numberOfLines={1} adjustsFontSizeToFit={true}>
+                      ${formatSmartCurrency(platinumMeltValue)}
+                    </Text>
+                    <Text style={{ color: platinumGainLoss >= 0 ? colors.success : colors.error, fontSize: scaledFonts.small, marginTop: 2 }} numberOfLines={1} adjustsFontSizeToFit={true}>
+                      {platinumGainLoss >= 0 ? '▲' : '▼'} {spotChangeDisplayMode === 'amount' ? `$${formatSmartCurrency(Math.abs(platinumGainLoss))}` : `${platinumGainLossPct >= 0 ? '+' : ''}${platinumGainLossPct.toFixed(1)}%`}
+                    </Text>
+                  </View>
+                )}
+                {totalPalladiumOzt > 0 && (
+                  <View style={{ flex: 1, minWidth: '40%' }}>
+                    <Text style={{ color: colors.palladium, fontSize: scaledFonts.small, fontWeight: '600' }}>Palladium</Text>
+                    <Text style={{ color: colors.text, fontSize: scaledFonts.xlarge, fontWeight: '700' }} numberOfLines={1} adjustsFontSizeToFit={true}>
+                      ${formatSmartCurrency(palladiumMeltValue)}
+                    </Text>
+                    <Text style={{ color: palladiumGainLoss >= 0 ? colors.success : colors.error, fontSize: scaledFonts.small, marginTop: 2 }} numberOfLines={1} adjustsFontSizeToFit={true}>
+                      {palladiumGainLoss >= 0 ? '▲' : '▼'} {spotChangeDisplayMode === 'amount' ? `$${formatSmartCurrency(Math.abs(palladiumGainLoss))}` : `${palladiumGainLossPct >= 0 ? '+' : ''}${palladiumGainLossPct.toFixed(1)}%`}
+                    </Text>
+                  </View>
+                )}
               </View>
             </View>
 
@@ -4883,57 +5032,39 @@ function AppContent() {
             {/* Live Spot Prices */}
             <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
               <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.large, marginBottom: 12 }]}>Live Spot Prices</Text>
-              <View style={{ flexDirection: 'row', gap: 12 }}>
-                <View style={{ flex: 1, backgroundColor: `${colors.silver}22`, padding: 16, borderRadius: 12 }}>
-                  <Text style={{ color: colors.silver, fontSize: scaledFonts.small }}>Silver</Text>
-                  <Text
-                    style={{ color: colors.text, fontSize: scaledFonts.xlarge, fontWeight: '700' }}
-                    numberOfLines={1}
-                    adjustsFontSizeToFit={true}
-                  >
-                    ${formatCurrency(silverSpot)}
-                  </Text>
-                  {spotChange.silver.percent != null && spotChange.silver.amount != null ? (
-                    <Text style={{
-                      color: spotChange.silver.amount >= 0 ? '#22C55E' : '#EF4444',
-                      fontSize: scaledFonts.small,
-                      fontWeight: '600',
-                      marginTop: 4
-                    }} numberOfLines={1} adjustsFontSizeToFit={true}>
-                      {spotChangeDisplayMode === 'percent'
-                        ? `${spotChange.silver.percent >= 0 ? '+' : ''}${spotChange.silver.percent.toFixed(2)}%`
-                        : `${spotChange.silver.amount >= 0 ? '+' : ''}$${spotChange.silver.amount.toFixed(2)}`
-                      }
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+                {[
+                  { key: 'gold', label: 'Gold', spot: goldSpot, color: colors.gold },
+                  { key: 'silver', label: 'Silver', spot: silverSpot, color: colors.silver },
+                  { key: 'platinum', label: 'Platinum', spot: platinumSpot, color: colors.platinum },
+                  { key: 'palladium', label: 'Palladium', spot: palladiumSpot, color: colors.palladium },
+                ].map(m => (
+                  <View key={m.key} style={{ width: '47%', backgroundColor: `${m.color}22`, padding: 16, borderRadius: 12 }}>
+                    <Text style={{ color: m.color, fontSize: scaledFonts.small }}>{m.label}</Text>
+                    <Text
+                      style={{ color: colors.text, fontSize: scaledFonts.xlarge, fontWeight: '700' }}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit={true}
+                    >
+                      ${formatCurrency(m.spot)}
                     </Text>
-                  ) : (
-                    <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny, marginTop: 4 }}>Change: --</Text>
-                  )}
-                </View>
-                <View style={{ flex: 1, backgroundColor: `${colors.gold}22`, padding: 16, borderRadius: 12 }}>
-                  <Text style={{ color: colors.gold, fontSize: scaledFonts.small }}>Gold</Text>
-                  <Text
-                    style={{ color: colors.text, fontSize: scaledFonts.xlarge, fontWeight: '700' }}
-                    numberOfLines={1}
-                    adjustsFontSizeToFit={true}
-                  >
-                    ${formatCurrency(goldSpot)}
-                  </Text>
-                  {spotChange.gold.percent != null && spotChange.gold.amount != null ? (
-                    <Text style={{
-                      color: spotChange.gold.amount >= 0 ? '#22C55E' : '#EF4444',
-                      fontSize: scaledFonts.small,
-                      fontWeight: '600',
-                      marginTop: 4
-                    }} numberOfLines={1} adjustsFontSizeToFit={true}>
-                      {spotChangeDisplayMode === 'percent'
-                        ? `${spotChange.gold.percent >= 0 ? '+' : ''}${spotChange.gold.percent.toFixed(2)}%`
-                        : `${spotChange.gold.amount >= 0 ? '+' : ''}$${spotChange.gold.amount.toFixed(2)}`
-                      }
-                    </Text>
-                  ) : (
-                    <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny, marginTop: 4 }}>Change: --</Text>
-                  )}
-                </View>
+                    {spotChange[m.key]?.percent != null && spotChange[m.key]?.amount != null ? (
+                      <Text style={{
+                        color: spotChange[m.key].amount >= 0 ? '#22C55E' : '#EF4444',
+                        fontSize: scaledFonts.small,
+                        fontWeight: '600',
+                        marginTop: 4
+                      }} numberOfLines={1} adjustsFontSizeToFit={true}>
+                        {spotChangeDisplayMode === 'percent'
+                          ? `${spotChange[m.key].percent >= 0 ? '+' : ''}${spotChange[m.key].percent.toFixed(2)}%`
+                          : `${spotChange[m.key].amount >= 0 ? '+' : ''}$${spotChange[m.key].amount.toFixed(2)}`
+                        }
+                      </Text>
+                    ) : (
+                      <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny, marginTop: 4 }}>Change: --</Text>
+                    )}
+                  </View>
+                ))}
               </View>
               {/* Gold/Silver Ratio row */}
               <View style={{ marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -4949,14 +5080,16 @@ function AppContent() {
             </View>
 
             {/* Holdings Breakdown */}
-            {(silverMeltValue > 0 || goldMeltValue > 0) && (
+            {totalMeltValue > 0 && (
               <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border, alignItems: 'center' }]}>
                 <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium, marginBottom: 12, alignSelf: 'flex-start' }]}>Holdings Breakdown</Text>
                 <PieChart
                   data={[
                     { label: 'Gold', value: goldMeltValue, color: colors.gold },
                     { label: 'Silver', value: silverMeltValue, color: colors.silver },
-                  ]}
+                    { label: 'Platinum', value: platinumMeltValue, color: colors.platinum },
+                    { label: 'Palladium', value: palladiumMeltValue, color: colors.palladium },
+                  ].filter(d => d.value > 0)}
                   size={140}
                   cardBgColor={colors.cardBg}
                   textColor={colors.text}
@@ -4976,6 +5109,18 @@ function AppContent() {
                 <Text style={[styles.statRowLabel, { fontSize: scaledFonts.small }]}>Gold Holdings</Text>
                 <Text style={[styles.statRowValue, { color: colors.gold, fontSize: scaledFonts.normal }]}>{formatOunces(totalGoldOzt, 3)} oz</Text>
               </View>
+              {totalPlatinumOzt > 0 && (
+                <View style={styles.statRow}>
+                  <Text style={[styles.statRowLabel, { fontSize: scaledFonts.small }]}>Platinum Holdings</Text>
+                  <Text style={[styles.statRowValue, { color: colors.platinum, fontSize: scaledFonts.normal }]}>{formatOunces(totalPlatinumOzt, 3)} oz</Text>
+                </View>
+              )}
+              {totalPalladiumOzt > 0 && (
+                <View style={styles.statRow}>
+                  <Text style={[styles.statRowLabel, { fontSize: scaledFonts.small }]}>Palladium Holdings</Text>
+                  <Text style={[styles.statRowValue, { color: colors.palladium, fontSize: scaledFonts.normal }]}>{formatOunces(totalPalladiumOzt, 3)} oz</Text>
+                </View>
+              )}
               <View style={[styles.divider, { backgroundColor: colors.border }]} />
               <View style={styles.statRow}>
                 <Text style={[styles.statRowLabel, { fontSize: scaledFonts.small }]}>Cost Basis</Text>
@@ -4990,6 +5135,18 @@ function AppContent() {
                 <Text style={[styles.statRowLabel, { fontSize: scaledFonts.small }]}>Avg Gold Cost</Text>
                 <Text style={[styles.statRowValue, { color: colors.text, fontSize: scaledFonts.normal }]}>${formatCurrency(avgGoldCostPerOz)}/oz</Text>
               </View>
+              {totalPlatinumOzt > 0 && (
+                <View style={styles.statRow}>
+                  <Text style={[styles.statRowLabel, { fontSize: scaledFonts.small }]}>Avg Platinum Cost</Text>
+                  <Text style={[styles.statRowValue, { color: colors.text, fontSize: scaledFonts.normal }]}>${formatCurrency(avgPlatinumCostPerOz)}/oz</Text>
+                </View>
+              )}
+              {totalPalladiumOzt > 0 && (
+                <View style={styles.statRow}>
+                  <Text style={[styles.statRowLabel, { fontSize: scaledFonts.small }]}>Avg Palladium Cost</Text>
+                  <Text style={[styles.statRowValue, { color: colors.text, fontSize: scaledFonts.normal }]}>${formatCurrency(avgPalladiumCostPerOz)}/oz</Text>
+                </View>
+              )}
             </View>
 
             {/* Export CSV */}
@@ -5006,59 +5163,39 @@ function AppContent() {
           <>
             {/* Segmented Control Filter */}
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 10 }}>
-              <View style={{
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{
                 flex: 1,
-                flexDirection: 'row',
                 backgroundColor: isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
                 borderRadius: 10,
                 padding: 3,
-              }}>
-                <TouchableOpacity
-                  style={{
-                    flex: 1,
-                    paddingVertical: 8,
-                    borderRadius: 8,
-                    alignItems: 'center',
-                    backgroundColor: metalTab === 'silver' ? (isDarkMode ? 'rgba(156,163,175,0.25)' : '#fff') : 'transparent',
-                  }}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setMetalTab('silver');
-                  }}
-                >
-                  <Text style={{ color: metalTab === 'silver' ? colors.silver : colors.muted, fontWeight: '600', fontSize: 13 }}>Silver</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={{
-                    flex: 1,
-                    paddingVertical: 8,
-                    borderRadius: 8,
-                    alignItems: 'center',
-                    backgroundColor: metalTab === 'gold' ? (isDarkMode ? 'rgba(251,191,36,0.2)' : '#fff') : 'transparent',
-                  }}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setMetalTab('gold');
-                  }}
-                >
-                  <Text style={{ color: metalTab === 'gold' ? colors.gold : colors.muted, fontWeight: '600', fontSize: 13 }}>Gold</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={{
-                    flex: 1,
-                    paddingVertical: 8,
-                    borderRadius: 8,
-                    alignItems: 'center',
-                    backgroundColor: metalTab === 'both' ? (isDarkMode ? 'rgba(251,191,36,0.2)' : '#fff') : 'transparent',
-                  }}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setMetalTab('both');
-                  }}
-                >
-                  <Text style={{ color: metalTab === 'both' ? colors.gold : colors.muted, fontWeight: '600', fontSize: 13 }}>All</Text>
-                </TouchableOpacity>
-              </View>
+              }} contentContainerStyle={{ flexDirection: 'row' }}>
+                {[
+                  { key: 'silver', label: 'Silver', color: colors.silver, bgActive: isDarkMode ? 'rgba(156,163,175,0.25)' : '#fff' },
+                  { key: 'gold', label: 'Gold', color: colors.gold, bgActive: isDarkMode ? 'rgba(251,191,36,0.2)' : '#fff' },
+                  { key: 'platinum', label: 'Pt', color: colors.platinum, bgActive: isDarkMode ? 'rgba(123,179,212,0.2)' : '#fff' },
+                  { key: 'palladium', label: 'Pd', color: colors.palladium, bgActive: isDarkMode ? 'rgba(107,191,138,0.2)' : '#fff' },
+                  { key: 'both', label: 'All', color: colors.gold, bgActive: isDarkMode ? 'rgba(251,191,36,0.2)' : '#fff' },
+                ].map(m => (
+                  <TouchableOpacity
+                    key={m.key}
+                    style={{
+                      flex: 1,
+                      minWidth: 50,
+                      paddingVertical: 8,
+                      paddingHorizontal: 8,
+                      borderRadius: 8,
+                      alignItems: 'center',
+                      backgroundColor: metalTab === m.key ? m.bgActive : 'transparent',
+                    }}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setMetalTab(m.key);
+                    }}
+                  >
+                    <Text style={{ color: metalTab === m.key ? m.color : colors.muted, fontWeight: '600', fontSize: 13 }}>{m.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
               <TouchableOpacity
                 style={{
                   width: 36,
@@ -5093,10 +5230,10 @@ function AppContent() {
                 {items.length > 0 && (
                   <View style={{ backgroundColor: isDarkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', borderRadius: 12, padding: 14, marginBottom: 14, marginTop: 8, borderWidth: 1, borderColor: isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }}>
                     <Text style={{ color: currentColor, fontWeight: '700', fontSize: scaledFonts.normal, marginBottom: 4 }}>
-                      {metalTab === 'silver' ? 'Silver' : 'Gold'} Summary
+                      {{ silver: 'Silver', gold: 'Gold', platinum: 'Platinum', palladium: 'Palladium' }[metalTab] || metalTab} Summary
                     </Text>
                     <Text style={{ color: colors.muted, fontSize: scaledFonts.small, marginBottom: 2 }}>
-                      {items.length} {items.length === 1 ? 'purchase' : 'purchases'} • {formatOunces(items.reduce((sum, i) => sum + i.ozt * i.quantity, 0), metalTab === 'gold' ? 3 : 2)} oz
+                      {items.length} {items.length === 1 ? 'purchase' : 'purchases'} • {formatOunces(items.reduce((sum, i) => sum + i.ozt * i.quantity, 0), metalTab === 'silver' ? 2 : 3)} oz
                     </Text>
                     <Text style={{ color: colors.text, fontSize: scaledFonts.normal, fontWeight: '600' }}>
                       Value: ${formatSmartCurrency(items.reduce((sum, i) => sum + i.ozt * i.quantity * spot, 0))}
@@ -5147,31 +5284,25 @@ function AppContent() {
               </>
             ) : (
               <>
-                {/* Summary Cards Side by Side */}
-                {(silverItems.length > 0 || goldItems.length > 0) && (
-                  <View style={{ flexDirection: 'row', gap: 12, marginTop: 8, marginBottom: 14 }}>
-                    {silverItems.length > 0 && (
-                      <View style={{ flex: 1, backgroundColor: isDarkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }}>
-                        <Text style={{ color: colors.silver, fontWeight: '700', fontSize: scaledFonts.normal, marginBottom: 4 }}>Silver Summary</Text>
+                {/* Summary Cards */}
+                {(silverItems.length > 0 || goldItems.length > 0 || platinumItems.length > 0 || palladiumItems.length > 0) && (
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 8, marginBottom: 14 }}>
+                    {[
+                      { items: silverItems, label: 'Silver', ozt: totalSilverOzt, value: silverMeltValue, color: colors.silver, decimals: 2 },
+                      { items: goldItems, label: 'Gold', ozt: totalGoldOzt, value: goldMeltValue, color: colors.gold, decimals: 3 },
+                      { items: platinumItems, label: 'Platinum', ozt: totalPlatinumOzt, value: platinumMeltValue, color: colors.platinum, decimals: 3 },
+                      { items: palladiumItems, label: 'Palladium', ozt: totalPalladiumOzt, value: palladiumMeltValue, color: colors.palladium, decimals: 3 },
+                    ].filter(m => m.items.length > 0).map(m => (
+                      <View key={m.label} style={{ width: '47%', backgroundColor: isDarkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }}>
+                        <Text style={{ color: m.color, fontWeight: '700', fontSize: scaledFonts.normal, marginBottom: 4 }}>{m.label}</Text>
                         <Text style={{ color: colors.muted, fontSize: scaledFonts.small, marginBottom: 2 }}>
-                          {silverItems.length} {silverItems.length === 1 ? 'purchase' : 'purchases'} • {formatOunces(totalSilverOzt)} oz
+                          {m.items.length} {m.items.length === 1 ? 'purchase' : 'purchases'} • {formatOunces(m.ozt, m.decimals)} oz
                         </Text>
                         <Text style={{ color: colors.text, fontSize: scaledFonts.normal, fontWeight: '600' }}>
-                          Value: ${formatSmartCurrency(silverMeltValue)}
+                          ${formatSmartCurrency(m.value)}
                         </Text>
                       </View>
-                    )}
-                    {goldItems.length > 0 && (
-                      <View style={{ flex: 1, backgroundColor: isDarkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }}>
-                        <Text style={{ color: colors.gold, fontWeight: '700', fontSize: scaledFonts.normal, marginBottom: 4 }}>Gold Summary</Text>
-                        <Text style={{ color: colors.muted, fontSize: scaledFonts.small, marginBottom: 2 }}>
-                          {goldItems.length} {goldItems.length === 1 ? 'purchase' : 'purchases'} • {formatOunces(totalGoldOzt, 3)} oz
-                        </Text>
-                        <Text style={{ color: colors.text, fontSize: scaledFonts.normal, fontWeight: '600' }}>
-                          Value: ${formatSmartCurrency(goldMeltValue)}
-                        </Text>
-                      </View>
-                    )}
+                    ))}
                   </View>
                 )}
 
@@ -5259,8 +5390,92 @@ function AppContent() {
                   </>
                 )}
 
+                {/* Platinum Items Group */}
+                {platinumItems.length > 0 && (
+                  <>
+                    <Text style={{ color: colors.platinum, fontWeight: '700', fontSize: scaledFonts.small, marginBottom: 8, marginTop: (silverItems.length > 0 || goldItems.length > 0) ? 24 : 4, textTransform: 'uppercase', letterSpacing: 1 }}>
+                      Platinum ({platinumItems.length})
+                    </Text>
+                    {sortItems(platinumItems, 'platinum').map((item, index) => {
+                      const meltValue = item.ozt * item.quantity * platinumSpot;
+                      const costBasis = getItemCostBasis(item);
+                      const gainLoss = meltValue - costBasis;
+                      const gainLossPct = costBasis > 0 ? (gainLoss / costBasis) * 100 : 0;
+                      const isGain = gainLoss >= 0;
+                      return (
+                        <TouchableOpacity
+                          key={item.supabase_id || `platinum-${item.id}-${index}`}
+                          style={[styles.itemCard, { backgroundColor: isDarkMode ? 'rgba(0,0,0,0.2)' : `${colors.platinum}15`, borderColor: isDarkMode ? 'rgba(255,255,255,0.05)' : `${colors.platinum}30` }]}
+                          onPress={() => viewItemDetail(item, 'platinum')}
+                          activeOpacity={0.7}
+                        >
+                          <View style={{ flex: 1 }}>
+                            <Text style={[styles.itemTitle, { color: colors.text, fontSize: scaledFonts.normal }]} numberOfLines={1}>{item.productName}</Text>
+                            {item.datePurchased && (
+                              <Text style={[styles.itemSubtitle, { fontSize: scaledFonts.tiny, marginBottom: 2 }]}>{formatDateDisplay(item.datePurchased)}</Text>
+                            )}
+                            <Text style={[styles.itemSubtitle, { fontSize: scaledFonts.small }]}>{item.quantity} qty @ ${formatCurrency(item.unitPrice)} • {formatOunces(item.ozt * item.quantity)} oz</Text>
+                            <Text style={[styles.itemSubtitle, { fontSize: scaledFonts.small }]}>
+                              Cost: ${formatCurrency(costBasis)}
+                            </Text>
+                          </View>
+                          <View style={{ alignItems: 'flex-end' }}>
+                            <Text style={{ fontSize: scaledFonts.tiny, color: colors.muted, marginBottom: 1 }}>Value</Text>
+                            <Text style={[styles.itemValue, { color: colors.platinum, fontSize: scaledFonts.medium }]}>${formatSmartCurrency(meltValue)}</Text>
+                            <Text style={{ color: isGain ? colors.success : colors.error, fontSize: scaledFonts.small, fontWeight: '600' }}>
+                              {isGain ? '+' : ''}{formatCurrency(gainLoss)} ({isGain ? '+' : ''}{gainLossPct.toFixed(1)}%)
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </>
+                )}
+
+                {/* Palladium Items Group */}
+                {palladiumItems.length > 0 && (
+                  <>
+                    <Text style={{ color: colors.palladium, fontWeight: '700', fontSize: scaledFonts.small, marginBottom: 8, marginTop: (silverItems.length > 0 || goldItems.length > 0 || platinumItems.length > 0) ? 24 : 4, textTransform: 'uppercase', letterSpacing: 1 }}>
+                      Palladium ({palladiumItems.length})
+                    </Text>
+                    {sortItems(palladiumItems, 'palladium').map((item, index) => {
+                      const meltValue = item.ozt * item.quantity * palladiumSpot;
+                      const costBasis = getItemCostBasis(item);
+                      const gainLoss = meltValue - costBasis;
+                      const gainLossPct = costBasis > 0 ? (gainLoss / costBasis) * 100 : 0;
+                      const isGain = gainLoss >= 0;
+                      return (
+                        <TouchableOpacity
+                          key={item.supabase_id || `palladium-${item.id}-${index}`}
+                          style={[styles.itemCard, { backgroundColor: isDarkMode ? 'rgba(0,0,0,0.2)' : `${colors.palladium}15`, borderColor: isDarkMode ? 'rgba(255,255,255,0.05)' : `${colors.palladium}30` }]}
+                          onPress={() => viewItemDetail(item, 'palladium')}
+                          activeOpacity={0.7}
+                        >
+                          <View style={{ flex: 1 }}>
+                            <Text style={[styles.itemTitle, { color: colors.text, fontSize: scaledFonts.normal }]} numberOfLines={1}>{item.productName}</Text>
+                            {item.datePurchased && (
+                              <Text style={[styles.itemSubtitle, { fontSize: scaledFonts.tiny, marginBottom: 2 }]}>{formatDateDisplay(item.datePurchased)}</Text>
+                            )}
+                            <Text style={[styles.itemSubtitle, { fontSize: scaledFonts.small }]}>{item.quantity} qty @ ${formatCurrency(item.unitPrice)} • {formatOunces(item.ozt * item.quantity)} oz</Text>
+                            <Text style={[styles.itemSubtitle, { fontSize: scaledFonts.small }]}>
+                              Cost: ${formatCurrency(costBasis)}
+                            </Text>
+                          </View>
+                          <View style={{ alignItems: 'flex-end' }}>
+                            <Text style={{ fontSize: scaledFonts.tiny, color: colors.muted, marginBottom: 1 }}>Value</Text>
+                            <Text style={[styles.itemValue, { color: colors.palladium, fontSize: scaledFonts.medium }]}>${formatSmartCurrency(meltValue)}</Text>
+                            <Text style={{ color: isGain ? colors.success : colors.error, fontSize: scaledFonts.small, fontWeight: '600' }}>
+                              {isGain ? '+' : ''}{formatCurrency(gainLoss)} ({isGain ? '+' : ''}{gainLossPct.toFixed(1)}%)
+                            </Text>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </>
+                )}
+
                 {/* Empty state */}
-                {silverItems.length === 0 && goldItems.length === 0 && (
+                {silverItems.length === 0 && goldItems.length === 0 && platinumItems.length === 0 && palladiumItems.length === 0 && (
                   <View style={styles.emptyState}>
                     <Text style={{ fontSize: 32, marginBottom: 16, color: colors.muted }}>—</Text>
                     <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>No holdings yet</Text>
@@ -5352,7 +5567,7 @@ function AppContent() {
                 </TouchableOpacity>
 
                 {/* Share My Stack */}
-                {(silverItems.length > 0 || goldItems.length > 0) && (
+                {(silverItems.length > 0 || goldItems.length > 0 || platinumItems.length > 0 || palladiumItems.length > 0) && (
                   <TouchableOpacity
                     style={[styles.card, {
                       backgroundColor: colors.cardBg,
@@ -5445,13 +5660,13 @@ function AppContent() {
                     const today = new Date().toDateString();
                     const hasTodaySnapshot = midnightSnapshot && midnightSnapshot.date === today;
 
-                    if (!hasTodaySnapshot || (silverItems.length === 0 && goldItems.length === 0)) {
+                    if (!hasTodaySnapshot || (silverItems.length === 0 && goldItems.length === 0 && platinumItems.length === 0 && palladiumItems.length === 0)) {
                       // No snapshot yet - show message
                       return (
                         <View style={{ alignItems: 'center', paddingVertical: 40 }}>
                           <Text style={{ fontSize: 24, marginBottom: 12, color: colors.muted }}>—</Text>
                           <Text style={{ color: colors.muted, textAlign: 'center', fontSize: scaledFonts.normal }}>
-                            {silverItems.length === 0 && goldItems.length === 0
+                            {silverItems.length === 0 && goldItems.length === 0 && platinumItems.length === 0 && palladiumItems.length === 0
                               ? 'Add some holdings to see your portfolio analytics!'
                               : 'Not enough data for 1D view yet.\nCheck back after midnight!'}
                           </Text>
@@ -5461,7 +5676,9 @@ function AppContent() {
 
                     // Calculate baseline from midnight snapshot
                     const midnightValue = (midnightSnapshot.silverOzt * midnightSnapshot.silverSpot) +
-                                        (midnightSnapshot.goldOzt * midnightSnapshot.goldSpot);
+                                        (midnightSnapshot.goldOzt * midnightSnapshot.goldSpot) +
+                                        ((midnightSnapshot.platinumOzt || 0) * (midnightSnapshot.platinumSpot || platinumSpot)) +
+                                        ((midnightSnapshot.palladiumOzt || 0) * (midnightSnapshot.palladiumSpot || palladiumSpot));
                     const currentValue = totalMeltValue;
 
                     // Create 2-point chart data
@@ -5632,38 +5849,32 @@ function AppContent() {
                   </Text>
 
                   {/* Metal Toggle Buttons */}
-                  <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
-                    <TouchableOpacity
-                      style={{
-                        flexDirection: 'row', alignItems: 'center',
-                        paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8,
-                        backgroundColor: spotHistoryShowGold ? '#D4A843' : (isDarkMode ? '#27272a' : '#f4f4f5'),
-                        borderWidth: 1, borderColor: spotHistoryShowGold ? '#D4A843' : colors.border,
-                      }}
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        if (!spotHistoryShowGold || spotHistoryShowSilver) setSpotHistoryShowGold(!spotHistoryShowGold);
-                      }}
-                    >
-                      <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#D4A843', marginRight: 6 }} />
-                      <Text style={{ color: spotHistoryShowGold ? '#000' : colors.text, fontWeight: '600', fontSize: scaledFonts.small }}>Gold</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={{
-                        flexDirection: 'row', alignItems: 'center',
-                        paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8,
-                        backgroundColor: spotHistoryShowSilver ? '#C0C0C0' : (isDarkMode ? '#27272a' : '#f4f4f5'),
-                        borderWidth: 1, borderColor: spotHistoryShowSilver ? '#C0C0C0' : colors.border,
-                      }}
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        if (spotHistoryShowGold || !spotHistoryShowSilver) setSpotHistoryShowSilver(!spotHistoryShowSilver);
-                      }}
-                    >
-                      <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#C0C0C0', marginRight: 6 }} />
-                      <Text style={{ color: spotHistoryShowSilver ? '#000' : colors.text, fontWeight: '600', fontSize: scaledFonts.small }}>Silver</Text>
-                    </TouchableOpacity>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                    {[
+                      { key: 'gold', label: 'Gold', color: '#D4A843', show: spotHistoryShowGold, setShow: setSpotHistoryShowGold },
+                      { key: 'silver', label: 'Silver', color: '#C0C0C0', show: spotHistoryShowSilver, setShow: setSpotHistoryShowSilver },
+                      { key: 'platinum', label: 'Pt', color: '#7BB3D4', show: spotHistoryShowPlatinum, setShow: setSpotHistoryShowPlatinum },
+                      { key: 'palladium', label: 'Pd', color: '#6BBF8A', show: spotHistoryShowPalladium, setShow: setSpotHistoryShowPalladium },
+                    ].map(m => (
+                      <TouchableOpacity
+                        key={m.key}
+                        style={{
+                          flexDirection: 'row', alignItems: 'center',
+                          paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8,
+                          backgroundColor: m.show ? m.color : (isDarkMode ? '#27272a' : '#f4f4f5'),
+                          borderWidth: 1, borderColor: m.show ? m.color : colors.border,
+                        }}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          // Ensure at least one toggle stays on
+                          const othersOn = [spotHistoryShowGold, spotHistoryShowSilver, spotHistoryShowPlatinum, spotHistoryShowPalladium].filter((v, i) => i !== ['gold', 'silver', 'platinum', 'palladium'].indexOf(m.key) && v).length > 0;
+                          if (!m.show || othersOn) m.setShow(!m.show);
+                        }}
+                      >
+                        <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: m.color, marginRight: 6 }} />
+                        <Text style={{ color: m.show ? '#000' : colors.text, fontWeight: '600', fontSize: scaledFonts.small }}>{m.label}</Text>
+                      </TouchableOpacity>
+                    ))}
                   </View>
 
                   {/* Time Range Selector */}
@@ -5703,7 +5914,8 @@ function AppContent() {
                     </View>
                   ) : spotHistoryData && spotHistoryData.data.length > 1 ? (() => {
                     const rawData = spotHistoryData.data;
-                    const showBoth = spotHistoryShowGold && spotHistoryShowSilver;
+                    const activeCount = [spotHistoryShowGold, spotHistoryShowSilver, spotHistoryShowPlatinum, spotHistoryShowPalladium].filter(Boolean).length;
+                    const showBoth = activeCount > 1;
                     const usePercent = showBoth;
 
                     // Build X-axis labels (~7 labels max)
@@ -5747,15 +5959,46 @@ function AppContent() {
                       });
                     }
 
+                    const basePlatinum = rawData[0].platinum;
+                    const basePalladium = rawData[0].palladium;
+                    const hasPlatinumData = basePlatinum > 0;
+                    const hasPalladiumData = basePalladium > 0;
+
+                    if (spotHistoryShowPlatinum && hasPlatinumData) {
+                      datasets.push({
+                        data: rawData.map(pt => usePercent
+                          ? ((pt.platinum - basePlatinum) / basePlatinum) * 100
+                          : pt.platinum
+                        ),
+                        color: (opacity = 1) => `rgba(123, 179, 212, ${opacity})`,
+                        strokeWidth: 2,
+                      });
+                    }
+
+                    if (spotHistoryShowPalladium && hasPalladiumData) {
+                      datasets.push({
+                        data: rawData.map(pt => usePercent
+                          ? ((pt.palladium - basePalladium) / basePalladium) * 100
+                          : pt.palladium
+                        ),
+                        color: (opacity = 1) => `rgba(107, 191, 138, ${opacity})`,
+                        strokeWidth: 2,
+                      });
+                    }
+
                     const lastGold = rawData[rawData.length - 1].gold;
                     const lastSilver = rawData[rawData.length - 1].silver;
+                    const lastPlatinum = rawData[rawData.length - 1].platinum;
+                    const lastPalladium = rawData[rawData.length - 1].palladium;
                     const goldPctChange = ((lastGold - baseGold) / baseGold) * 100;
                     const silverPctChange = ((lastSilver - baseSilver) / baseSilver) * 100;
+                    const platinumPctChange = hasPlatinumData ? ((lastPlatinum - basePlatinum) / basePlatinum) * 100 : 0;
+                    const palladiumPctChange = hasPalladiumData ? ((lastPalladium - basePalladium) / basePalladium) * 100 : 0;
 
                     return (
                       <>
                         <LineChart
-                          key={`spot-${spotHistoryRange}-${spotHistoryShowGold}-${spotHistoryShowSilver}`}
+                          key={`spot-${spotHistoryRange}-${spotHistoryShowGold}-${spotHistoryShowSilver}-${spotHistoryShowPlatinum}-${spotHistoryShowPalladium}`}
                           data={{ labels: chartLabels, datasets }}
                           width={SCREEN_WIDTH - 48}
                           height={200}
@@ -5795,7 +6038,7 @@ function AppContent() {
                               % change from {new Date(rawData[0].date + 'T12:00:00').toLocaleDateString()}
                             </Text>
                           )}
-                          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                          <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 4 }}>
                             {spotHistoryShowGold && (
                               <Text style={{ color: '#D4A843', fontSize: scaledFonts.small, fontWeight: '600' }}>
                                 Gold: ${formatCurrency(lastGold)}
@@ -5806,6 +6049,18 @@ function AppContent() {
                               <Text style={{ color: '#C0C0C0', fontSize: scaledFonts.small, fontWeight: '600' }}>
                                 Silver: ${formatCurrency(lastSilver)}
                                 {showBoth ? ` (${silverPctChange >= 0 ? '+' : ''}${silverPctChange.toFixed(1)}%)` : ''}
+                              </Text>
+                            )}
+                            {spotHistoryShowPlatinum && hasPlatinumData && (
+                              <Text style={{ color: '#7BB3D4', fontSize: scaledFonts.small, fontWeight: '600' }}>
+                                Platinum: ${formatCurrency(lastPlatinum)}
+                                {showBoth ? ` (${platinumPctChange >= 0 ? '+' : ''}${platinumPctChange.toFixed(1)}%)` : ''}
+                              </Text>
+                            )}
+                            {spotHistoryShowPalladium && hasPalladiumData && (
+                              <Text style={{ color: '#6BBF8A', fontSize: scaledFonts.small, fontWeight: '600' }}>
+                                Palladium: ${formatCurrency(lastPalladium)}
+                                {showBoth ? ` (${palladiumPctChange >= 0 ? '+' : ''}${palladiumPctChange.toFixed(1)}%)` : ''}
                               </Text>
                             )}
                           </View>
@@ -5827,9 +6082,11 @@ function AppContent() {
                   {totalMeltValue > 0 ? (
                     <PieChart
                       data={[
-                        { label: 'Gold', value: totalGoldOzt * goldSpot, color: colors.gold },
-                        { label: 'Silver', value: totalSilverOzt * silverSpot, color: colors.silver },
-                      ]}
+                        { label: 'Gold', value: goldMeltValue, color: colors.gold },
+                        { label: 'Silver', value: silverMeltValue, color: colors.silver },
+                        { label: 'Platinum', value: platinumMeltValue, color: colors.platinum },
+                        { label: 'Palladium', value: palladiumMeltValue, color: colors.palladium },
+                      ].filter(d => d.value > 0)}
                       size={160}
                       cardBgColor={colors.cardBg}
                       textColor={colors.text}
@@ -5929,7 +6186,81 @@ function AppContent() {
                     </View>
                   )}
 
-                  {goldItems.length === 0 && silverItems.length === 0 && (
+                  {/* Platinum Analysis */}
+                  {platinumItems.length > 0 && (
+                    <View style={{ marginTop: 16 }}>
+                      <Text style={{ color: colors.platinum, fontWeight: '600', marginBottom: 8, fontSize: scaledFonts.normal }}>Platinum</Text>
+                      {(() => {
+                        const totalPtCost = platinumItems.reduce((sum, item) => sum + ((item.unitPrice || 0) * (item.quantity || 1)), 0);
+                        const ptMeltValue = totalPlatinumOzt * platinumSpot;
+                        const ptPL = ptMeltValue - totalPtCost;
+                        const ptPLPercent = totalPtCost > 0 ? (ptPL / totalPtCost) * 100 : 0;
+                        const avgPtCostPerOz = totalPlatinumOzt > 0 ? totalPtCost / totalPlatinumOzt : 0;
+                        const redact = !hasGoldAccess;
+                        return (
+                          <>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                              <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>Total Cost</Text>
+                              <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>{redact ? '$•••••' : `$${formatCurrency(totalPtCost)}`}</Text>
+                            </View>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                              <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>Current Value</Text>
+                              <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>{redact ? '$•••••' : `$${formatCurrency(ptMeltValue)}`}</Text>
+                            </View>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                              <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>Avg Cost/oz</Text>
+                              <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>{redact ? '$•••••' : `$${formatCurrency(avgPtCostPerOz)}`}</Text>
+                            </View>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                              <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>Unrealized P/L</Text>
+                              <Text style={{ color: redact ? colors.muted : (ptPL >= 0 ? colors.success : colors.error), fontSize: scaledFonts.normal }}>
+                                {redact ? '$••••• (•••%)' : `${ptPL >= 0 ? '+' : ''}$${formatCurrency(ptPL)} (${ptPLPercent >= 0 ? '+' : ''}${ptPLPercent.toFixed(1)}%)`}
+                              </Text>
+                            </View>
+                          </>
+                        );
+                      })()}
+                    </View>
+                  )}
+
+                  {/* Palladium Analysis */}
+                  {palladiumItems.length > 0 && (
+                    <View style={{ marginTop: 16 }}>
+                      <Text style={{ color: colors.palladium, fontWeight: '600', marginBottom: 8, fontSize: scaledFonts.normal }}>Palladium</Text>
+                      {(() => {
+                        const totalPdCost = palladiumItems.reduce((sum, item) => sum + ((item.unitPrice || 0) * (item.quantity || 1)), 0);
+                        const pdMeltValue = totalPalladiumOzt * palladiumSpot;
+                        const pdPL = pdMeltValue - totalPdCost;
+                        const pdPLPercent = totalPdCost > 0 ? (pdPL / totalPdCost) * 100 : 0;
+                        const avgPdCostPerOz = totalPalladiumOzt > 0 ? totalPdCost / totalPalladiumOzt : 0;
+                        const redact = !hasGoldAccess;
+                        return (
+                          <>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                              <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>Total Cost</Text>
+                              <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>{redact ? '$•••••' : `$${formatCurrency(totalPdCost)}`}</Text>
+                            </View>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                              <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>Current Value</Text>
+                              <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>{redact ? '$•••••' : `$${formatCurrency(pdMeltValue)}`}</Text>
+                            </View>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                              <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>Avg Cost/oz</Text>
+                              <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>{redact ? '$•••••' : `$${formatCurrency(avgPdCostPerOz)}`}</Text>
+                            </View>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                              <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>Unrealized P/L</Text>
+                              <Text style={{ color: redact ? colors.muted : (pdPL >= 0 ? colors.success : colors.error), fontSize: scaledFonts.normal }}>
+                                {redact ? '$••••• (•••%)' : `${pdPL >= 0 ? '+' : ''}$${formatCurrency(pdPL)} (${pdPLPercent >= 0 ? '+' : ''}${pdPLPercent.toFixed(1)}%)`}
+                              </Text>
+                            </View>
+                          </>
+                        );
+                      })()}
+                    </View>
+                  )}
+
+                  {goldItems.length === 0 && silverItems.length === 0 && platinumItems.length === 0 && palladiumItems.length === 0 && (
                     <Text style={{ color: colors.muted, textAlign: 'center', paddingVertical: 20, fontSize: scaledFonts.normal }}>
                       Add holdings to see cost analysis
                     </Text>
@@ -5941,7 +6272,7 @@ function AppContent() {
                   <Text style={[styles.cardTitle, { color: colors.text, marginBottom: 12, fontSize: scaledFonts.medium }]}>Purchase Statistics</Text>
 
                   {(() => {
-                    const allItems = [...goldItems, ...silverItems];
+                    const allItems = [...goldItems, ...silverItems, ...platinumItems, ...palladiumItems];
                     const itemsWithDates = allItems.filter(i => i.datePurchased);
                     const dealers = [...new Set(allItems.map(i => i.source).filter(Boolean))];
 
@@ -5978,10 +6309,22 @@ function AppContent() {
                           <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>Total Gold</Text>
                           <Text style={{ color: colors.gold, fontSize: scaledFonts.normal }}>{totalGoldOzt.toFixed(4)} oz</Text>
                         </View>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: totalPlatinumOzt > 0 || totalPalladiumOzt > 0 ? 8 : 0 }}>
                           <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>Total Silver</Text>
                           <Text style={{ color: colors.silver, fontSize: scaledFonts.normal }}>{totalSilverOzt.toFixed(4)} oz</Text>
                         </View>
+                        {totalPlatinumOzt > 0 && (
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: totalPalladiumOzt > 0 ? 8 : 0 }}>
+                            <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>Total Platinum</Text>
+                            <Text style={{ color: colors.platinum, fontSize: scaledFonts.normal }}>{totalPlatinumOzt.toFixed(4)} oz</Text>
+                          </View>
+                        )}
+                        {totalPalladiumOzt > 0 && (
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                            <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>Total Palladium</Text>
+                            <Text style={{ color: colors.palladium, fontSize: scaledFonts.normal }}>{totalPalladiumOzt.toFixed(4)} oz</Text>
+                          </View>
+                        )}
                       </>
                     );
                   })()}
@@ -6001,14 +6344,30 @@ function AppContent() {
                 {/* Break-Even Analysis */}
                 <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
                   <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>Break-Even Analysis</Text>
-                  <View style={{ backgroundColor: `${colors.silver}22`, padding: 12, borderRadius: 8, marginBottom: 8 }}>
-                    <Text style={{ color: colors.silver, fontSize: scaledFonts.normal }}>Silver: ${formatCurrency(silverBreakeven)}/oz needed</Text>
-                    <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny }}>{silverSpot >= silverBreakeven ? 'Profitable!' : `Need +$${formatCurrency(silverBreakeven - silverSpot)}`}</Text>
-                  </View>
-                  <View style={{ backgroundColor: `${colors.gold}22`, padding: 12, borderRadius: 8 }}>
-                    <Text style={{ color: colors.gold, fontSize: scaledFonts.normal }}>Gold: ${formatCurrency(goldBreakeven)}/oz needed</Text>
-                    <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny }}>{goldSpot >= goldBreakeven ? 'Profitable!' : `Need +$${formatCurrency(goldBreakeven - goldSpot)}`}</Text>
-                  </View>
+                  {totalSilverOzt > 0 && (
+                    <View style={{ backgroundColor: `${colors.silver}22`, padding: 12, borderRadius: 8, marginBottom: 8 }}>
+                      <Text style={{ color: colors.silver, fontSize: scaledFonts.normal }}>Silver: ${formatCurrency(silverBreakeven)}/oz needed</Text>
+                      <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny }}>{silverSpot >= silverBreakeven ? 'Profitable!' : `Need +$${formatCurrency(silverBreakeven - silverSpot)}`}</Text>
+                    </View>
+                  )}
+                  {totalGoldOzt > 0 && (
+                    <View style={{ backgroundColor: `${colors.gold}22`, padding: 12, borderRadius: 8, marginBottom: 8 }}>
+                      <Text style={{ color: colors.gold, fontSize: scaledFonts.normal }}>Gold: ${formatCurrency(goldBreakeven)}/oz needed</Text>
+                      <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny }}>{goldSpot >= goldBreakeven ? 'Profitable!' : `Need +$${formatCurrency(goldBreakeven - goldSpot)}`}</Text>
+                    </View>
+                  )}
+                  {totalPlatinumOzt > 0 && (
+                    <View style={{ backgroundColor: `${colors.platinum}22`, padding: 12, borderRadius: 8, marginBottom: 8 }}>
+                      <Text style={{ color: colors.platinum, fontSize: scaledFonts.normal }}>Platinum: ${formatCurrency(platinumBreakeven)}/oz needed</Text>
+                      <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny }}>{platinumSpot >= platinumBreakeven ? 'Profitable!' : `Need +$${formatCurrency(platinumBreakeven - platinumSpot)}`}</Text>
+                    </View>
+                  )}
+                  {totalPalladiumOzt > 0 && (
+                    <View style={{ backgroundColor: `${colors.palladium}22`, padding: 12, borderRadius: 8 }}>
+                      <Text style={{ color: colors.palladium, fontSize: scaledFonts.normal }}>Palladium: ${formatCurrency(palladiumBreakeven)}/oz needed</Text>
+                      <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny }}>{palladiumSpot >= palladiumBreakeven ? 'Profitable!' : `Need +$${formatCurrency(palladiumBreakeven - palladiumSpot)}`}</Text>
+                    </View>
+                  )}
                 </View>
 
                 {/* Premium Analysis */}
@@ -6824,13 +7183,17 @@ function AppContent() {
                     )}
                   </View>
 
-                  <View style={styles.metalTabs}>
-                    <TouchableOpacity style={[styles.metalTab, { borderColor: metalTab === 'silver' ? colors.silver : colors.border, backgroundColor: metalTab === 'silver' ? `${colors.silver}22` : 'transparent' }]} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setMetalTab('silver'); }}>
-                      <Text style={{ color: metalTab === 'silver' ? colors.silver : colors.muted, fontSize: scaledFonts.normal }}>Silver</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.metalTab, { borderColor: metalTab === 'gold' ? colors.gold : colors.border, backgroundColor: metalTab === 'gold' ? `${colors.gold}22` : 'transparent' }]} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setMetalTab('gold'); }}>
-                      <Text style={{ color: metalTab === 'gold' ? colors.gold : colors.muted, fontSize: scaledFonts.normal }}>Gold</Text>
-                    </TouchableOpacity>
+                  <View style={[styles.metalTabs, { flexWrap: 'wrap' }]}>
+                    {[
+                      { key: 'silver', label: 'Silver', color: colors.silver },
+                      { key: 'gold', label: 'Gold', color: colors.gold },
+                      { key: 'platinum', label: 'Platinum', color: colors.platinum },
+                      { key: 'palladium', label: 'Palladium', color: colors.palladium },
+                    ].map(m => (
+                      <TouchableOpacity key={m.key} style={[styles.metalTab, { borderColor: metalTab === m.key ? m.color : colors.border, backgroundColor: metalTab === m.key ? `${m.color}22` : 'transparent' }]} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setMetalTab(m.key); }}>
+                        <Text style={{ color: metalTab === m.key ? m.color : colors.muted, fontSize: scaledFonts.normal }}>{m.label}</Text>
+                      </TouchableOpacity>
+                    ))}
                   </View>
 
                   <FloatingInput label="Product Name *" value={form.productName} onChangeText={v => setForm(p => ({ ...p, productName: v }))} placeholder="American Silver Eagle" colors={colors} isDarkMode={isDarkMode} scaledFonts={scaledFonts} />
@@ -6985,20 +7348,24 @@ function AppContent() {
       >
         {/* Inputs at TOP */}
         <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
-          <View style={{ flex: 1 }}><FloatingInput label="Silver Price" value={specSilverPrice} onChangeText={setSpecSilverPrice} keyboardType="decimal-pad" prefix="$" colors={colors} isDarkMode={isDarkMode} scaledFonts={scaledFonts} /></View>
-          <View style={{ flex: 1 }}><FloatingInput label="Gold Price" value={specGoldPrice} onChangeText={setSpecGoldPrice} keyboardType="decimal-pad" prefix="$" colors={colors} isDarkMode={isDarkMode} scaledFonts={scaledFonts} /></View>
+          <View style={{ flex: 1 }}><FloatingInput label="Silver" value={specSilverPrice} onChangeText={setSpecSilverPrice} keyboardType="decimal-pad" prefix="$" colors={colors} isDarkMode={isDarkMode} scaledFonts={scaledFonts} /></View>
+          <View style={{ flex: 1 }}><FloatingInput label="Gold" value={specGoldPrice} onChangeText={setSpecGoldPrice} keyboardType="decimal-pad" prefix="$" colors={colors} isDarkMode={isDarkMode} scaledFonts={scaledFonts} /></View>
+        </View>
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+          <View style={{ flex: 1 }}><FloatingInput label="Platinum" value={specPlatinumPrice} onChangeText={setSpecPlatinumPrice} keyboardType="decimal-pad" prefix="$" colors={colors} isDarkMode={isDarkMode} scaledFonts={scaledFonts} /></View>
+          <View style={{ flex: 1 }}><FloatingInput label="Palladium" value={specPalladiumPrice} onChangeText={setSpecPalladiumPrice} keyboardType="decimal-pad" prefix="$" colors={colors} isDarkMode={isDarkMode} scaledFonts={scaledFonts} /></View>
         </View>
 
         {/* Quick presets */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
           {[
-            { s: 200, g: 7500, label: 'Bull' },
-            { s: 350, g: 10000, label: 'Moon' },
-            { s: 1000, g: 25000, label: 'Hyper' },
+            { s: 200, g: 7500, pt: 3000, pd: 2500, label: 'Bull' },
+            { s: 350, g: 10000, pt: 5000, pd: 4000, label: 'Moon' },
+            { s: 1000, g: 25000, pt: 10000, pd: 8000, label: 'Hyper' },
           ].map((preset, i) => (
-            <TouchableOpacity key={i} style={{ backgroundColor: colors.border, padding: 12, borderRadius: 12, marginRight: 8 }} onPress={() => { setSpecSilverPrice(preset.s.toString()); setSpecGoldPrice(preset.g.toString()); Keyboard.dismiss(); }}>
+            <TouchableOpacity key={i} style={{ backgroundColor: colors.border, padding: 12, borderRadius: 12, marginRight: 8 }} onPress={() => { setSpecSilverPrice(preset.s.toString()); setSpecGoldPrice(preset.g.toString()); setSpecPlatinumPrice(preset.pt.toString()); setSpecPalladiumPrice(preset.pd.toString()); Keyboard.dismiss(); }}>
               <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>{preset.label}</Text>
-              <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny }}>${preset.s} / ${preset.g}</Text>
+              <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny }}>Ag ${preset.s} / Au ${preset.g}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -7010,15 +7377,18 @@ function AppContent() {
           <Text style={{ color: specGainLoss >= 0 ? colors.success : colors.error, fontSize: scaledFonts.normal }}>{specGainLoss >= 0 ? '+' : ''}{specGainLossPct.toFixed(1)}% from cost basis</Text>
         </View>
 
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          <View style={[styles.card, { flex: 1, backgroundColor: `${colors.silver}22` }]}>
-            <Text style={{ color: colors.silver, fontSize: scaledFonts.small }}>Silver</Text>
-            <Text style={{ color: colors.text, fontSize: scaledFonts.large, fontWeight: '600' }}>${(totalSilverOzt * specSilverNum).toLocaleString()}</Text>
-          </View>
-          <View style={[styles.card, { flex: 1, backgroundColor: `${colors.gold}22` }]}>
-            <Text style={{ color: colors.gold, fontSize: scaledFonts.small }}>Gold</Text>
-            <Text style={{ color: colors.text, fontSize: scaledFonts.large, fontWeight: '600' }}>${(totalGoldOzt * specGoldNum).toLocaleString()}</Text>
-          </View>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          {[
+            { label: 'Silver', color: colors.silver, value: totalSilverOzt * specSilverNum },
+            { label: 'Gold', color: colors.gold, value: totalGoldOzt * specGoldNum },
+            { label: 'Platinum', color: colors.platinum, value: totalPlatinumOzt * specPlatinumNum },
+            { label: 'Palladium', color: colors.palladium, value: totalPalladiumOzt * specPalladiumNum },
+          ].filter(m => m.value > 0).map(m => (
+            <View key={m.label} style={[styles.card, { width: '47%', backgroundColor: `${m.color}22` }]}>
+              <Text style={{ color: m.color, fontSize: scaledFonts.small }}>{m.label}</Text>
+              <Text style={{ color: colors.text, fontSize: scaledFonts.large, fontWeight: '600' }}>${m.value.toLocaleString()}</Text>
+            </View>
+          ))}
         </View>
       </ModalWrapper>
 
@@ -7072,65 +7442,51 @@ function AppContent() {
       >
         {(() => {
           // Simply read saved item.premium values — already calculated when added/edited
-          const silverWith = silverItems.filter(i => (i.premium || 0) > 0);
-          const goldWith = goldItems.filter(i => (i.premium || 0) > 0);
+          const metalPremiums = [
+            { key: 'silver', label: 'Silver', items: silverItems, color: colors.silver },
+            { key: 'gold', label: 'Gold', items: goldItems, color: colors.gold },
+            { key: 'platinum', label: 'Platinum', items: platinumItems, color: colors.platinum },
+            { key: 'palladium', label: 'Palladium', items: palladiumItems, color: colors.palladium },
+          ];
 
-          const silverTotal = silverWith.reduce((sum, i) => sum + i.premium * i.quantity, 0);
-          const goldTotal = goldWith.reduce((sum, i) => sum + i.premium * i.quantity, 0);
-          const grandTotal = silverTotal + goldTotal;
-
-          const totalAll = silverItems.length + goldItems.length;
-          const totalWith = silverWith.length + goldWith.length;
+          let grandTotal = 0;
+          let totalAll = 0;
+          let totalWith = 0;
+          metalPremiums.forEach(m => {
+            totalAll += m.items.length;
+            const withPremium = m.items.filter(i => (i.premium || 0) > 0);
+            totalWith += withPremium.length;
+            grandTotal += withPremium.reduce((sum, i) => sum + i.premium * i.quantity, 0);
+          });
 
           return (
             <>
-              {/* Silver Premiums */}
-              {silverItems.length > 0 && (
-                <View style={[styles.card, { backgroundColor: `${colors.silver}15`, borderColor: `${colors.silver}30` }]}>
-                  <Text style={{ color: colors.silver, fontWeight: '700', fontSize: scaledFonts.normal, marginBottom: 8 }}>Silver Premiums</Text>
-                  {silverWith.length > 0 ? (
-                    <>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>Total Paid</Text>
-                        <Text style={{ color: colors.text, fontSize: scaledFonts.normal, fontWeight: '600' }}>${formatCurrency(silverTotal)}</Text>
-                      </View>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>Avg per Unit</Text>
-                        <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>${formatCurrency(silverTotal / silverWith.reduce((s, i) => s + i.quantity, 0))}</Text>
-                      </View>
-                    </>
-                  ) : (
-                    <Text style={{ color: colors.muted, fontSize: scaledFonts.small, marginBottom: 4 }}>No premium data available</Text>
-                  )}
-                  <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny, marginTop: 4 }}>
-                    {silverWith.length} of {silverItems.length} holding{silverItems.length !== 1 ? 's' : ''} with data
-                  </Text>
-                </View>
-              )}
-
-              {/* Gold Premiums */}
-              {goldItems.length > 0 && (
-                <View style={[styles.card, { backgroundColor: `${colors.gold}15`, borderColor: `${colors.gold}30` }]}>
-                  <Text style={{ color: colors.gold, fontWeight: '700', fontSize: scaledFonts.normal, marginBottom: 8 }}>Gold Premiums</Text>
-                  {goldWith.length > 0 ? (
-                    <>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>Total Paid</Text>
-                        <Text style={{ color: colors.text, fontSize: scaledFonts.normal, fontWeight: '600' }}>${formatCurrency(goldTotal)}</Text>
-                      </View>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>Avg per Unit</Text>
-                        <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>${formatCurrency(goldTotal / goldWith.reduce((s, i) => s + i.quantity, 0))}</Text>
-                      </View>
-                    </>
-                  ) : (
-                    <Text style={{ color: colors.muted, fontSize: scaledFonts.small, marginBottom: 4 }}>No premium data available</Text>
-                  )}
-                  <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny, marginTop: 4 }}>
-                    {goldWith.length} of {goldItems.length} holding{goldItems.length !== 1 ? 's' : ''} with data
-                  </Text>
-                </View>
-              )}
+              {metalPremiums.filter(m => m.items.length > 0).map(m => {
+                const withPremium = m.items.filter(i => (i.premium || 0) > 0);
+                const metalTotal = withPremium.reduce((sum, i) => sum + i.premium * i.quantity, 0);
+                return (
+                  <View key={m.key} style={[styles.card, { backgroundColor: `${m.color}15`, borderColor: `${m.color}30` }]}>
+                    <Text style={{ color: m.color, fontWeight: '700', fontSize: scaledFonts.normal, marginBottom: 8 }}>{m.label} Premiums</Text>
+                    {withPremium.length > 0 ? (
+                      <>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                          <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>Total Paid</Text>
+                          <Text style={{ color: colors.text, fontSize: scaledFonts.normal, fontWeight: '600' }}>${formatCurrency(metalTotal)}</Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                          <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>Avg per Unit</Text>
+                          <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>${formatCurrency(metalTotal / withPremium.reduce((s, i) => s + i.quantity, 0))}</Text>
+                        </View>
+                      </>
+                    ) : (
+                      <Text style={{ color: colors.muted, fontSize: scaledFonts.small, marginBottom: 4 }}>No premium data available</Text>
+                    )}
+                    <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny, marginTop: 4 }}>
+                      {withPremium.length} of {m.items.length} holding{m.items.length !== 1 ? 's' : ''} with data
+                    </Text>
+                  </View>
+                );
+              })}
 
               {/* Total */}
               <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
@@ -7302,30 +7658,35 @@ function AppContent() {
           <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 12 }}>
             Get notified when spot prices reach a new all-time high.
           </Text>
-          {['silver', 'gold'].map((metal) => (
-            <View key={metal} style={{
+          {[
+            { key: 'silver', label: 'Silver', color: colors.silver },
+            { key: 'gold', label: 'Gold', color: colors.gold },
+            { key: 'platinum', label: 'Platinum', color: colors.platinum },
+            { key: 'palladium', label: 'Palladium', color: colors.palladium },
+          ].map((item, idx, arr) => (
+            <View key={item.key} style={{
               flexDirection: 'row',
               alignItems: 'center',
               justifyContent: 'space-between',
               paddingVertical: 12,
-              borderBottomWidth: metal === 'silver' ? 1 : 0,
+              borderBottomWidth: idx < arr.length - 1 ? 1 : 0,
               borderBottomColor: colors.border,
             }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                 <View style={{
                   width: 28, height: 28, borderRadius: 6,
-                  backgroundColor: metal === 'gold' ? 'rgba(251,191,36,0.2)' : 'rgba(156,163,175,0.2)',
+                  backgroundColor: `${item.color}33`,
                   alignItems: 'center', justifyContent: 'center',
                 }}>
-                  <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: metal === 'gold' ? '#fbbf24' : '#9ca3af' }} />
+                  <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: item.color }} />
                 </View>
                 <Text style={{ color: colors.text, fontSize: 15 }}>
-                  {metal === 'gold' ? 'Gold' : 'Silver'} All-Time High
+                  {item.label} All-Time High
                 </Text>
               </View>
               <Switch
-                value={athAlerts[metal]}
-                onValueChange={() => toggleAthAlert(metal)}
+                value={athAlerts[item.key]}
+                onValueChange={() => toggleAthAlert(item.key)}
                 trackColor={{ false: isDarkMode ? '#39393d' : '#e5e5ea', true: colors.gold }}
                 thumbColor="#fff"
               />
@@ -7340,34 +7701,39 @@ function AppContent() {
         <View style={{ marginBottom: 20 }}>
           <Text style={{ color: colors.text, fontWeight: '700', fontSize: 16, marginBottom: 12 }}>Custom Price Alert</Text>
           <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 16 }}>
-            Get notified when spot prices reach your target. Current prices: Gold ${goldSpot.toFixed(2)}, Silver ${silverSpot.toFixed(2)}
+            Get notified when spot prices reach your target
           </Text>
 
           {/* Metal Selection */}
           <Text style={{ color: colors.text, fontWeight: '600', marginBottom: 8 }}>Metal</Text>
-          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
-            {['silver', 'gold'].map((metal) => (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+            {[
+              { key: 'silver', label: 'Silver', color: colors.silver },
+              { key: 'gold', label: 'Gold', color: colors.gold },
+              { key: 'platinum', label: 'Platinum', color: colors.platinum },
+              { key: 'palladium', label: 'Palladium', color: colors.palladium },
+            ].map((m) => (
               <TouchableOpacity
-                key={metal}
+                key={m.key}
                 style={{
-                  flex: 1,
+                  width: '47%',
                   paddingVertical: 12,
                   borderRadius: 8,
-                  backgroundColor: newAlert.metal === metal
-                    ? (metal === 'gold' ? colors.gold : colors.silver)
+                  backgroundColor: newAlert.metal === m.key
+                    ? m.color
                     : (isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'),
                   alignItems: 'center',
                 }}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setNewAlert(prev => ({ ...prev, metal }));
+                  setNewAlert(prev => ({ ...prev, metal: m.key }));
                 }}
               >
                 <Text style={{
-                  color: newAlert.metal === metal ? '#000' : colors.text,
+                  color: newAlert.metal === m.key ? '#000' : colors.text,
                   fontWeight: '600',
                 }}>
-                  {metal === 'gold' ? 'Gold' : 'Silver'}
+                  {m.label}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -7423,12 +7789,12 @@ function AppContent() {
               value={newAlert.targetPrice}
               onChangeText={(value) => setNewAlert(prev => ({ ...prev, targetPrice: value }))}
               keyboardType="decimal-pad"
-              placeholder={newAlert.metal === 'gold' ? '4500.00' : '75.00'}
+              placeholder={{ gold: '4500.00', silver: '75.00', platinum: '2100.00', palladium: '1740.00' }[newAlert.metal] || '75.00'}
               placeholderTextColor={colors.muted}
             />
           </View>
           <Text style={{ color: colors.muted, fontSize: 11, marginTop: 4 }}>
-            Current {newAlert.metal === 'gold' ? 'gold' : 'silver'} spot: ${newAlert.metal === 'gold' ? goldSpot.toFixed(2) : silverSpot.toFixed(2)}/oz
+            Current {{ gold: 'gold', silver: 'silver', platinum: 'platinum', palladium: 'palladium' }[newAlert.metal]} spot: ${{ gold: goldSpot, silver: silverSpot, platinum: platinumSpot, palladium: palladiumSpot }[newAlert.metal]?.toFixed(2)}/oz
           </Text>
         </View>
 
@@ -8065,7 +8431,8 @@ function AppContent() {
               <View style={[styles.divider, { backgroundColor: colors.border }]} />
               {(() => {
                 const costBasis = getItemCostBasis(detailItem);
-                const meltValue = detailItem.ozt * detailItem.quantity * (detailMetal === 'silver' ? silverSpot : goldSpot);
+                const detailSpotMap = { silver: silverSpot, gold: goldSpot, platinum: platinumSpot, palladium: palladiumSpot };
+                const meltValue = detailItem.ozt * detailItem.quantity * (detailSpotMap[detailMetal] || goldSpot);
                 const gainLoss = meltValue - costBasis;
                 const gainLossPct = costBasis > 0 ? (gainLoss / costBasis) * 100 : 0;
                 const isGain = gainLoss >= 0;
@@ -8079,7 +8446,7 @@ function AppContent() {
                     </View>
                     <View style={styles.statRow}>
                       <Text style={[styles.statRowLabel, { fontSize: scaledFonts.normal, fontWeight: '600' }]}>Current Value</Text>
-                      <Text style={[styles.statRowValue, { fontSize: scaledFonts.medium, color: detailMetal === 'silver' ? colors.silver : colors.gold }]}>
+                      <Text style={[styles.statRowValue, { fontSize: scaledFonts.medium, color: metalColorMap[detailMetal] || colors.gold }]}>
                         ${formatCurrency(meltValue)}
                       </Text>
                     </View>
@@ -8097,7 +8464,7 @@ function AppContent() {
 
             <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
               <TouchableOpacity
-                style={[styles.button, { flex: 1, backgroundColor: detailMetal === 'silver' ? colors.silver : colors.gold }]}
+                style={[styles.button, { flex: 1, backgroundColor: metalColorMap[detailMetal] || colors.gold }]}
                 onPress={() => {
                   setShowDetailView(false);
                   editItem(detailItem, detailMetal);
@@ -8227,43 +8594,36 @@ function AppContent() {
                 <Text style={{ color: '#fff', fontSize: 36, fontWeight: '700' }}>${formatCurrency(totalMeltValue, 0)}</Text>
               </View>
 
-              {/* Gold & Silver Breakdown */}
-              <View style={{ flexDirection: 'row', gap: 12, marginBottom: 20 }}>
-                {/* Gold */}
-                <View style={{
-                  flex: 1,
-                  backgroundColor: 'rgba(251, 191, 36, 0.08)',
-                  borderRadius: 12,
-                  padding: 16,
-                  borderWidth: 1,
-                  borderColor: 'rgba(251, 191, 36, 0.15)',
-                }}>
-                  <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#fbbf24', marginBottom: 4 }} />
-                  <Text style={{ color: '#fbbf24', fontWeight: '600', marginBottom: 8 }}>Gold</Text>
-                  <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>{formatOunces(totalGoldOzt, 3)} oz</Text>
-                  <Text style={{ color: '#71717a', fontSize: 12, marginTop: 4 }}>${formatCurrency(totalGoldOzt * goldSpot, 0)}</Text>
-                </View>
-
-                {/* Silver */}
-                <View style={{
-                  flex: 1,
-                  backgroundColor: 'rgba(156, 163, 175, 0.08)',
-                  borderRadius: 12,
-                  padding: 16,
-                  borderWidth: 1,
-                  borderColor: 'rgba(156, 163, 175, 0.15)',
-                }}>
-                  <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: '#9ca3af', marginBottom: 4 }} />
-                  <Text style={{ color: '#9ca3af', fontWeight: '600', marginBottom: 8 }}>Silver</Text>
-                  <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>{formatOunces(totalSilverOzt, 2)} oz</Text>
-                  <Text style={{ color: '#71717a', fontSize: 12, marginTop: 4 }}>${formatCurrency(totalSilverOzt * silverSpot, 0)}</Text>
-                </View>
+              {/* Metal Breakdown */}
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
+                {[
+                  { label: 'Gold', ozt: totalGoldOzt, spot: goldSpot, color: '#fbbf24', decimals: 3, show: totalGoldOzt > 0 },
+                  { label: 'Silver', ozt: totalSilverOzt, spot: silverSpot, color: '#9ca3af', decimals: 2, show: totalSilverOzt > 0 },
+                  { label: 'Platinum', ozt: totalPlatinumOzt, spot: platinumSpot, color: '#7BB3D4', decimals: 3, show: totalPlatinumOzt > 0 },
+                  { label: 'Palladium', ozt: totalPalladiumOzt, spot: palladiumSpot, color: '#6BBF8A', decimals: 3, show: totalPalladiumOzt > 0 },
+                ].filter(m => m.show).map(m => (
+                  <View key={m.label} style={{
+                    width: '47%',
+                    backgroundColor: `${m.color}14`,
+                    borderRadius: 12,
+                    padding: 16,
+                    borderWidth: 1,
+                    borderColor: `${m.color}26`,
+                  }}>
+                    <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: m.color, marginBottom: 4 }} />
+                    <Text style={{ color: m.color, fontWeight: '600', marginBottom: 8 }}>{m.label}</Text>
+                    <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>{formatOunces(m.ozt, m.decimals)} oz</Text>
+                    <Text style={{ color: '#71717a', fontSize: 12, marginTop: 4 }}>${formatCurrency(m.ozt * m.spot, 0)}</Text>
+                  </View>
+                ))}
               </View>
 
               {/* Spot Prices */}
-              <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 20, marginBottom: 16 }}>
-                <Text style={{ color: '#71717a', fontSize: 11 }}>Gold: ${goldSpot.toFixed(0)}/oz</Text>
-                <Text style={{ color: '#71717a', fontSize: 11 }}>Silver: ${silverSpot.toFixed(2)}/oz</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 12, marginBottom: 16 }}>
+                <Text style={{ color: '#71717a', fontSize: 11 }}>Au: ${goldSpot.toFixed(0)}/oz</Text>
+                <Text style={{ color: '#71717a', fontSize: 11 }}>Ag: ${silverSpot.toFixed(2)}/oz</Text>
+                {totalPlatinumOzt > 0 && <Text style={{ color: '#71717a', fontSize: 11 }}>Pt: ${platinumSpot.toFixed(0)}/oz</Text>}
+                {totalPalladiumOzt > 0 && <Text style={{ color: '#71717a', fontSize: 11 }}>Pd: ${palladiumSpot.toFixed(0)}/oz</Text>}
               </View>
 
               {/* Watermark */}
