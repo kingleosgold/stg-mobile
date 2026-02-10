@@ -91,13 +91,11 @@ const schemas = {
     'object.missing': 'Either user_id or device_id is required'
   }),
 
-  // Price alert deletion
+  // Price alert deletion (accept UUID or legacy timestamp IDs)
   priceAlertDelete: Joi.object({
     alert_id: Joi.string()
-      .uuid()
       .required()
       .messages({
-        'string.guid': 'alert_id must be a valid UUID',
         'any.required': 'alert_id is required'
       }),
   }),

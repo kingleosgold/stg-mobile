@@ -28,7 +28,7 @@ async function createAlert({ userId, metal, targetPrice, direction, pushToken })
       target_price: targetPrice,
       direction,
       push_token: pushToken,
-      active: true,
+      enabled: true,
       triggered: false,
     })
     .select()
@@ -97,8 +97,10 @@ async function deleteAlert(alertId, userId) {
  * Check all active alerts against current prices and send notifications
  */
 async function checkAlerts(currentPrices) {
+  console.log('🔔 [priceAlerts.checkAlerts] Called with prices:', currentPrices);
+
   if (!isSupabaseAvailable()) {
-    console.log('Database not available, skipping alert check');
+    console.log('🔔 [priceAlerts.checkAlerts] Database not available, skipping');
     return { checked: 0, triggered: 0 };
   }
 
@@ -108,17 +110,20 @@ async function checkAlerts(currentPrices) {
   const { data: alerts, error } = await supabase
     .from('price_alerts')
     .select('*')
-    .eq('active', true)
+    .eq('enabled', true)
     .eq('triggered', false);
 
   if (error) {
-    console.error('Error fetching alerts for check:', error);
+    console.error('🔔 [priceAlerts.checkAlerts] Error fetching alerts:', error);
     return { checked: 0, triggered: 0, error: error.message };
   }
 
   if (!alerts || alerts.length === 0) {
+    console.log('🔔 [priceAlerts.checkAlerts] No active alerts found');
     return { checked: 0, triggered: 0 };
   }
+
+  console.log(`🔔 [priceAlerts.checkAlerts] Found ${alerts.length} active alerts`);
 
   console.log(`🔍 Checking ${alerts.length} active alerts...`);
 
@@ -168,7 +173,7 @@ async function checkAlerts(currentPrices) {
       .update({
         triggered: true,
         triggered_at: new Date().toISOString(),
-        active: false, // Deactivate after triggering
+        enabled: false, // Deactivate after triggering
       })
       .in('id', triggeredAlerts);
 
@@ -220,7 +225,7 @@ async function getAlertCount(userId) {
     .from('price_alerts')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', userId)
-    .eq('active', true);
+    .eq('enabled', true);
 
   if (error) {
     console.error('Error counting alerts:', error);

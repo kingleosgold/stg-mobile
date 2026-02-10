@@ -2242,8 +2242,10 @@ app.get('/terms', (req, res) => {
 app.post('/api/push-token/register', validate('pushTokenRegister'), async (req, res) => {
   try {
     const { expo_push_token, platform, app_version, user_id, device_id } = req.body;
+    console.log('🔔 [Push Token] Register request:', { expo_push_token: expo_push_token?.substring(0, 30) + '...', platform, user_id: user_id?.substring(0, 8), device_id });
 
     if (!isSupabaseAvailable()) {
+      console.error('🔔 [Push Token] Supabase not available!');
       return res.status(503).json({ success: false, error: 'Database not configured' });
     }
 
@@ -2255,6 +2257,10 @@ app.post('/api/push-token/register', validate('pushTokenRegister'), async (req, 
       .select('id')
       .eq('expo_push_token', expo_push_token)
       .single();
+
+    if (checkError && checkError.code !== 'PGRST116') {
+      console.error('🔔 [Push Token] Error checking existing token:', checkError);
+    }
 
     if (existing) {
       // Update existing token
@@ -2270,11 +2276,11 @@ app.post('/api/push-token/register', validate('pushTokenRegister'), async (req, 
         .eq('id', existing.id);
 
       if (updateError) {
-        console.error('Error updating push token:', updateError);
+        console.error('🔔 [Push Token] Error updating:', updateError);
         return res.status(500).json({ success: false, error: updateError.message });
       }
 
-      console.log(`✅ Updated push token: ${expo_push_token.substring(0, 30)}...`);
+      console.log(`✅ [Push Token] Updated: ${expo_push_token.substring(0, 30)}... (id: ${existing.id})`);
       return res.json({ success: true, action: 'updated', id: existing.id });
     }
 
@@ -2292,14 +2298,14 @@ app.post('/api/push-token/register', validate('pushTokenRegister'), async (req, 
       .single();
 
     if (insertError) {
-      console.error('Error inserting push token:', insertError);
+      console.error('🔔 [Push Token] Error inserting:', insertError);
       return res.status(500).json({ success: false, error: insertError.message });
     }
 
-    console.log(`✅ Registered new push token: ${expo_push_token.substring(0, 30)}...`);
+    console.log(`✅ [Push Token] Registered NEW: ${expo_push_token.substring(0, 30)}... (id: ${inserted.id})`);
     res.json({ success: true, action: 'created', id: inserted.id });
   } catch (error) {
-    console.error('Error in /api/push-token/register:', error);
+    console.error('❌ [Push Token] Register error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -2341,8 +2347,10 @@ app.delete('/api/push-token/delete', validate('pushTokenDelete'), async (req, re
 app.post('/api/price-alerts/sync', validate('priceAlertsSync'), async (req, res) => {
   try {
     const { alerts, user_id, device_id } = req.body;
+    console.log('🔔 [Alert Sync] Request:', { alertCount: alerts?.length, user_id: user_id?.substring(0, 8), device_id });
 
     if (!isSupabaseAvailable()) {
+      console.error('🔔 [Alert Sync] Supabase not available!');
       return res.status(503).json({ success: false, error: 'Database not configured' });
     }
 
@@ -2351,13 +2359,20 @@ app.post('/api/price-alerts/sync', validate('priceAlertsSync'), async (req, res)
 
     for (const alert of alerts) {
       try {
-        const { data: existing } = await supabase
+        console.log(`🔔 [Alert Sync] Processing alert: ${alert.id} (${alert.metal} ${alert.direction} $${alert.target_price})`);
+
+        const { data: existing, error: selectError } = await supabase
           .from('price_alerts')
           .select('id')
           .eq('id', alert.id)
           .single();
 
+        if (selectError && selectError.code !== 'PGRST116') {
+          console.error(`🔔 [Alert Sync] Error checking alert ${alert.id}:`, selectError);
+        }
+
         if (existing) {
+          console.log(`🔔 [Alert Sync] Alert ${alert.id} exists, updating...`);
           const { error: updateError } = await supabase
             .from('price_alerts')
             .update({
@@ -2369,11 +2384,14 @@ app.post('/api/price-alerts/sync', validate('priceAlertsSync'), async (req, res)
             .eq('id', alert.id);
 
           if (updateError) {
+            console.error(`🔔 [Alert Sync] Update failed for ${alert.id}:`, updateError);
             results.push({ id: alert.id, success: false, error: updateError.message });
           } else {
+            console.log(`✅ [Alert Sync] Updated alert ${alert.id}`);
             results.push({ id: alert.id, success: true, action: 'updated' });
           }
         } else {
+          console.log(`🔔 [Alert Sync] Alert ${alert.id} is new, inserting...`);
           const { data: inserted, error: insertError } = await supabase
             .from('price_alerts')
             .insert({
@@ -2389,22 +2407,26 @@ app.post('/api/price-alerts/sync', validate('priceAlertsSync'), async (req, res)
             .single();
 
           if (insertError) {
+            console.error(`🔔 [Alert Sync] Insert failed for ${alert.id}:`, insertError);
             results.push({ id: alert.id, success: false, error: insertError.message });
           } else {
+            console.log(`✅ [Alert Sync] Created alert ${inserted.id}`);
             results.push({ id: inserted.id, success: true, action: 'created' });
           }
         }
       } catch (alertError) {
+        console.error(`❌ [Alert Sync] Exception for alert ${alert.id}:`, alertError);
         results.push({ id: alert.id, success: false, error: alertError.message });
       }
     }
 
     const successCount = results.filter(r => r.success).length;
-    console.log(`✅ Synced ${successCount}/${alerts.length} price alerts`);
+    console.log(`🔔 [Alert Sync] Complete: ${successCount}/${alerts.length} synced`);
+    console.log('🔔 [Alert Sync] Results:', JSON.stringify(results));
 
     res.json({ success: true, results, total: alerts.length, synced: successCount });
   } catch (error) {
-    console.error('Error in /api/price-alerts/sync:', error);
+    console.error('❌ [Alert Sync] Error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -2505,28 +2527,27 @@ fetchLiveSpotPrices().then(() => {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
     // Start price alert checker (runs every 5 minutes)
+    console.log('🔔 [Alert Checker] Starting price alert checker...');
     startPriceAlertChecker(() => {
       // Ensure we have fresh prices before checking
       const cacheAge = spotPriceCache.lastUpdated
         ? (Date.now() - spotPriceCache.lastUpdated.getTime()) / 1000 / 60
         : Infinity;
 
+      console.log(`🔔 [Alert Checker] Price cache age: ${cacheAge.toFixed(1)} min`);
+
       if (cacheAge > 10) {
+        console.log('🔔 [Alert Checker] Cache stale, fetching fresh prices...');
         return fetchLiveSpotPrices().then(() => spotPriceCache.prices);
       }
 
+      console.log('🔔 [Alert Checker] Using cached prices:', spotPriceCache.prices);
       return Promise.resolve(spotPriceCache.prices);
     });
 
-    // Run initial alert check after 1 minute (let server stabilize)
-    setTimeout(async () => {
-      try {
-        const result = await checkAlerts(spotPriceCache.prices);
-        console.log(`🔔 Initial alert check: ${result.triggered}/${result.checked} triggered`);
-      } catch (error) {
-        console.error('❌ Initial alert check error:', error.message);
-      }
-    }, 60 * 1000);
+    // Note: startPriceAlertChecker already runs immediately on startup,
+    // so no separate initial check needed. The checker handles token lookup
+    // from the push_tokens table correctly.
   });
 }).catch(error => {
   console.error('Startup error:', error);

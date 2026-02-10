@@ -93,17 +93,32 @@ async function checkPriceAlerts(currentPrices) {
         console.log(`   🔔 Alert triggered! ${alert.metal} ${alert.direction} $${alert.target_price}`);
         console.log(`      Current price: $${currentPrice}`);
 
-        // Get user's push token
-        const { data: tokenData, error: tokenError } = await supabase
+        // Get user's push token (build query based on available identifiers)
+        console.log(`   🔍 Looking up push token for user_id=${alert.user_id}, device_id=${alert.device_id}`);
+        let tokenQuery = supabase
           .from('push_tokens')
-          .select('expo_push_token, platform')
-          .or(`user_id.eq.${alert.user_id},device_id.eq.${alert.device_id}`)
+          .select('expo_push_token, platform');
+
+        // Build OR condition only with non-null identifiers to avoid matching wrong devices
+        const orConditions = [];
+        if (alert.user_id) orConditions.push(`user_id.eq.${alert.user_id}`);
+        if (alert.device_id) orConditions.push(`device_id.eq.${alert.device_id}`);
+
+        if (orConditions.length === 0) {
+          console.log(`   ⚠️  Alert ${alert.id} has no user_id or device_id, cannot find push token`);
+          stats.errors++;
+          await markAlertTriggered(alert.id, currentPrice, false, 'No user_id or device_id on alert');
+          continue;
+        }
+
+        const { data: tokenData, error: tokenError } = await tokenQuery
+          .or(orConditions.join(','))
           .order('last_active', { ascending: false })
           .limit(1)
           .single();
 
         if (tokenError || !tokenData) {
-          console.log(`   ⚠️  No push token found for alert ${alert.id}`);
+          console.log(`   ⚠️  No push token found for alert ${alert.id} (error: ${tokenError?.message || 'no data'})`);
           stats.errors++;
           
           // Still mark as triggered to avoid repeated checks
