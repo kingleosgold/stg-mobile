@@ -2915,6 +2915,175 @@ app.post('/api/intelligence/migrate', async (req, res) => {
 });
 
 // ============================================
+// VAULT DATA (COMEX Warehouse Inventory)
+// ============================================
+
+// GET /api/vault-data - Fetch COMEX warehouse inventory data
+app.get('/api/vault-data', async (req, res) => {
+  try {
+    const source = req.query.source || 'comex';
+    const days = Math.min(parseInt(req.query.days) || 30, 365);
+
+    if (!isSupabaseAvailable()) {
+      return res.json({
+        success: true,
+        source,
+        days,
+        data: { gold: [], silver: [], platinum: [], palladium: [] },
+        message: 'Vault data not configured',
+      });
+    }
+
+    const sb = getSupabase();
+    const sinceDate = new Date();
+    sinceDate.setDate(sinceDate.getDate() - days);
+    const sinceDateStr = sinceDate.toISOString().split('T')[0];
+
+    const { data, error } = await sb
+      .from('vault_data')
+      .select('date, metal, registered_oz, eligible_oz, combined_oz, registered_change_oz, eligible_change_oz, combined_change_oz, open_interest_oz, oversubscribed_ratio')
+      .eq('source', source)
+      .gte('date', sinceDateStr)
+      .order('date', { ascending: true });
+
+    if (error) {
+      console.error('Vault data fetch error:', error);
+      return res.json({
+        success: true,
+        source,
+        days,
+        data: { gold: [], silver: [], platinum: [], palladium: [] },
+        error: error.message,
+      });
+    }
+
+    // Group by metal
+    const grouped = { gold: [], silver: [], platinum: [], palladium: [] };
+    for (const row of (data || [])) {
+      if (grouped[row.metal]) {
+        grouped[row.metal].push({
+          date: row.date,
+          registered_oz: parseFloat(row.registered_oz) || 0,
+          eligible_oz: parseFloat(row.eligible_oz) || 0,
+          combined_oz: parseFloat(row.combined_oz) || 0,
+          registered_change_oz: parseFloat(row.registered_change_oz) || 0,
+          eligible_change_oz: parseFloat(row.eligible_change_oz) || 0,
+          oversubscribed_ratio: parseFloat(row.oversubscribed_ratio) || 0,
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      source,
+      days,
+      data: grouped,
+    });
+  } catch (error) {
+    console.error('Vault data endpoint error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/vault-data/seed - Seed vault data (testing)
+app.post('/api/vault-data/seed', async (req, res) => {
+  try {
+    const apiKey = req.headers['x-api-key'] || req.query.api_key;
+    if (!apiKey || apiKey !== process.env.INTELLIGENCE_API_KEY) {
+      return res.status(401).json({ success: false, error: 'Invalid API key' });
+    }
+
+    if (!isSupabaseAvailable()) {
+      return res.status(503).json({ success: false, error: 'Supabase not configured' });
+    }
+
+    const { entries } = req.body;
+    if (!entries || !Array.isArray(entries) || entries.length === 0) {
+      return res.status(400).json({ success: false, error: 'entries array required' });
+    }
+
+    const sb = getSupabase();
+    const { data, error } = await sb
+      .from('vault_data')
+      .insert(entries)
+      .select();
+
+    if (error) {
+      console.error('Vault seed error:', error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+
+    res.json({ success: true, inserted: data.length, entries: data });
+  } catch (error) {
+    console.error('Vault seed endpoint error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/vault-data/migrate - Run vault_data table migration (one-time)
+app.post('/api/vault-data/migrate', async (req, res) => {
+  try {
+    const apiKey = req.headers['x-api-key'] || req.query.api_key;
+    if (!apiKey || apiKey !== process.env.INTELLIGENCE_API_KEY) {
+      return res.status(401).json({ success: false, error: 'Invalid API key' });
+    }
+
+    if (!isSupabaseAvailable()) {
+      return res.status(503).json({ success: false, error: 'Supabase not configured' });
+    }
+
+    const sb = getSupabase();
+
+    const statements = [
+      `CREATE TABLE IF NOT EXISTS vault_data (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        date DATE NOT NULL,
+        source TEXT NOT NULL DEFAULT 'comex',
+        metal TEXT NOT NULL CHECK (metal IN ('gold', 'silver', 'platinum', 'palladium')),
+        registered_oz NUMERIC,
+        eligible_oz NUMERIC,
+        combined_oz NUMERIC,
+        registered_change_oz NUMERIC,
+        eligible_change_oz NUMERIC,
+        combined_change_oz NUMERIC,
+        open_interest_oz NUMERIC,
+        oversubscribed_ratio NUMERIC,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_vault_data_date_metal ON vault_data (date, metal, source)`,
+    ];
+
+    const results = [];
+    for (const sql of statements) {
+      const { error } = await sb.rpc('exec_sql', { sql_text: sql }).maybeSingle();
+      if (error) {
+        const { error: error2 } = await sb.from('vault_data').select('id').limit(0);
+        if (error2 && error2.code === '42P01') {
+          results.push({ sql: sql.substring(0, 50) + '...', status: 'needs_manual_migration', error: error.message });
+        } else {
+          results.push({ sql: sql.substring(0, 50) + '...', status: 'table_exists_or_created' });
+        }
+      } else {
+        results.push({ sql: sql.substring(0, 50) + '...', status: 'ok' });
+      }
+    }
+
+    const { error: verifyError } = await sb.from('vault_data').select('id').limit(0);
+
+    res.json({
+      success: !verifyError,
+      table_exists: !verifyError,
+      results,
+      verify_error: verifyError?.message || null,
+      note: verifyError ? 'Run the SQL migration manually in Supabase Dashboard SQL Editor' : 'Table ready',
+    });
+  } catch (error) {
+    console.error('Vault migrate error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================
 // STARTUP
 // ============================================
 

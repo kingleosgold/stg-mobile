@@ -945,6 +945,12 @@ function AppContent() {
   const [intelligenceLoading, setIntelligenceLoading] = useState(false);
   const [intelligenceLastFetched, setIntelligenceLastFetched] = useState(null);
 
+  // Today Tab - Vault Watch (COMEX Warehouse Inventory)
+  const [vaultData, setVaultData] = useState({ gold: [], silver: [], platinum: [], palladium: [] });
+  const [vaultLoading, setVaultLoading] = useState(false);
+  const [vaultLastFetched, setVaultLastFetched] = useState(null);
+  const [vaultMetal, setVaultMetal] = useState('silver'); // Default to silver
+
   // Custom Milestone State
   const [showMilestoneModal, setShowMilestoneModal] = useState(false);
   const [customSilverMilestone, setCustomSilverMilestone] = useState(null); // null means use default
@@ -3653,10 +3659,28 @@ function AppContent() {
     }
   };
 
-  // Fetch intelligence on mount and when switching to Today tab
+  // Fetch vault data (COMEX warehouse inventory)
+  const fetchVaultData = async () => {
+    try {
+      setVaultLoading(true);
+      const response = await fetch(`${API_BASE_URL}/api/vault-data?source=comex&days=30`);
+      const data = await response.json();
+      if (data.success && data.data) {
+        setVaultData(data.data);
+      }
+      setVaultLastFetched(new Date());
+    } catch (error) {
+      console.error('Vault data fetch error:', error);
+    } finally {
+      setVaultLoading(false);
+    }
+  };
+
+  // Fetch intelligence + vault data on mount and when switching to Today tab
   useEffect(() => {
-    if (tab === 'today' && !intelligenceLastFetched) {
-      fetchIntelligenceBriefs();
+    if (tab === 'today') {
+      if (!intelligenceLastFetched) fetchIntelligenceBriefs();
+      if (!vaultLastFetched) fetchVaultData();
     }
   }, [tab]);
 
@@ -3665,6 +3689,7 @@ function AppContent() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     await Promise.all([
       fetchIntelligenceBriefs(),
+      fetchVaultData(),
       fetchSpotPrices(true),
     ]);
     setIsRefreshing(false);
@@ -5634,6 +5659,271 @@ function AppContent() {
                   </View>
                 )}
               </View>
+
+              {/* ===== SECTION 3.5: VAULT WATCH (Gold-only) ===== */}
+              {(() => {
+                const vaultMetals = [
+                  { key: 'silver', label: 'Ag', color: colors.silver },
+                  { key: 'gold', label: 'Au', color: colors.gold },
+                  { key: 'platinum', label: 'Pt', color: colors.platinum },
+                  { key: 'palladium', label: 'Pd', color: colors.palladium },
+                ];
+
+                const currentVaultData = vaultData[vaultMetal] || [];
+                const latestVault = currentVaultData.length > 0 ? currentVaultData[currentVaultData.length - 1] : null;
+
+                // Format large oz numbers compactly: 101394888 → "101.4M"
+                const formatOzCompact = (val) => {
+                  if (!val && val !== 0) return '—';
+                  const abs = Math.abs(val);
+                  if (abs >= 1e9) return `${(val / 1e9).toFixed(1)}B`;
+                  if (abs >= 1e6) return `${(val / 1e6).toFixed(1)}M`;
+                  if (abs >= 1e3) return `${(val / 1e3).toFixed(0)}K`;
+                  return val.toLocaleString();
+                };
+
+                // Format change with comma separators
+                const formatChangeOz = (val) => {
+                  if (!val && val !== 0) return '—';
+                  const sign = val > 0 ? '+' : '';
+                  return `${sign}${Math.round(val).toLocaleString()} oz`;
+                };
+
+                // Chart data for registered inventory trend
+                const chartDataPoints = currentVaultData.map(d => d.registered_oz).filter(v => v > 0);
+                const chartLabels = currentVaultData.map(d => {
+                  const dt = new Date(d.date + 'T00:00:00');
+                  return `${dt.getMonth() + 1}/${dt.getDate()}`;
+                });
+                // Show max 8 labels evenly spaced
+                const labelInterval = Math.max(1, Math.floor(chartLabels.length / 7));
+                const sparseLabels = chartLabels.map((l, i) => i % labelInterval === 0 || i === chartLabels.length - 1 ? l : '');
+
+                const ratio = latestVault?.oversubscribed_ratio || 0;
+                const ratioWarning = ratio > 3.0 ? { icon: '\uD83D\uDD25', label: 'Supply squeeze territory', color: '#F87171' }
+                  : ratio > 2.0 ? { icon: '\u26A0\uFE0F', label: 'Elevated', color: '#FBBF24' }
+                  : null;
+
+                // Bullish color for inventory decreases (gold accent), gray for increases
+                const bullishColor = '#D4A843';
+                const bearishColor = colors.muted;
+
+                const getChangeColor = (val) => val < 0 ? bullishColor : val > 0 ? bearishColor : colors.muted;
+                const getChangeArrow = (val) => val < 0 ? '\u25BC' : val > 0 ? '\u25B2' : '';
+
+                return (
+                  <View style={{ position: 'relative', marginBottom: 16 }}>
+                    <View style={{ opacity: hasGoldAccess ? 1 : 0.4 }} pointerEvents={hasGoldAccess ? 'auto' : 'none'}>
+                      {/* Section header with gold divider */}
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 10 }}>
+                        <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '600', letterSpacing: 1.2, textTransform: 'uppercase', marginLeft: 4 }}>
+                          {'\uD83C\uDFE6'} Vault Watch
+                        </Text>
+                        <View style={{ flex: 1, height: 1, backgroundColor: 'rgba(212,168,67,0.2)' }} />
+                      </View>
+
+                      <Text style={{ color: colors.muted, fontSize: 11, marginBottom: 10, marginLeft: 4 }}>COMEX Warehouse Inventory</Text>
+
+                      {/* Metal selector pills */}
+                      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
+                        {vaultMetals.map(m => (
+                          <TouchableOpacity
+                            key={m.key}
+                            style={{
+                              paddingVertical: 6,
+                              paddingHorizontal: 14,
+                              borderRadius: 16,
+                              backgroundColor: vaultMetal === m.key ? `${m.color}20` : 'transparent',
+                              borderWidth: 1,
+                              borderColor: vaultMetal === m.key ? m.color : isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+                            }}
+                            onPress={() => {
+                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                              setVaultMetal(m.key);
+                            }}
+                          >
+                            <Text style={{ color: vaultMetal === m.key ? m.color : colors.muted, fontSize: 13, fontWeight: '700' }}>{m.label}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+
+                      {vaultLoading && !latestVault ? (
+                        /* Loading skeleton */
+                        <View style={{
+                          backgroundColor: todayCardBg,
+                          borderRadius: 12,
+                          borderWidth: 1,
+                          borderColor: todayCardBorder,
+                          padding: 20,
+                        }}>
+                          <View style={{ width: '60%', height: 14, backgroundColor: isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)', borderRadius: 4, marginBottom: 12 }} />
+                          <View style={{ width: '40%', height: 24, backgroundColor: isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)', borderRadius: 4, marginBottom: 8 }} />
+                          <View style={{ width: '80%', height: 10, backgroundColor: isDarkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)', borderRadius: 4 }} />
+                        </View>
+                      ) : latestVault ? (
+                        <View style={{
+                          backgroundColor: todayCardBg,
+                          borderRadius: 12,
+                          borderWidth: 1,
+                          borderColor: todayCardBorder,
+                          overflow: 'hidden',
+                        }}>
+                          {/* Key stats */}
+                          <View style={{ padding: 16 }}>
+                            {/* Registered */}
+                            <View style={{ marginBottom: 14 }}>
+                              <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>Registered</Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10 }}>
+                                <Text style={{ color: colors.text, fontSize: 26, fontWeight: '700' }}>{formatOzCompact(latestVault.registered_oz)} oz</Text>
+                                {latestVault.registered_change_oz !== 0 && (
+                                  <Text style={{ color: getChangeColor(latestVault.registered_change_oz), fontSize: 13, fontWeight: '600' }}>
+                                    {getChangeArrow(latestVault.registered_change_oz)} {formatChangeOz(latestVault.registered_change_oz)}
+                                  </Text>
+                                )}
+                              </View>
+                            </View>
+
+                            {/* Eligible */}
+                            <View style={{ marginBottom: 14 }}>
+                              <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>Eligible</Text>
+                              <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10 }}>
+                                <Text style={{ color: colors.text, fontSize: 20, fontWeight: '600' }}>{formatOzCompact(latestVault.eligible_oz)} oz</Text>
+                                {latestVault.eligible_change_oz !== 0 && (
+                                  <Text style={{ color: getChangeColor(latestVault.eligible_change_oz), fontSize: 12, fontWeight: '600' }}>
+                                    {getChangeArrow(latestVault.eligible_change_oz)} {formatChangeOz(latestVault.eligible_change_oz)}
+                                  </Text>
+                                )}
+                              </View>
+                            </View>
+
+                            {/* Combined */}
+                            <View style={{ marginBottom: 14 }}>
+                              <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>Combined</Text>
+                              <Text style={{ color: colors.text, fontSize: 18, fontWeight: '600' }}>{formatOzCompact(latestVault.combined_oz)} oz</Text>
+                            </View>
+
+                            {/* Oversubscribed Ratio */}
+                            {ratio > 0 && (
+                              <View style={{ marginBottom: 4 }}>
+                                <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>Oversubscribed Ratio</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                  <Text style={{ color: ratio > 2 ? '#FBBF24' : colors.text, fontSize: 24, fontWeight: '700' }}>{ratio.toFixed(1)}x</Text>
+                                  {ratioWarning && (
+                                    <View style={{
+                                      flexDirection: 'row',
+                                      alignItems: 'center',
+                                      gap: 4,
+                                      backgroundColor: `${ratioWarning.color}15`,
+                                      borderRadius: 6,
+                                      paddingHorizontal: 8,
+                                      paddingVertical: 3,
+                                    }}>
+                                      <Text style={{ fontSize: 12 }}>{ratioWarning.icon}</Text>
+                                      <Text style={{ color: ratioWarning.color, fontSize: 11, fontWeight: '600' }}>{ratioWarning.label}</Text>
+                                    </View>
+                                  )}
+                                </View>
+                              </View>
+                            )}
+                          </View>
+
+                          {/* Divider */}
+                          <View style={{ height: 1, backgroundColor: 'rgba(212,168,67,0.15)', marginHorizontal: 16 }} />
+
+                          {/* Mini trend chart */}
+                          {chartDataPoints.length >= 3 && (
+                            <View style={{ paddingVertical: 12, paddingHorizontal: 4 }}>
+                              <Text style={{ color: colors.muted, fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginLeft: 12 }}>Registered Inventory (30d)</Text>
+                              <LineChart
+                                data={{
+                                  labels: sparseLabels,
+                                  datasets: [{
+                                    data: chartDataPoints,
+                                    color: (opacity = 1) => `rgba(212, 168, 67, ${opacity})`,
+                                    strokeWidth: 2,
+                                  }],
+                                }}
+                                width={SCREEN_WIDTH - 56}
+                                height={160}
+                                yAxisSuffix=""
+                                chartConfig={{
+                                  backgroundColor: 'transparent',
+                                  backgroundGradientFrom: isDarkMode ? '#0d0d0d' : '#fafafa',
+                                  backgroundGradientTo: isDarkMode ? '#0d0d0d' : '#fafafa',
+                                  decimalPlaces: 0,
+                                  color: (opacity = 1) => `rgba(212, 168, 67, ${opacity})`,
+                                  labelColor: () => colors.muted,
+                                  style: { borderRadius: 8 },
+                                  propsForDots: { r: '0' },
+                                  fillShadowGradientFrom: 'rgba(212, 168, 67, 0.3)',
+                                  fillShadowGradientTo: 'rgba(212, 168, 67, 0.0)',
+                                  fillShadowGradientFromOpacity: 0.3,
+                                  fillShadowGradientToOpacity: 0,
+                                  formatYLabel: (value) => {
+                                    const num = parseFloat(value);
+                                    if (num >= 1e9) return `${(num / 1e9).toFixed(1)}B`;
+                                    if (num >= 1e6) return `${(num / 1e6).toFixed(0)}M`;
+                                    if (num >= 1e3) return `${(num / 1e3).toFixed(0)}K`;
+                                    return num.toFixed(0);
+                                  },
+                                }}
+                                fromZero={false}
+                                segments={3}
+                                bezier
+                                withShadow={true}
+                                style={{ borderRadius: 8, marginLeft: -8 }}
+                              />
+                            </View>
+                          )}
+
+                          {/* Source footer */}
+                          <View style={{ paddingHorizontal: 16, paddingBottom: 12, paddingTop: 4 }}>
+                            <Text style={{ color: colors.muted, fontSize: 10, opacity: 0.6 }}>Source: CME Group {'\u00B7'} Updated daily</Text>
+                          </View>
+                        </View>
+                      ) : (
+                        <View style={{
+                          backgroundColor: todayCardBg,
+                          borderRadius: 12,
+                          borderWidth: 1,
+                          borderColor: todayCardBorder,
+                          padding: 24,
+                          alignItems: 'center',
+                        }}>
+                          <Text style={{ color: colors.muted, fontSize: 14, textAlign: 'center' }}>Vault data updating...</Text>
+                          <Text style={{ color: colors.muted, fontSize: 12, marginTop: 4, textAlign: 'center' }}>Check back soon for COMEX inventory data</Text>
+                        </View>
+                      )}
+                    </View>
+
+                    {/* Gold-only overlay for vault watch */}
+                    {!hasGoldAccess && (
+                      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
+                        <View style={{
+                          backgroundColor: isDarkMode ? 'rgba(26, 26, 46, 0.95)' : 'rgba(255,255,255,0.95)',
+                          borderRadius: 16,
+                          padding: 20,
+                          marginHorizontal: 20,
+                          alignItems: 'center',
+                          borderWidth: 1,
+                          borderColor: 'rgba(212, 168, 67, 0.3)',
+                        }}>
+                          <Text style={{ color: colors.gold, fontSize: scaledFonts.medium, fontWeight: '700', marginBottom: 6 }}>Unlock Vault Watch</Text>
+                          <Text style={{ color: colors.muted, textAlign: 'center', marginBottom: 14, fontSize: scaledFonts.small, lineHeight: 18 }}>
+                            Track COMEX warehouse inventory and spot supply squeezes
+                          </Text>
+                          <TouchableOpacity
+                            style={{ backgroundColor: colors.gold, paddingVertical: 10, paddingHorizontal: 24, borderRadius: 10 }}
+                            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setShowPaywallModal(true); }}
+                          >
+                            <Text style={{ color: '#000', fontWeight: '700', fontSize: scaledFonts.normal }}>Upgrade to Gold</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                );
+              })()}
 
               {/* ===== SECTION 4: INTELLIGENCE FEED (Gold-only) ===== */}
               <View style={{ position: 'relative', marginBottom: 16 }}>
