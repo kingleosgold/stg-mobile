@@ -2846,6 +2846,74 @@ app.post('/api/intelligence/seed', async (req, res) => {
   }
 });
 
+// POST /api/intelligence/migrate - Run intelligence_briefs table migration (one-time)
+app.post('/api/intelligence/migrate', async (req, res) => {
+  try {
+    const apiKey = req.headers['x-api-key'] || req.query.api_key;
+    if (!apiKey || apiKey !== process.env.INTELLIGENCE_API_KEY) {
+      return res.status(401).json({ success: false, error: 'Invalid API key' });
+    }
+
+    if (!isSupabaseAvailable()) {
+      return res.status(503).json({ success: false, error: 'Supabase not configured' });
+    }
+
+    const sb = getSupabase();
+
+    // Run migration SQL statements sequentially
+    const statements = [
+      `CREATE TABLE IF NOT EXISTS intelligence_briefs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        date DATE NOT NULL,
+        category TEXT NOT NULL CHECK (category IN ('market_brief', 'breaking_news', 'policy', 'supply_demand', 'analysis')),
+        title TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        source TEXT,
+        source_url TEXT,
+        relevance_score INTEGER CHECK (relevance_score >= 1 AND relevance_score <= 100),
+        gold_price_at_publish NUMERIC,
+        silver_price_at_publish NUMERIC,
+        platinum_price_at_publish NUMERIC,
+        palladium_price_at_publish NUMERIC,
+        expires_at TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_intelligence_briefs_date_category ON intelligence_briefs (date, category)`,
+    ];
+
+    const results = [];
+    for (const sql of statements) {
+      const { error } = await sb.rpc('exec_sql', { sql_text: sql }).maybeSingle();
+      if (error) {
+        // Try direct query approach
+        const { error: error2 } = await sb.from('intelligence_briefs').select('id').limit(0);
+        if (error2 && error2.code === '42P01') {
+          // Table doesn't exist, can't create via PostgREST - need manual migration
+          results.push({ sql: sql.substring(0, 50) + '...', status: 'needs_manual_migration', error: error.message });
+        } else {
+          results.push({ sql: sql.substring(0, 50) + '...', status: 'table_exists_or_created' });
+        }
+      } else {
+        results.push({ sql: sql.substring(0, 50) + '...', status: 'ok' });
+      }
+    }
+
+    // Verify table exists by trying a select
+    const { error: verifyError } = await sb.from('intelligence_briefs').select('id').limit(0);
+
+    res.json({
+      success: !verifyError,
+      table_exists: !verifyError,
+      results,
+      verify_error: verifyError?.message || null,
+      note: verifyError ? 'Run the SQL migration manually in Supabase Dashboard SQL Editor' : 'Table ready',
+    });
+  } catch (error) {
+    console.error('Intelligence migrate error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // ============================================
 // STARTUP
 // ============================================
