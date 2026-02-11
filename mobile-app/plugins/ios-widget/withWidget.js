@@ -212,6 +212,25 @@ const withWidgetExtension = (config) => {
         }, null, 2)
       );
 
+      // Copy app icon to widget Assets.xcassets as AppIcon imageset
+      const appIconImagesetDir = path.join(assetsDir, 'AppIcon.imageset');
+      if (!fs.existsSync(appIconImagesetDir)) {
+        fs.mkdirSync(appIconImagesetDir, { recursive: true });
+      }
+
+      const appIconSrc = path.join(projectRoot, 'assets', 'icon.png');
+      if (fs.existsSync(appIconSrc)) {
+        fs.copyFileSync(appIconSrc, path.join(appIconImagesetDir, 'icon.png'));
+        fs.writeFileSync(
+          path.join(appIconImagesetDir, 'Contents.json'),
+          JSON.stringify({
+            images: [{ filename: 'icon.png', idiom: 'universal', scale: '1x' }],
+            info: { author: 'xcode', version: 1 }
+          }, null, 2)
+        );
+        console.log('Copied app icon to widget Assets.xcassets');
+      }
+
       console.log('Widget extension files created');
       return config;
     },

@@ -73,8 +73,13 @@ export const updateWidgetData = async (data) => {
       palladiumOzt: data.palladiumOzt || 0,
       platinumSpot: data.platinumSpot || 0,
       palladiumSpot: data.palladiumSpot || 0,
+      platinumChangeAmount: data.platinumChangeAmount || 0,
+      platinumChangePercent: data.platinumChangePercent || 0,
+      palladiumChangeAmount: data.palladiumChangeAmount || 0,
+      palladiumChangePercent: data.palladiumChangePercent || 0,
       lastUpdated: new Date().toISOString(),
       hasSubscription: data.hasSubscription || false,
+      hideValues: data.hideValues || false,
     };
 
     // Serialize to JSON and send to native module

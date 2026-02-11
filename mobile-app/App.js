@@ -789,6 +789,7 @@ function AppContent() {
   const systemColorScheme = useColorScheme();
   const [themePreference, setThemePreference] = useState('system'); // 'system', 'light', 'dark'
   const [largeText, setLargeText] = useState(false); // Accessibility: increase font sizes
+  const [hideWidgetValues, setHideWidgetValues] = useState(false); // Widget: hide dollar amounts
 
   // Derive actual theme from preference
   const isDarkMode = themePreference === 'system'
@@ -938,7 +939,6 @@ function AppContent() {
   // Share My Stack
   const shareViewRef = useRef(null);
   const [isGeneratingShare, setIsGeneratingShare] = useState(false);
-  const [showSharePreview, setShowSharePreview] = useState(false);
 
   // Custom Milestone State
   const [showMilestoneModal, setShowMilestoneModal] = useState(false);
@@ -1451,7 +1451,7 @@ function AppContent() {
 
   const loadData = async () => {
     try {
-      const [silver, gold, platinum, palladium, silverS, goldS, platinumS, palladiumS, timestamp, hasSeenTutorial, storedMidnightSnapshot, storedTheme, storedChangeDisplayMode, storedLargeText, storedSilverMilestone, storedGoldMilestone, storedLastSilverReached, storedLastGoldReached, storedGuestMode] = await Promise.all([
+      const [silver, gold, platinum, palladium, silverS, goldS, platinumS, palladiumS, timestamp, hasSeenTutorial, storedMidnightSnapshot, storedTheme, storedChangeDisplayMode, storedLargeText, storedSilverMilestone, storedGoldMilestone, storedLastSilverReached, storedLastGoldReached, storedGuestMode, storedHideWidgetValues] = await Promise.all([
         AsyncStorage.getItem('stack_silver'),
         AsyncStorage.getItem('stack_gold'),
         AsyncStorage.getItem('stack_platinum'),
@@ -1471,6 +1471,7 @@ function AppContent() {
         AsyncStorage.getItem('stack_last_silver_milestone_reached'),
         AsyncStorage.getItem('stack_last_gold_milestone_reached'),
         AsyncStorage.getItem('stack_guest_mode'),
+        AsyncStorage.getItem('stack_hide_widget_values'),
       ]);
 
       // Safely parse JSON data with fallbacks
@@ -1529,6 +1530,11 @@ function AppContent() {
         setGuestMode(true);
       } else {
         setGuestMode(false);
+      }
+
+      // Load hide widget values preference
+      if (storedHideWidgetValues === 'true') {
+        setHideWidgetValues(true);
       }
 
       // Show tutorial if user hasn't seen it
@@ -2750,7 +2756,12 @@ function AppContent() {
         palladiumOzt: totalPalladiumOzt,
         platinumSpot: platinumSpot,
         palladiumSpot: palladiumSpot,
+        platinumChangeAmount: spotChange?.platinum?.amount || 0,
+        platinumChangePercent: spotChange?.platinum?.percent || 0,
+        palladiumChangeAmount: spotChange?.palladium?.amount || 0,
+        palladiumChangePercent: spotChange?.palladium?.percent || 0,
         hasSubscription: hasGold || hasLifetimeAccess,
+        hideValues: hideWidgetValues,
       };
 
       console.log('📱 [syncWidget] Sending payload:', widgetPayload);
@@ -2768,7 +2779,7 @@ function AppContent() {
     if (dataLoaded && spotPricesLive && (hasGold || hasLifetimeAccess)) {
       syncWidget();
     }
-  }, [totalMeltValue, totalGoldOzt, totalSilverOzt, totalPlatinumOzt, totalPalladiumOzt, silverSpot, goldSpot, platinumSpot, palladiumSpot, spotChange, dataLoaded, spotPricesLive, hasGold, hasLifetimeAccess]);
+  }, [totalMeltValue, totalGoldOzt, totalSilverOzt, totalPlatinumOzt, totalPalladiumOzt, silverSpot, goldSpot, platinumSpot, palladiumSpot, spotChange, dataLoaded, spotPricesLive, hasGold, hasLifetimeAccess, hideWidgetValues]);
 
   // Sync widget when app comes to foreground
   useEffect(() => {
@@ -4911,7 +4922,6 @@ function AppContent() {
       });
 
       setIsGeneratingShare(false);
-      setShowSharePreview(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       console.error('Share My Stack error:', error);
@@ -5762,28 +5772,111 @@ function AppContent() {
                   </View>
                 </TouchableOpacity>
 
-                {/* Share My Stack */}
-                {(silverItems.length > 0 || goldItems.length > 0 || platinumItems.length > 0 || palladiumItems.length > 0) && (
-                  <TouchableOpacity
-                    style={[styles.card, {
-                      backgroundColor: colors.cardBg,
-                      borderColor: colors.gold,
-                      borderWidth: 1,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      paddingVertical: 14,
-                      gap: 8,
-                    }]}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setShowSharePreview(true);
-                    }}
-                  >
-                    <Text style={{ fontSize: scaledFonts.medium }}>📸</Text>
-                    <Text style={{ color: colors.gold, fontSize: scaledFonts.normal, fontWeight: '600' }}>Share My Stack</Text>
-                  </TouchableOpacity>
-                )}
+                {/* Share My Stack - Inline Card */}
+                {(silverItems.length > 0 || goldItems.length > 0 || platinumItems.length > 0 || palladiumItems.length > 0) && (() => {
+                  const shareMetals = [
+                    { label: 'Gold', symbol: 'Au', ozt: totalGoldOzt, spot: goldSpot, color: '#D4A843', decimals: 3, value: totalGoldOzt * goldSpot },
+                    { label: 'Silver', symbol: 'Ag', ozt: totalSilverOzt, spot: silverSpot, color: '#9ca3af', decimals: 2, value: totalSilverOzt * silverSpot },
+                    { label: 'Platinum', symbol: 'Pt', ozt: totalPlatinumOzt, spot: platinumSpot, color: '#7BB3D4', decimals: 3, value: totalPlatinumOzt * platinumSpot },
+                    { label: 'Palladium', symbol: 'Pd', ozt: totalPalladiumOzt, spot: palladiumSpot, color: '#6BBF8A', decimals: 3, value: totalPalladiumOzt * palladiumSpot },
+                  ].filter(m => m.ozt > 0);
+                  return (
+                    <View style={{ position: 'relative' }}>
+                      <ViewShot
+                        ref={shareViewRef}
+                        options={{ format: 'png', quality: 1.0, result: 'tmpfile' }}
+                      >
+                        <View style={{
+                          backgroundColor: '#111111',
+                          borderRadius: 16,
+                          overflow: 'hidden',
+                        }}>
+                          {/* Gold accent line */}
+                          <View style={{ height: 2, backgroundColor: '#D4A843' }} />
+
+                          <View style={{ padding: 20, paddingTop: 16 }}>
+                            {/* App icon + title */}
+                            <View style={{ alignItems: 'center', marginBottom: 12 }}>
+                              <Image source={require('./assets/icon.png')} style={{ width: 44, height: 44, borderRadius: 10, marginBottom: 8 }} />
+                              <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: '700', letterSpacing: 3, textTransform: 'uppercase' }}>My Stack</Text>
+                            </View>
+
+                            {/* Portfolio value */}
+                            <Text style={{ color: '#ffffff', fontSize: 36, fontWeight: '700', textAlign: 'center', marginBottom: 8 }}>${formatCurrency(totalMeltValue, 0)}</Text>
+
+                            {/* Colored dots for held metals */}
+                            <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8, marginBottom: 16 }}>
+                              {shareMetals.map(m => (
+                                <View key={m.label} style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: m.color }} />
+                              ))}
+                            </View>
+
+                            {/* Gold divider */}
+                            <View style={{ height: 1, backgroundColor: 'rgba(212,168,67,0.4)', marginBottom: 16 }} />
+
+                            {/* Metal rows */}
+                            {shareMetals.map(m => {
+                              const pct = totalMeltValue > 0 ? ((m.value / totalMeltValue) * 100).toFixed(0) : '0';
+                              return (
+                                <View key={m.label} style={{ marginBottom: 12 }}>
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                      <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: m.color }} />
+                                      <Text style={{ color: '#ffffff', fontSize: 15, fontWeight: '600' }}>{m.label}</Text>
+                                    </View>
+                                    <Text style={{ color: '#ffffff', fontSize: 15, fontWeight: '700' }}>${formatCurrency(m.value, 0)}</Text>
+                                  </View>
+                                  <Text style={{ color: '#71717a', fontSize: 12, marginLeft: 18, marginTop: 2 }}>{formatOunces(m.ozt, m.decimals)} oz · {pct}%</Text>
+                                </View>
+                              );
+                            })}
+
+                            {/* Gold divider */}
+                            <View style={{ height: 1, backgroundColor: 'rgba(212,168,67,0.4)', marginTop: 4, marginBottom: 12 }} />
+
+                            {/* Spot prices row */}
+                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 12, marginBottom: 16 }}>
+                              {shareMetals.map(m => (
+                                <Text key={m.symbol} style={{ color: '#71717a', fontSize: 12, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>{m.symbol} ${m.symbol === 'Ag' ? m.spot.toFixed(2) : m.spot.toFixed(0)}</Text>
+                              ))}
+                            </View>
+
+                            {/* Branding */}
+                            <View style={{ alignItems: 'center' }}>
+                              <Text style={{ color: '#D4A843', fontSize: 14, fontWeight: '700', marginBottom: 2 }}>stacktrackergold.com</Text>
+                              <Text style={{ color: '#52525b', fontSize: 11 }}>Tracked with Stack Tracker Gold</Text>
+                            </View>
+                          </View>
+                        </View>
+                      </ViewShot>
+
+                      {/* Share button - outside ViewShot so not captured */}
+                      <TouchableOpacity
+                        style={{
+                          position: 'absolute',
+                          top: 14,
+                          right: 12,
+                          zIndex: 10,
+                          width: 36,
+                          height: 36,
+                          borderRadius: 18,
+                          backgroundColor: 'rgba(255,255,255,0.1)',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          shareMyStack();
+                        }}
+                      >
+                        <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                          <Path d="M12 2L12 16M12 2L8 6M12 2L16 6" stroke="#D4A843" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                          <Path d="M4 14V18C4 19.1 4.9 20 6 20H18C19.1 20 20 19.1 20 18V14" stroke="#D4A843" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                        </Svg>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })()}
               </>
             )}
           </>
@@ -6932,6 +7025,37 @@ function AppContent() {
                     onValueChange={(value) => {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                       toggleLargeText(value);
+                    }}
+                    trackColor={{ false: isDarkMode ? '#39393d' : '#e9e9eb', true: '#34c759' }}
+                    thumbColor="#fff"
+                    ios_backgroundColor={isDarkMode ? '#39393d' : '#e9e9eb'}
+                  />
+                </View>
+              </View>
+
+              {/* Widget Section */}
+              <SectionHeader title="Widget" />
+              <View style={{ borderRadius: 10, overflow: 'hidden' }}>
+                <View style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  backgroundColor: groupBg,
+                  paddingVertical: 12,
+                  paddingHorizontal: 16,
+                  minHeight: 44,
+                  borderRadius: 10,
+                }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>Hide Values on Widget</Text>
+                    <Text style={{ color: colors.muted, fontSize: scaledFonts.small, marginTop: 2 }}>Show dots instead of dollar amounts</Text>
+                  </View>
+                  <Switch
+                    value={hideWidgetValues}
+                    onValueChange={(value) => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setHideWidgetValues(value);
+                      AsyncStorage.setItem('stack_hide_widget_values', value ? 'true' : 'false');
                     }}
                     trackColor={{ false: isDarkMode ? '#39393d' : '#e9e9eb', true: '#34c759' }}
                     thumbColor="#fff"
@@ -8776,126 +8900,6 @@ function AppContent() {
         </TouchableOpacity>
       </ModalWrapper>
 
-      {/* Share My Stack Preview Modal */}
-      <Modal visible={showSharePreview} animationType="slide" transparent>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.95)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-          {/* Shareable View - Captured by ViewShot */}
-          <ViewShot
-            ref={shareViewRef}
-            options={{ format: 'png', quality: 1.0, result: 'tmpfile' }}
-            style={{ width: SCREEN_WIDTH - 40 }}
-          >
-            <View style={{
-              backgroundColor: '#1a1a2e',
-              borderRadius: 20,
-              padding: 24,
-              width: '100%',
-            }}>
-              {/* Header */}
-              <View style={{ alignItems: 'center', marginBottom: 20 }}>
-                <View style={{
-                  width: 40, height: 40, borderRadius: 20,
-                  backgroundColor: 'rgba(251, 191, 36, 0.2)',
-                  alignItems: 'center', justifyContent: 'center',
-                  marginBottom: 8,
-                }}>
-                  <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: '#fbbf24' }} />
-                </View>
-                <Text style={{ color: '#fbbf24', fontSize: 18, fontWeight: '700' }}>My Precious Metals Stack</Text>
-              </View>
-
-              {/* Portfolio Value */}
-              <View style={{
-                backgroundColor: 'rgba(251, 191, 36, 0.1)',
-                borderRadius: 16,
-                padding: 20,
-                alignItems: 'center',
-                marginBottom: 20,
-                borderWidth: 1,
-                borderColor: 'rgba(251, 191, 36, 0.2)',
-              }}>
-                <Text style={{ color: '#71717a', fontSize: 12, marginBottom: 4 }}>Total Portfolio Value</Text>
-                <Text style={{ color: '#fff', fontSize: 36, fontWeight: '700' }}>${formatCurrency(totalMeltValue, 0)}</Text>
-              </View>
-
-              {/* Metal Breakdown */}
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
-                {[
-                  { label: 'Gold', ozt: totalGoldOzt, spot: goldSpot, color: '#fbbf24', decimals: 3, show: totalGoldOzt > 0 },
-                  { label: 'Silver', ozt: totalSilverOzt, spot: silverSpot, color: '#9ca3af', decimals: 2, show: totalSilverOzt > 0 },
-                  { label: 'Platinum', ozt: totalPlatinumOzt, spot: platinumSpot, color: '#7BB3D4', decimals: 3, show: totalPlatinumOzt > 0 },
-                  { label: 'Palladium', ozt: totalPalladiumOzt, spot: palladiumSpot, color: '#6BBF8A', decimals: 3, show: totalPalladiumOzt > 0 },
-                ].filter(m => m.show).map(m => (
-                  <View key={m.label} style={{
-                    width: '47%',
-                    backgroundColor: `${m.color}14`,
-                    borderRadius: 12,
-                    padding: 16,
-                    borderWidth: 1,
-                    borderColor: `${m.color}26`,
-                  }}>
-                    <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: m.color, marginBottom: 4 }} />
-                    <Text style={{ color: m.color, fontWeight: '600', marginBottom: 8 }}>{m.label}</Text>
-                    <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>{formatOunces(m.ozt, m.decimals)} oz</Text>
-                    <Text style={{ color: '#71717a', fontSize: 12, marginTop: 4 }}>${formatCurrency(m.ozt * m.spot, 0)}</Text>
-                  </View>
-                ))}
-              </View>
-
-              {/* Spot Prices */}
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 12, marginBottom: 16 }}>
-                <Text style={{ color: '#71717a', fontSize: 11 }}>Au: ${goldSpot.toFixed(0)}/oz</Text>
-                <Text style={{ color: '#71717a', fontSize: 11 }}>Ag: ${silverSpot.toFixed(2)}/oz</Text>
-                {totalPlatinumOzt > 0 && <Text style={{ color: '#71717a', fontSize: 11 }}>Pt: ${platinumSpot.toFixed(0)}/oz</Text>}
-                {totalPalladiumOzt > 0 && <Text style={{ color: '#71717a', fontSize: 11 }}>Pd: ${palladiumSpot.toFixed(0)}/oz</Text>}
-              </View>
-
-              {/* Watermark */}
-              <View style={{ alignItems: 'center', paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)' }}>
-                <Text style={{ color: '#52525b', fontSize: 11 }}>Tracked with Stack Tracker Gold</Text>
-                <Text style={{ color: '#3f3f46', fontSize: 10, marginTop: 2 }}>www.stacktrackergold.com</Text>
-              </View>
-            </View>
-          </ViewShot>
-
-          {/* Action Buttons */}
-          <View style={{ width: '100%', marginTop: 20, gap: 12 }}>
-            <TouchableOpacity
-              style={{
-                backgroundColor: colors.gold,
-                padding: 16,
-                borderRadius: 12,
-                alignItems: 'center',
-                flexDirection: 'row',
-                justifyContent: 'center',
-                gap: 8,
-              }}
-              onPress={shareMyStack}
-              disabled={isGeneratingShare}
-            >
-              {isGeneratingShare ? (
-                <ActivityIndicator color="#000" />
-              ) : (
-                <>
-                  <Text style={{ color: '#000', fontWeight: '600', fontSize: 16 }}>Share</Text>
-                </>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={{
-                backgroundColor: 'rgba(255,255,255,0.1)',
-                padding: 16,
-                borderRadius: 12,
-                alignItems: 'center',
-              }}
-              onPress={() => setShowSharePreview(false)}
-            >
-              <Text style={{ color: '#fff', fontWeight: '600' }}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
 
       {/* First Launch Tutorial */}
       <Tutorial

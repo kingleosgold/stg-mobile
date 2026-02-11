@@ -3,12 +3,28 @@ import WidgetKit
 
 // MARK: - Design Constants
 
-private let bgColor = Color(hex: "#1a1a2e")
-private let goldAccent = Color(hex: "#D4AF37")
+private let bgColor = Color(hex: "#1a1a1a")
+private let goldAccent = Color(hex: "#D4A843")
 private let greenColor = Color(hex: "#4CAF50")
 private let redColor = Color(hex: "#F44336")
 private let mutedColor = Color(hex: "#71717a")
 private let silverColor = Color(hex: "#9ca3af")
+private let platinumColor = Color(hex: "#7BB3D4")
+private let palladiumColor = Color(hex: "#6BBF8A")
+
+// MARK: - Helpers
+
+/// Gold shimmer accent line at top of widget
+private func goldAccentLine() -> some View {
+    Rectangle()
+        .fill(goldAccent)
+        .frame(height: 2)
+}
+
+/// Privacy masking: returns masked text when hidden
+private func privacyText(_ text: String, _ hide: Bool) -> String {
+    hide ? "••••••" : text
+}
 
 /// Main widget entry view that switches between sizes
 struct StackTrackerWidgetEntryView: View {
@@ -37,41 +53,67 @@ struct SmallWidgetView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if data.hasSubscription {
-                // Portfolio label
-                Text("Portfolio")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(mutedColor)
-                    .padding(.bottom, 2)
+                goldAccentLine()
 
-                // Hero portfolio value
-                Text(formatCurrency(data.portfolioValue))
-                    .font(.system(size: 32, weight: .bold))
-                    .foregroundColor(.white)
-                    .minimumScaleFactor(0.5)
+                VStack(alignment: .leading, spacing: 0) {
+                    // Logo + label
+                    HStack(spacing: 6) {
+                        Image("AppIcon")
+                            .resizable()
+                            .frame(width: 20, height: 20)
+                            .cornerRadius(4)
+                        Text("PORTFOLIO")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundColor(mutedColor)
+                            .kerning(1.2)
+                    }
+                    .padding(.top, 10)
+                    .padding(.bottom, 6)
+
+                    // Portfolio value
+                    Text(privacyText(formatCurrency(data.portfolioValue), data.hideValues))
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundColor(.white)
+                        .minimumScaleFactor(0.5)
+                        .lineLimit(1)
+                        .padding(.bottom, 4)
+
+                    // Daily change
+                    HStack(spacing: 4) {
+                        Text(data.dailyChangeAmount >= 0 ? "▲" : "▼")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(changeColor(data.dailyChangeAmount))
+                        Text(privacyText(formatChange(data.dailyChangeAmount), data.hideValues))
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(changeColor(data.dailyChangeAmount))
+                        Text("(\(formatPercent(data.dailyChangePercent)))")
+                            .font(.system(size: 10))
+                            .foregroundColor(changeColor(data.dailyChangeAmount))
+                    }
                     .lineLimit(1)
-                    .padding(.bottom, 4)
+                    .minimumScaleFactor(0.7)
 
-                // Daily change with arrow and percent
-                HStack(spacing: 4) {
-                    Text(data.dailyChangeAmount >= 0 ? "▲" : "▼")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(changeColor(data.dailyChangeAmount))
-                    Text(formatChange(data.dailyChangeAmount))
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(changeColor(data.dailyChangeAmount))
-                    Text("(\(formatPercent(data.dailyChangePercent)))")
-                        .font(.system(size: 11))
-                        .foregroundColor(changeColor(data.dailyChangeAmount))
+                    Spacer()
+
+                    // Bottom: colored dots for held metals
+                    HStack(spacing: 6) {
+                        if data.goldValue > 0 {
+                            Circle().fill(goldAccent).frame(width: 8, height: 8)
+                        }
+                        if data.silverValue > 0 {
+                            Circle().fill(silverColor).frame(width: 8, height: 8)
+                        }
+                        if data.platinumValue > 0 {
+                            Circle().fill(platinumColor).frame(width: 8, height: 8)
+                        }
+                        if data.palladiumValue > 0 {
+                            Circle().fill(palladiumColor).frame(width: 8, height: 8)
+                        }
+                    }
+                    .padding(.bottom, 2)
                 }
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-
-                Spacer()
-
-                // Branding
-                Text("Stack Tracker Gold")
-                    .font(.system(size: 8, weight: .semibold))
-                    .foregroundColor(goldAccent.opacity(0.7))
+                .padding(.horizontal, 12)
+                .padding(.bottom, 10)
             } else {
                 Spacer()
                 VStack(spacing: 4) {
@@ -86,7 +128,6 @@ struct SmallWidgetView: View {
                 Spacer()
             }
         }
-        .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .containerBackground(for: .widget) { bgColor }
     }
@@ -101,84 +142,60 @@ struct MediumWidgetView: View {
         Group {
             if data.hasSubscription {
                 VStack(alignment: .leading, spacing: 0) {
-                    // Top: Portfolio value and daily change
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Portfolio")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(mutedColor)
+                    goldAccentLine()
 
-                        Text(formatCurrency(data.portfolioValue))
-                            .font(.system(size: 48, weight: .bold))
-                            .foregroundColor(.white)
-                            .minimumScaleFactor(0.5)
-                            .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 0) {
+                        // Top row: logo + portfolio value + change
+                        HStack(alignment: .top) {
+                            Image("AppIcon")
+                                .resizable()
+                                .frame(width: 18, height: 18)
+                                .cornerRadius(4)
+                                .padding(.top, 2)
 
-                        HStack(spacing: 4) {
-                            Text(data.dailyChangeAmount >= 0 ? "▲" : "▼")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundColor(changeColor(data.dailyChangeAmount))
-                            Text(formatChange(data.dailyChangeAmount))
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(changeColor(data.dailyChangeAmount))
-                            Text("(\(formatPercent(data.dailyChangePercent)))")
-                                .font(.system(size: 11))
-                                .foregroundColor(changeColor(data.dailyChangeAmount))
-                        }
-                    }
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(privacyText(formatCurrency(data.portfolioValue), data.hideValues))
+                                    .font(.system(size: 32, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .minimumScaleFactor(0.5)
+                                    .lineLimit(1)
 
-                    Spacer(minLength: 8)
-
-                    // Bottom: Spot prices side by side
-                    HStack(spacing: 0) {
-                        // Silver
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Silver (Ag)")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundColor(silverColor)
-                            Text(formatSpotPrice(data.silverSpot))
-                                .font(.system(size: 20, weight: .bold))
-                                .foregroundColor(.white)
-                                .minimumScaleFactor(0.7)
-                                .lineLimit(1)
-                            HStack(spacing: 3) {
-                                Text(data.silverChangeAmount >= 0 ? "▲" : "▼")
-                                    .font(.system(size: 9, weight: .bold))
-                                Text(formatPercent(data.silverChangePercent))
-                                    .font(.system(size: 10, weight: .medium))
+                                HStack(spacing: 4) {
+                                    Text(data.dailyChangeAmount >= 0 ? "▲" : "▼")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundColor(changeColor(data.dailyChangeAmount))
+                                    Text(privacyText(formatChange(data.dailyChangeAmount), data.hideValues))
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundColor(changeColor(data.dailyChangeAmount))
+                                    Text("(\(formatPercent(data.dailyChangePercent)))")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(changeColor(data.dailyChangeAmount))
+                                }
                             }
-                            .foregroundColor(changeColor(data.silverChangeAmount))
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
 
-                        // Gold
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Gold (Au)")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundColor(goldAccent)
-                            Text(formatSpotPrice(data.goldSpot))
-                                .font(.system(size: 20, weight: .bold))
-                                .foregroundColor(.white)
-                                .minimumScaleFactor(0.7)
-                                .lineLimit(1)
-                            HStack(spacing: 3) {
-                                Text(data.goldChangeAmount >= 0 ? "▲" : "▼")
-                                    .font(.system(size: 9, weight: .bold))
-                                Text(formatPercent(data.goldChangePercent))
-                                    .font(.system(size: 10, weight: .medium))
-                            }
-                            .foregroundColor(changeColor(data.goldChangeAmount))
+                            Spacer()
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 10)
+
+                        // Divider
+                        Rectangle()
+                            .fill(goldAccent.opacity(0.15))
+                            .frame(height: 1)
+                            .padding(.vertical, 8)
+
+                        // Bottom: 4 spot prices
+                        HStack(spacing: 0) {
+                            spotPriceColumn(symbol: "Au", price: data.goldSpot, changePercent: data.goldChangePercent, changeAmount: data.goldChangeAmount, color: goldAccent)
+                            spotPriceColumn(symbol: "Ag", price: data.silverSpot, changePercent: data.silverChangePercent, changeAmount: data.silverChangeAmount, color: silverColor)
+                            spotPriceColumn(symbol: "Pt", price: data.platinumSpot, changePercent: data.platinumChangePercent, changeAmount: data.platinumChangeAmount, color: platinumColor)
+                            spotPriceColumn(symbol: "Pd", price: data.palladiumSpot, changePercent: data.palladiumChangePercent, changeAmount: data.palladiumChangeAmount, color: palladiumColor)
+                        }
+
+                        Spacer(minLength: 2)
                     }
-
-                    Spacer(minLength: 4)
-
-                    // Branding
-                    Text("Stack Tracker Gold")
-                        .font(.system(size: 8, weight: .semibold))
-                        .foregroundColor(goldAccent.opacity(0.7))
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 10)
                 }
-                .padding(12)
             } else {
                 VStack(spacing: 8) {
                     Image(systemName: "lock.fill")
@@ -198,6 +215,26 @@ struct MediumWidgetView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .containerBackground(for: .widget) { bgColor }
     }
+
+    private func spotPriceColumn(symbol: String, price: Double, changePercent: Double, changeAmount: Double, color: Color) -> some View {
+        VStack(spacing: 3) {
+            Circle()
+                .fill(color)
+                .frame(width: 6, height: 6)
+            Text(symbol)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(color)
+            Text(formatSpotPrice(price))
+                .font(.system(size: 16, weight: .bold))
+                .foregroundColor(.white)
+                .minimumScaleFactor(0.6)
+                .lineLimit(1)
+            Text(formatPercent(changePercent))
+                .font(.system(size: 9, weight: .medium))
+                .foregroundColor(changeColor(changeAmount))
+        }
+        .frame(maxWidth: .infinity)
+    }
 }
 
 // MARK: - Large Widget View
@@ -205,137 +242,104 @@ struct MediumWidgetView: View {
 struct LargeWidgetView: View {
     let data: WidgetData
 
+    private let spotGridColumns = [
+        GridItem(.flexible(), spacing: 8),
+        GridItem(.flexible(), spacing: 8),
+    ]
+
     var body: some View {
         Group {
             if data.hasSubscription {
                 VStack(alignment: .leading, spacing: 0) {
-                    // Top: Portfolio hero
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Portfolio")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(mutedColor)
+                    goldAccentLine()
 
-                        Text(formatCurrency(data.portfolioValue))
-                            .font(.system(size: 48, weight: .bold))
-                            .foregroundColor(.white)
-                            .minimumScaleFactor(0.5)
-                            .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 0) {
+                        // Logo + portfolio value
+                        HStack(spacing: 8) {
+                            Image("AppIcon")
+                                .resizable()
+                                .frame(width: 20, height: 20)
+                                .cornerRadius(4)
 
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text(privacyText(formatCurrency(data.portfolioValue), data.hideValues))
+                                    .font(.system(size: 36, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .minimumScaleFactor(0.5)
+                                    .lineLimit(1)
+                            }
+                        }
+                        .padding(.top, 10)
+
+                        // Daily change
                         HStack(spacing: 4) {
                             Text(data.dailyChangeAmount >= 0 ? "▲" : "▼")
-                                .font(.system(size: 13, weight: .bold))
+                                .font(.system(size: 11, weight: .bold))
                                 .foregroundColor(changeColor(data.dailyChangeAmount))
-                            Text(formatChange(data.dailyChangeAmount))
-                                .font(.system(size: 15, weight: .semibold))
+                            Text(privacyText(formatChange(data.dailyChangeAmount), data.hideValues))
+                                .font(.system(size: 13, weight: .semibold))
                                 .foregroundColor(changeColor(data.dailyChangeAmount))
                             Text("(\(formatPercent(data.dailyChangePercent)))")
-                                .font(.system(size: 13))
+                                .font(.system(size: 11))
                                 .foregroundColor(changeColor(data.dailyChangeAmount))
                         }
-                    }
+                        .padding(.top, 2)
 
-                    Spacer(minLength: 12)
+                        // Divider
+                        Rectangle()
+                            .fill(goldAccent.opacity(0.15))
+                            .frame(height: 1)
+                            .padding(.vertical, 10)
 
-                    // Divider
-                    Rectangle()
-                        .fill(Color.white.opacity(0.08))
-                        .frame(height: 1)
-                        .padding(.bottom, 12)
+                        // LIVE SPOT section header
+                        Text("LIVE SPOT")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundColor(mutedColor)
+                            .kerning(1.2)
+                            .padding(.bottom, 8)
 
-                    // Middle: Silver and Gold holdings side by side
-                    HStack(spacing: 0) {
-                        // Silver holdings
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Silver")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(silverColor)
-                            Text(formatCurrency(data.silverValue))
-                                .font(.system(size: 24, weight: .bold))
-                                .foregroundColor(.white)
-                                .minimumScaleFactor(0.6)
-                                .lineLimit(1)
-                            Text(formatOunces(data.silverOzt) + " oz")
-                                .font(.system(size: 12))
-                                .foregroundColor(mutedColor)
+                        // 2x2 grid of spot price cards
+                        LazyVGrid(columns: spotGridColumns, spacing: 8) {
+                            spotCard(symbol: "Au", price: data.goldSpot, changePercent: data.goldChangePercent, changeAmount: data.goldChangeAmount, color: goldAccent)
+                            spotCard(symbol: "Ag", price: data.silverSpot, changePercent: data.silverChangePercent, changeAmount: data.silverChangeAmount, color: silverColor)
+                            spotCard(symbol: "Pt", price: data.platinumSpot, changePercent: data.platinumChangePercent, changeAmount: data.platinumChangeAmount, color: platinumColor)
+                            spotCard(symbol: "Pd", price: data.palladiumSpot, changePercent: data.palladiumChangePercent, changeAmount: data.palladiumChangeAmount, color: palladiumColor)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
 
-                        // Gold holdings
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Gold")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(goldAccent)
-                            Text(formatCurrency(data.goldValue))
-                                .font(.system(size: 24, weight: .bold))
-                                .foregroundColor(.white)
-                                .minimumScaleFactor(0.6)
-                                .lineLimit(1)
-                            Text(formatOunces(data.goldOzt) + " oz")
-                                .font(.system(size: 12))
-                                .foregroundColor(mutedColor)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
+                        // Divider
+                        Rectangle()
+                            .fill(goldAccent.opacity(0.15))
+                            .frame(height: 1)
+                            .padding(.vertical, 10)
 
-                    Spacer(minLength: 12)
+                        // HOLDINGS section header
+                        Text("HOLDINGS")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundColor(mutedColor)
+                            .kerning(1.2)
+                            .padding(.bottom, 6)
 
-                    // Divider
-                    Rectangle()
-                        .fill(Color.white.opacity(0.08))
-                        .frame(height: 1)
-                        .padding(.bottom, 12)
-
-                    // Bottom: Spot prices
-                    HStack(spacing: 0) {
-                        // Silver spot
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Silver (Ag)")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundColor(silverColor)
-                            Text(formatSpotPrice(data.silverSpot))
-                                .font(.system(size: 20, weight: .bold))
-                                .foregroundColor(.white)
-                                .minimumScaleFactor(0.7)
-                                .lineLimit(1)
-                            HStack(spacing: 2) {
-                                Text(data.silverChangeAmount >= 0 ? "▲" : "▼")
-                                    .font(.system(size: 9, weight: .bold))
-                                Text(formatPercent(data.silverChangePercent))
-                                    .font(.system(size: 11, weight: .medium))
+                        // Holdings rows - only metals with value > 0
+                        VStack(spacing: 6) {
+                            if data.goldValue > 0 {
+                                holdingRow(name: "Gold", value: data.goldValue, color: goldAccent)
                             }
-                            .foregroundColor(changeColor(data.silverChangeAmount))
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                        // Gold spot
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Gold (Au)")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundColor(goldAccent)
-                            Text(formatSpotPrice(data.goldSpot))
-                                .font(.system(size: 20, weight: .bold))
-                                .foregroundColor(.white)
-                                .minimumScaleFactor(0.7)
-                                .lineLimit(1)
-                            HStack(spacing: 2) {
-                                Text(data.goldChangeAmount >= 0 ? "▲" : "▼")
-                                    .font(.system(size: 9, weight: .bold))
-                                Text(formatPercent(data.goldChangePercent))
-                                    .font(.system(size: 11, weight: .medium))
+                            if data.silverValue > 0 {
+                                holdingRow(name: "Silver", value: data.silverValue, color: silverColor)
                             }
-                            .foregroundColor(changeColor(data.goldChangeAmount))
+                            if data.platinumValue > 0 {
+                                holdingRow(name: "Platinum", value: data.platinumValue, color: platinumColor)
+                            }
+                            if data.palladiumValue > 0 {
+                                holdingRow(name: "Palladium", value: data.palladiumValue, color: palladiumColor)
+                            }
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                        Spacer(minLength: 4)
                     }
-
-                    Spacer(minLength: 8)
-
-                    // Branding
-                    Text("Stack Tracker Gold")
-                        .font(.system(size: 8, weight: .semibold))
-                        .foregroundColor(goldAccent.opacity(0.7))
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 10)
                 }
-                .padding(14)
             } else {
                 VStack(spacing: 12) {
                     Image(systemName: "lock.fill")
@@ -354,6 +358,48 @@ struct LargeWidgetView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .containerBackground(for: .widget) { bgColor }
+    }
+
+    private func spotCard(symbol: String, price: Double, changePercent: Double, changeAmount: Double, color: Color) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(color)
+                        .frame(width: 6, height: 6)
+                    Text(symbol)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(color)
+                }
+                Text(formatSpotPrice(price))
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.white)
+                    .minimumScaleFactor(0.6)
+                    .lineLimit(1)
+                Text(formatPercent(changePercent))
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundColor(changeColor(changeAmount))
+            }
+            Spacer()
+        }
+        .padding(10)
+        .background(Color.white.opacity(0.04))
+        .cornerRadius(8)
+    }
+
+    private func holdingRow(name: String, value: Double, color: Color) -> some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(color)
+                .frame(width: 8, height: 8)
+            Text(name)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(.white)
+            Spacer()
+            Text(privacyText(formatCurrency(value), data.hideValues))
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.white)
+        }
     }
 }
 
@@ -389,16 +435,6 @@ private func formatChange(_ value: Double) -> String {
 private func formatPercent(_ value: Double) -> String {
     let prefix = value >= 0 ? "+" : ""
     return "\(prefix)\(String(format: "%.1f", value))%"
-}
-
-private func formatOunces(_ value: Double) -> String {
-    if value == floor(value) {
-        return String(format: "%.0f", value)
-    } else if value * 10 == floor(value * 10) {
-        return String(format: "%.1f", value)
-    } else {
-        return String(format: "%.2f", value)
-    }
 }
 
 // MARK: - Color Extension

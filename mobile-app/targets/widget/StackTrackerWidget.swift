@@ -57,14 +57,20 @@ struct Provider: TimelineProvider {
 
             // Fetch fresh prices from backend cache (with timeout)
             if let freshPrices = await fetchFromBackendCacheAsync() {
-                print("✅ [Widget] Got fresh prices - Gold: $\(freshPrices.gold), Silver: $\(freshPrices.silver)")
+                print("✅ [Widget] Got fresh prices - Gold: $\(freshPrices.gold), Silver: $\(freshPrices.silver), Pt: $\(freshPrices.platinum), Pd: $\(freshPrices.palladium)")
 
                 data.goldSpot = freshPrices.gold
                 data.silverSpot = freshPrices.silver
+                data.platinumSpot = freshPrices.platinum
+                data.palladiumSpot = freshPrices.palladium
                 data.goldChangeAmount = freshPrices.goldChange
                 data.goldChangePercent = freshPrices.goldChangePercent
                 data.silverChangeAmount = freshPrices.silverChange
                 data.silverChangePercent = freshPrices.silverChangePercent
+                data.platinumChangeAmount = freshPrices.platinumChange
+                data.platinumChangePercent = freshPrices.platinumChangePercent
+                data.palladiumChangeAmount = freshPrices.palladiumChange
+                data.palladiumChangePercent = freshPrices.palladiumChangePercent
                 data.lastUpdated = currentDate
 
                 // Save updated data to App Group so app benefits too
@@ -136,10 +142,17 @@ struct Provider: TimelineProvider {
                 return nil
             }
 
+            let platinum = json["platinum"] as? Double ?? 0
+            let palladium = json["palladium"] as? Double ?? 0
+
             var goldChange: Double = 0
             var goldChangePercent: Double = 0
             var silverChange: Double = 0
             var silverChangePercent: Double = 0
+            var platinumChange: Double = 0
+            var platinumChangePercent: Double = 0
+            var palladiumChange: Double = 0
+            var palladiumChangePercent: Double = 0
 
             if let change = json["change"] as? [String: Any] {
                 if let goldData = change["gold"] as? [String: Any] {
@@ -150,15 +163,29 @@ struct Provider: TimelineProvider {
                     silverChange = silverData["amount"] as? Double ?? 0
                     silverChangePercent = silverData["percent"] as? Double ?? 0
                 }
+                if let platinumData = change["platinum"] as? [String: Any] {
+                    platinumChange = platinumData["amount"] as? Double ?? 0
+                    platinumChangePercent = platinumData["percent"] as? Double ?? 0
+                }
+                if let palladiumData = change["palladium"] as? [String: Any] {
+                    palladiumChange = palladiumData["amount"] as? Double ?? 0
+                    palladiumChangePercent = palladiumData["percent"] as? Double ?? 0
+                }
             }
 
             return SpotPrices(
                 gold: gold,
                 silver: silver,
+                platinum: platinum,
+                palladium: palladium,
                 goldChange: goldChange,
                 goldChangePercent: goldChangePercent,
                 silverChange: silverChange,
-                silverChangePercent: silverChangePercent
+                silverChangePercent: silverChangePercent,
+                platinumChange: platinumChange,
+                platinumChangePercent: platinumChangePercent,
+                palladiumChange: palladiumChange,
+                palladiumChangePercent: palladiumChangePercent
             )
 
         } catch {
@@ -219,10 +246,16 @@ struct Provider: TimelineProvider {
 struct SpotPrices {
     let gold: Double
     let silver: Double
+    let platinum: Double
+    let palladium: Double
     let goldChange: Double
     let goldChangePercent: Double
     let silverChange: Double
     let silverChangePercent: Double
+    let platinumChange: Double
+    let platinumChangePercent: Double
+    let palladiumChange: Double
+    let palladiumChangePercent: Double
 }
 
 /// Timeline entry containing widget data
