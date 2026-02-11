@@ -3560,9 +3560,9 @@ app.get('/api/sync-subscription', async (req, res) => {
 
     console.log(`\n🔄 [Subscription Sync] Checking RevenueCat for user: ${userId}`);
 
-    // Query RevenueCat REST API for this user's subscription status
+    // Query RevenueCat V1 REST API (V2 secret keys work with V1 endpoints)
     const rcResponse = await axios.get(
-      `https://api.revenuecat.com/v2/projects/proj1fb48f08/subscribers/${userId}`,
+      `https://api.revenuecat.com/v1/subscribers/${userId}`,
       {
         headers: {
           'Authorization': `Bearer ${REVENUECAT_API_KEY}`,
@@ -3571,6 +3571,9 @@ app.get('/api/sync-subscription', async (req, res) => {
         validateStatus: () => true, // Don't throw on non-200
       }
     );
+
+    console.log(`   📡 RevenueCat response status: ${rcResponse.status}`);
+    console.log(`   📡 RevenueCat response data:`, JSON.stringify(rcResponse.data, null, 2));
 
     if (rcResponse.status === 404) {
       // User not found in RevenueCat — they have no purchases
@@ -3591,6 +3594,7 @@ app.get('/api/sync-subscription', async (req, res) => {
 
     const subscriber = rcResponse.data?.subscriber;
     const entitlements = subscriber?.entitlements || {};
+    console.log(`   📡 Parsed entitlements:`, JSON.stringify(entitlements, null, 2));
 
     // Check for active "Gold" (or any) entitlement
     let tier = 'free';
