@@ -38,7 +38,7 @@ import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import AuthScreen from './src/screens/AuthScreen';
 import AccountScreen from './src/screens/AccountScreen';
 import ResetPasswordScreen from './src/screens/ResetPasswordScreen';
-import { AppleLogo, GoogleLogo, ProfileIcon, DashboardIcon, HoldingsIcon, AnalyticsIcon, ToolsIcon, SettingsIcon, SortIcon } from './src/components/icons';
+import { AppleLogo, GoogleLogo, ProfileIcon, DashboardIcon, HoldingsIcon, AnalyticsIcon, ToolsIcon, SettingsIcon, SortIcon, TodayIcon } from './src/components/icons';
 import {
   fetchHoldings,
   addHolding,
@@ -939,6 +939,11 @@ function AppContent() {
   // Share My Stack
   const shareViewRef = useRef(null);
   const [isGeneratingShare, setIsGeneratingShare] = useState(false);
+
+  // Today Tab - Intelligence Feed
+  const [intelligenceBriefs, setIntelligenceBriefs] = useState([]);
+  const [intelligenceLoading, setIntelligenceLoading] = useState(false);
+  const [intelligenceLastFetched, setIntelligenceLastFetched] = useState(null);
 
   // Custom Milestone State
   const [showMilestoneModal, setShowMilestoneModal] = useState(false);
@@ -3627,6 +3632,44 @@ function AppContent() {
     setIsRefreshing(false);
   };
 
+  // ============================================
+  // TODAY TAB - INTELLIGENCE FEED
+  // ============================================
+
+  const fetchIntelligenceBriefs = async () => {
+    try {
+      setIntelligenceLoading(true);
+      const today = new Date().toISOString().split('T')[0];
+      const response = await fetch(`${API_BASE_URL}/api/intelligence?date=${today}`);
+      const data = await response.json();
+      if (data.success && data.briefs) {
+        setIntelligenceBriefs(data.briefs);
+      }
+      setIntelligenceLastFetched(new Date());
+    } catch (error) {
+      console.error('Intelligence fetch error:', error);
+    } finally {
+      setIntelligenceLoading(false);
+    }
+  };
+
+  // Fetch intelligence on mount and when switching to Today tab
+  useEffect(() => {
+    if (tab === 'today' && !intelligenceLastFetched) {
+      fetchIntelligenceBriefs();
+    }
+  }, [tab]);
+
+  const onRefreshToday = async () => {
+    setIsRefreshing(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await Promise.all([
+      fetchIntelligenceBriefs(),
+      fetchSpotPrices(true),
+    ]);
+    setIsRefreshing(false);
+  };
+
   /**
    * Fetch historical spot price for a given date
    *
@@ -5061,8 +5104,8 @@ function AppContent() {
               </TouchableOpacity>
             )}
           </View>
-          {supabaseUser ? (
-            // Signed in - show profile icon that goes to Settings
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            {/* Settings gear icon */}
             <TouchableOpacity
               style={{
                 width: 36,
@@ -5074,24 +5117,42 @@ function AppContent() {
                 borderWidth: 1,
                 borderColor: isDarkMode ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)',
               }}
-              onPress={() => setShowAccountScreen(true)}
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setTab('settings'); }}
             >
-              <ProfileIcon size={20} color={colors.gold} />
+              <SettingsIcon size={18} color={tab === 'settings' ? colors.gold : colors.muted} />
             </TouchableOpacity>
-          ) : (
-            // Not signed in - show Sign In button
-            <TouchableOpacity
-              style={{
-                paddingHorizontal: 14,
-                paddingVertical: 8,
-                backgroundColor: colors.gold,
-                borderRadius: 20,
-              }}
-              onPress={() => disableGuestMode()}
-            >
-              <Text style={{ color: '#18181b', fontSize: 13, fontWeight: '600' }}>Sign In</Text>
-            </TouchableOpacity>
-          )}
+            {supabaseUser ? (
+              // Signed in - show profile icon that goes to account
+              <TouchableOpacity
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 18,
+                  backgroundColor: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderWidth: 1,
+                  borderColor: isDarkMode ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)',
+                }}
+                onPress={() => setShowAccountScreen(true)}
+              >
+                <ProfileIcon size={20} color={colors.gold} />
+              </TouchableOpacity>
+            ) : (
+              // Not signed in - show Sign In button
+              <TouchableOpacity
+                style={{
+                  paddingHorizontal: 14,
+                  paddingVertical: 8,
+                  backgroundColor: colors.gold,
+                  borderRadius: 20,
+                }}
+                onPress={() => disableGuestMode()}
+              >
+                <Text style={{ color: '#18181b', fontSize: 13, fontWeight: '600' }}>Sign In</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </View>
 
@@ -5101,12 +5162,13 @@ function AppContent() {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         refreshControl={
-          (tab === 'dashboard' || tab === 'analytics' || tab === 'holdings') ? (
+          (tab === 'dashboard' || tab === 'analytics' || tab === 'holdings' || tab === 'today') ? (
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={
                 tab === 'dashboard' ? onRefreshDashboard :
-                tab === 'holdings' ? onRefreshDashboard : // Use same handler - syncs holdings and prices
+                tab === 'holdings' ? onRefreshDashboard :
+                tab === 'today' ? onRefreshToday :
                 onRefreshAnalytics
               }
               tintColor={colors.gold}
@@ -5364,6 +5426,337 @@ function AppContent() {
 
           </>
         )}
+
+        {/* TODAY TAB */}
+        {tab === 'today' && (() => {
+          const todayDate = new Date();
+          const dateStr = todayDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+          // Metal movers data
+          const metalMovers = [
+            { symbol: 'Au', label: 'Gold', spot: goldSpot, change: spotChange?.gold?.amount || 0, pct: spotChange?.gold?.percent || 0, color: '#D4A843' },
+            { symbol: 'Ag', label: 'Silver', spot: silverSpot, change: spotChange?.silver?.amount || 0, pct: spotChange?.silver?.percent || 0, color: '#9ca3af' },
+            { symbol: 'Pt', label: 'Platinum', spot: platinumSpot, change: spotChange?.platinum?.amount || 0, pct: spotChange?.platinum?.percent || 0, color: '#7BB3D4' },
+            { symbol: 'Pd', label: 'Palladium', spot: palladiumSpot, change: spotChange?.palladium?.amount || 0, pct: spotChange?.palladium?.percent || 0, color: '#6BBF8A' },
+          ].sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct));
+
+          // Portfolio impact per metal (only metals held)
+          const holdingsImpact = [
+            { label: 'Gold', ozt: totalGoldOzt, spot: goldSpot, pct: spotChange?.gold?.percent || 0, color: '#D4A843' },
+            { label: 'Silver', ozt: totalSilverOzt, spot: silverSpot, pct: spotChange?.silver?.percent || 0, color: '#9ca3af' },
+            { label: 'Platinum', ozt: totalPlatinumOzt, spot: platinumSpot, pct: spotChange?.platinum?.percent || 0, color: '#7BB3D4' },
+            { label: 'Palladium', ozt: totalPalladiumOzt, spot: palladiumSpot, pct: spotChange?.palladium?.percent || 0, color: '#6BBF8A' },
+          ].filter(m => m.ozt > 0).map(m => {
+            const currentValue = m.ozt * m.spot;
+            const prevValue = m.pct !== 0 ? currentValue / (1 + m.pct / 100) : currentValue;
+            const dollarChange = currentValue - prevValue;
+            return { ...m, currentValue, dollarChange };
+          }).sort((a, b) => Math.abs(b.dollarChange) - Math.abs(a.dollarChange));
+
+          // AI summary generation (client-side)
+          const biggestMover = metalMovers[0];
+          const gainedLost = dailyChange >= 0 ? 'gained' : 'lost';
+          const rallyDecline = biggestMover?.pct >= 0 ? 'rally' : 'decline';
+          const aiSummary = totalMeltValue > 0 && dailyChange !== 0
+            ? `Your stack ${gainedLost} $${formatCurrency(Math.abs(dailyChange), 0)} today, driven by ${biggestMover?.label}'s ${Math.abs(biggestMover?.pct || 0).toFixed(1)}% ${rallyDecline}.`
+            : totalMeltValue > 0
+            ? 'Markets are steady today. Your stack value is unchanged.'
+            : 'Add holdings to see your daily portfolio changes.';
+
+          const categoryColors = {
+            market_brief: '#D4A843',
+            breaking_news: '#F87171',
+            policy: '#60A5FA',
+            supply_demand: '#6BBF8A',
+            analysis: '#C084FC',
+          };
+
+          const categoryLabels = {
+            market_brief: 'Market Brief',
+            breaking_news: 'Breaking',
+            policy: 'Policy',
+            supply_demand: 'Supply & Demand',
+            analysis: 'Analysis',
+          };
+
+          const todayCardBg = isDarkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)';
+          const todayCardBorder = isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
+
+          return (
+            <View style={{ backgroundColor: isDarkMode ? '#0d0d0d' : colors.bg, marginHorizontal: -20, paddingHorizontal: 16, paddingTop: 4, minHeight: Dimensions.get('window').height - 200 }}>
+
+              {/* ===== SECTION 1: PORTFOLIO PULSE ===== */}
+              <View style={{
+                backgroundColor: todayCardBg,
+                borderRadius: 16,
+                borderWidth: 1,
+                borderColor: todayCardBorder,
+                padding: 20,
+                marginBottom: 16,
+                overflow: 'hidden',
+              }}>
+                {/* Gold accent line */}
+                <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, backgroundColor: '#D4A843' }} />
+
+                <Text style={{ color: colors.muted, fontSize: 13, fontWeight: '500', marginBottom: 4, marginTop: 4 }}>Today, {dateStr}</Text>
+
+                <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 12, marginBottom: 6 }}>
+                  <Text style={{ color: colors.text, fontSize: 36, fontWeight: '700' }}>${formatCurrency(totalMeltValue, 0)}</Text>
+                </View>
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+                  <Text style={{ color: dailyChange >= 0 ? '#4CAF50' : '#F44336', fontSize: 15, fontWeight: '600' }}>
+                    {dailyChange >= 0 ? '▲' : '▼'} ${formatCurrency(Math.abs(dailyChange), 0)}
+                  </Text>
+                  <Text style={{ color: dailyChange >= 0 ? '#4CAF50' : '#F44336', fontSize: 13 }}>
+                    ({dailyChangePct >= 0 ? '+' : ''}{dailyChangePct.toFixed(2)}%)
+                  </Text>
+                </View>
+
+                <Text style={{ color: colors.muted, fontSize: 13, lineHeight: 18, fontStyle: 'italic' }}>{aiSummary}</Text>
+              </View>
+
+              {/* ===== SECTION 2: METAL MOVERS ===== */}
+              <View style={{ marginBottom: 16 }}>
+                <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '600', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 10, marginLeft: 4 }}>Metal Movers</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
+                  {metalMovers.map(m => (
+                    <View key={m.symbol} style={{
+                      backgroundColor: todayCardBg,
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: todayCardBorder,
+                      padding: 14,
+                      width: 140,
+                      overflow: 'hidden',
+                    }}>
+                      {/* Color accent left edge */}
+                      <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: 3, backgroundColor: m.color }} />
+
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: m.color }} />
+                        <Text style={{ color: m.color, fontSize: 13, fontWeight: '700' }}>{m.symbol}</Text>
+                        {Math.abs(m.pct) > 3 && (
+                          <View style={{ backgroundColor: 'rgba(248,113,113,0.15)', borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 }}>
+                            <Text style={{ color: '#F87171', fontSize: 9, fontWeight: '700' }}>HOT</Text>
+                          </View>
+                        )}
+                      </View>
+
+                      <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700', marginBottom: 4 }}>
+                        ${m.symbol === 'Ag' ? m.spot.toFixed(2) : m.spot.toFixed(0)}
+                      </Text>
+
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        <Text style={{ color: m.change >= 0 ? '#4CAF50' : '#F44336', fontSize: 12, fontWeight: '600' }}>
+                          {m.change >= 0 ? '+' : ''}{m.symbol === 'Ag' ? m.change.toFixed(2) : m.change.toFixed(0)}
+                        </Text>
+                        <Text style={{ color: m.pct >= 0 ? '#4CAF50' : '#F44336', fontSize: 11 }}>
+                          ({m.pct >= 0 ? '+' : ''}{m.pct.toFixed(1)}%)
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+
+              {/* ===== SECTION 3: WHAT CHANGED TODAY (Gold-only) ===== */}
+              <View style={{ position: 'relative', marginBottom: 16 }}>
+                <View style={{ opacity: hasGoldAccess ? 1 : 0.4 }} pointerEvents={hasGoldAccess ? 'auto' : 'none'}>
+                  {holdingsImpact.length > 0 && (
+                    <View>
+                      <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '600', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 10, marginLeft: 4 }}>What Changed Today</Text>
+                      <View style={{
+                        backgroundColor: todayCardBg,
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        borderColor: todayCardBorder,
+                        overflow: 'hidden',
+                      }}>
+                        {holdingsImpact.map((m, i) => (
+                          <View key={m.label} style={{
+                            paddingVertical: 14,
+                            paddingHorizontal: 16,
+                            borderBottomWidth: i < holdingsImpact.length - 1 ? 1 : 0,
+                            borderBottomColor: todayCardBorder,
+                          }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: m.color }} />
+                              <Text style={{ color: colors.text, fontSize: 14, flex: 1 }}>
+                                Your {m.label.toLowerCase()} ({formatOunces(m.ozt, m.label === 'Silver' ? 0 : 2)} oz)
+                              </Text>
+                            </View>
+                            <Text style={{ color: m.dollarChange >= 0 ? '#4CAF50' : '#F44336', fontSize: 14, fontWeight: '600', marginLeft: 16, marginTop: 4 }}>
+                              {m.dollarChange >= 0 ? 'gained' : 'lost'} ${formatCurrency(Math.abs(m.dollarChange), 0)} ({m.pct >= 0 ? '+' : ''}{m.pct.toFixed(1)}%)
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  )}
+                  {holdingsImpact.length === 0 && (
+                    <View style={{
+                      backgroundColor: todayCardBg,
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: todayCardBorder,
+                      padding: 20,
+                      alignItems: 'center',
+                    }}>
+                      <Text style={{ color: colors.muted, fontSize: 14 }}>Add holdings to see daily impact</Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Gold-only overlay */}
+                {!hasGoldAccess && (
+                  <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
+                    <View style={{
+                      backgroundColor: isDarkMode ? 'rgba(26, 26, 46, 0.95)' : 'rgba(255,255,255,0.95)',
+                      borderRadius: 16,
+                      padding: 20,
+                      marginHorizontal: 20,
+                      alignItems: 'center',
+                      borderWidth: 1,
+                      borderColor: 'rgba(212, 168, 67, 0.3)',
+                    }}>
+                      <Text style={{ color: colors.gold, fontSize: scaledFonts.medium, fontWeight: '700', marginBottom: 6 }}>Unlock Daily Intelligence</Text>
+                      <Text style={{ color: colors.muted, textAlign: 'center', marginBottom: 14, fontSize: scaledFonts.small, lineHeight: 18 }}>
+                        See how your holdings changed and get market intelligence
+                      </Text>
+                      <TouchableOpacity
+                        style={{ backgroundColor: colors.gold, paddingVertical: 10, paddingHorizontal: 24, borderRadius: 10 }}
+                        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setShowPaywallModal(true); }}
+                      >
+                        <Text style={{ color: '#000', fontWeight: '700', fontSize: scaledFonts.normal }}>Upgrade to Gold</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+              </View>
+
+              {/* ===== SECTION 4: INTELLIGENCE FEED (Gold-only) ===== */}
+              <View style={{ position: 'relative', marginBottom: 16 }}>
+                <View style={{ opacity: hasGoldAccess ? 1 : 0.4 }} pointerEvents={hasGoldAccess ? 'auto' : 'none'}>
+                  {/* Section header with gold divider */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 10 }}>
+                    <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '600', letterSpacing: 1.2, textTransform: 'uppercase', marginLeft: 4 }}>Market Intelligence</Text>
+                    <View style={{ flex: 1, height: 1, backgroundColor: 'rgba(212,168,67,0.2)' }} />
+                  </View>
+
+                  {intelligenceLoading && intelligenceBriefs.length === 0 ? (
+                    // Loading skeletons
+                    <View style={{ gap: 10 }}>
+                      {[1, 2, 3].map(i => (
+                        <View key={i} style={{
+                          backgroundColor: todayCardBg,
+                          borderRadius: 12,
+                          borderWidth: 1,
+                          borderColor: todayCardBorder,
+                          padding: 16,
+                        }}>
+                          <View style={{ width: 60, height: 12, backgroundColor: isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)', borderRadius: 4, marginBottom: 8 }} />
+                          <View style={{ width: '80%', height: 14, backgroundColor: isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)', borderRadius: 4, marginBottom: 6 }} />
+                          <View style={{ width: '100%', height: 10, backgroundColor: isDarkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)', borderRadius: 4, marginBottom: 4 }} />
+                          <View style={{ width: '90%', height: 10, backgroundColor: isDarkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)', borderRadius: 4 }} />
+                        </View>
+                      ))}
+                    </View>
+                  ) : intelligenceBriefs.length > 0 ? (
+                    <View style={{ gap: 10 }}>
+                      {intelligenceBriefs.map((brief, i) => (
+                        <TouchableOpacity
+                          key={brief.id || i}
+                          style={{
+                            backgroundColor: todayCardBg,
+                            borderRadius: 12,
+                            borderWidth: 1,
+                            borderColor: todayCardBorder,
+                            padding: 16,
+                          }}
+                          onPress={() => {
+                            if (brief.source_url) {
+                              Linking.openURL(brief.source_url);
+                            }
+                          }}
+                          activeOpacity={brief.source_url ? 0.7 : 1}
+                        >
+                          {/* Category tag */}
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                            <View style={{
+                              backgroundColor: `${categoryColors[brief.category] || '#D4A843'}20`,
+                              borderRadius: 4,
+                              paddingHorizontal: 6,
+                              paddingVertical: 2,
+                            }}>
+                              <Text style={{ color: categoryColors[brief.category] || '#D4A843', fontSize: 10, fontWeight: '700', textTransform: 'uppercase' }}>
+                                {categoryLabels[brief.category] || brief.category}
+                              </Text>
+                            </View>
+                            {brief.source && (
+                              <Text style={{ color: colors.muted, fontSize: 10 }}>{brief.source}</Text>
+                            )}
+                          </View>
+
+                          {/* Title */}
+                          <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600', marginBottom: 6, lineHeight: 20 }}>{brief.title}</Text>
+
+                          {/* Summary */}
+                          <Text style={{ color: colors.muted, fontSize: 13, lineHeight: 18 }}>{brief.summary}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  ) : (
+                    <View style={{
+                      backgroundColor: todayCardBg,
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: todayCardBorder,
+                      padding: 24,
+                      alignItems: 'center',
+                    }}>
+                      <Text style={{ color: colors.muted, fontSize: 14, textAlign: 'center' }}>Intelligence feed updating...</Text>
+                      <Text style={{ color: colors.muted, fontSize: 12, marginTop: 4, textAlign: 'center' }}>Check back soon for today's market briefs</Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Gold-only overlay for intelligence (only if section 3 doesn't already show it) */}
+                {!hasGoldAccess && holdingsImpact.length === 0 && (
+                  <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
+                    <View style={{
+                      backgroundColor: isDarkMode ? 'rgba(26, 26, 46, 0.95)' : 'rgba(255,255,255,0.95)',
+                      borderRadius: 16,
+                      padding: 20,
+                      marginHorizontal: 20,
+                      alignItems: 'center',
+                      borderWidth: 1,
+                      borderColor: 'rgba(212, 168, 67, 0.3)',
+                    }}>
+                      <Text style={{ color: colors.gold, fontSize: scaledFonts.medium, fontWeight: '700', marginBottom: 6 }}>Unlock Daily Intelligence</Text>
+                      <Text style={{ color: colors.muted, textAlign: 'center', marginBottom: 14, fontSize: scaledFonts.small, lineHeight: 18 }}>
+                        Get AI-powered market briefs delivered daily
+                      </Text>
+                      <TouchableOpacity
+                        style={{ backgroundColor: colors.gold, paddingVertical: 10, paddingHorizontal: 24, borderRadius: 10 }}
+                        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setShowPaywallModal(true); }}
+                      >
+                        <Text style={{ color: '#000', fontWeight: '700', fontSize: scaledFonts.normal }}>Upgrade to Gold</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+              </View>
+
+              {/* ===== SECTION 5: FOOTER ===== */}
+              <View style={{ alignItems: 'center', paddingVertical: 24, marginBottom: 20 }}>
+                <Text style={{ color: colors.muted, fontSize: 11, opacity: 0.6 }}>Powered by Stack Tracker Gold</Text>
+                <Text style={{ color: colors.muted, fontSize: 10, opacity: 0.4, marginTop: 4 }}>Intelligence updates daily at 6:30 AM EST</Text>
+              </View>
+
+            </View>
+          );
+        })()}
 
         {/* HOLDINGS TAB */}
         {tab === 'holdings' && (
@@ -7298,10 +7691,10 @@ function AppContent() {
       <View style={[styles.bottomTabs, { backgroundColor: isDarkMode ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.95)', borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom, 10) }]}>
         {[
           { key: 'dashboard', label: 'Dashboard', Icon: DashboardIcon },
+          { key: 'today', label: 'Today', Icon: TodayIcon },
           { key: 'holdings', label: 'Holdings', Icon: HoldingsIcon },
           { key: 'analytics', label: 'Analytics', Icon: AnalyticsIcon },
           { key: 'tools', label: 'Tools', Icon: ToolsIcon },
-          { key: 'settings', label: 'Settings', Icon: SettingsIcon },
         ].map(t => (
           <TouchableOpacity key={t.key} style={styles.bottomTab} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setTab(t.key); }}>
             <t.Icon size={22} color={tab === t.key ? colors.gold : colors.muted} />

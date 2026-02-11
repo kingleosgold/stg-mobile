@@ -7,3 +7,4 @@ export { default as AnalyticsIcon } from './AnalyticsIcon';
 export { default as ToolsIcon } from './ToolsIcon';
 export { default as SettingsIcon } from './SettingsIcon';
 export { default as SortIcon } from './SortIcon';
+export { default as TodayIcon } from './TodayIcon';

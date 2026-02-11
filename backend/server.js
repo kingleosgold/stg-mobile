@@ -2753,6 +2753,100 @@ app.get('/api/price-alerts', async (req, res) => {
 });
 
 // ============================================
+// INTELLIGENCE FEED (Today Tab)
+// ============================================
+
+// GET /api/intelligence - Fetch daily intelligence briefs
+app.get('/api/intelligence', async (req, res) => {
+  try {
+    const date = req.query.date || new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+
+    if (!isSupabaseAvailable()) {
+      return res.json({
+        success: true,
+        date,
+        briefs: [],
+        generated_at: new Date().toISOString(),
+        spot_prices: spotPriceCache.prices || {},
+        message: 'Intelligence feed not configured',
+      });
+    }
+
+    const sb = getSupabase();
+    const { data, error } = await sb
+      .from('intelligence_briefs')
+      .select('*')
+      .eq('date', date)
+      .order('relevance_score', { ascending: false });
+
+    if (error) {
+      console.error('Intelligence fetch error:', error);
+      return res.json({
+        success: true,
+        date,
+        briefs: [],
+        generated_at: new Date().toISOString(),
+        spot_prices: spotPriceCache.prices || {},
+        error: error.message,
+      });
+    }
+
+    // Filter out expired briefs
+    const now = new Date();
+    const activeBriefs = (data || []).filter(b =>
+      !b.expires_at || new Date(b.expires_at) > now
+    );
+
+    res.json({
+      success: true,
+      date,
+      briefs: activeBriefs,
+      generated_at: new Date().toISOString(),
+      spot_prices: spotPriceCache.prices || {},
+    });
+  } catch (error) {
+    console.error('Intelligence endpoint error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/intelligence/seed - Seed intelligence briefs (testing)
+app.post('/api/intelligence/seed', async (req, res) => {
+  try {
+    // API key check
+    const apiKey = req.headers['x-api-key'] || req.query.api_key;
+    if (!apiKey || apiKey !== process.env.INTELLIGENCE_API_KEY) {
+      return res.status(401).json({ success: false, error: 'Invalid API key' });
+    }
+
+    if (!isSupabaseAvailable()) {
+      return res.status(503).json({ success: false, error: 'Supabase not configured' });
+    }
+
+    const { briefs } = req.body;
+    if (!briefs || !Array.isArray(briefs) || briefs.length === 0) {
+      return res.status(400).json({ success: false, error: 'briefs array required' });
+    }
+
+    const sb = getSupabase();
+    const { data, error } = await sb
+      .from('intelligence_briefs')
+      .insert(briefs)
+      .select();
+
+    if (error) {
+      console.error('Intelligence seed error:', error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+
+    res.json({ success: true, inserted: data.length, briefs: data });
+  } catch (error) {
+    console.error('Intelligence seed endpoint error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================
 // STARTUP
 // ============================================
 
