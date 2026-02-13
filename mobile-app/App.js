@@ -1561,7 +1561,9 @@ function AppContent() {
       }
 
       // Show v2.0 tutorial if user hasn't seen it (and has seen the original)
+      console.log('[DEBUG] has_seen_v2_0_tutorial =', hasSeenV20Tutorial, '| hasSeenTutorial =', hasSeenTutorial);
       if (hasSeenTutorial && !hasSeenV20Tutorial) {
+        console.log('[DEBUG] Triggering v2.0 tutorial');
         setShowV20Tutorial(true);
       }
 
