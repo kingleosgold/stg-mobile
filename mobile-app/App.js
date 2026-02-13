@@ -814,7 +814,7 @@ function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [tab, setTab] = useState('dashboard');
+  const [tab, setTab] = useState('today');
   const [metalTab, setMetalTab] = useState('both'); // Changed from 'silver' to 'both'
 
   // Spot Prices - Updated defaults for Dec 2025
@@ -852,6 +852,14 @@ function AppContent() {
   const [showPremiumAnalysisModal, setShowPremiumAnalysisModal] = useState(false);
   const [showPaywallModal, setShowPaywallModal] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
+  const [showV15Tutorial, setShowV15Tutorial] = useState(false);
+
+  // AI Stack Advisor state
+  const [advisorMessages, setAdvisorMessages] = useState([]);
+  const [advisorInput, setAdvisorInput] = useState('');
+  const [advisorLoading, setAdvisorLoading] = useState(false);
+  const [advisorQuestionsToday, setAdvisorQuestionsToday] = useState(0);
+  const advisorScrollRef = useRef(null);
   const [showImportPreview, setShowImportPreview] = useState(false);
   const [importData, setImportData] = useState([]);
   const [showDealerSelector, setShowDealerSelector] = useState(false);
@@ -1462,7 +1470,7 @@ function AppContent() {
 
   const loadData = async () => {
     try {
-      const [silver, gold, platinum, palladium, silverS, goldS, platinumS, palladiumS, timestamp, hasSeenTutorial, storedMidnightSnapshot, storedTheme, storedChangeDisplayMode, storedLargeText, storedSilverMilestone, storedGoldMilestone, storedLastSilverReached, storedLastGoldReached, storedGuestMode, storedHideWidgetValues] = await Promise.all([
+      const [silver, gold, platinum, palladium, silverS, goldS, platinumS, palladiumS, timestamp, hasSeenTutorial, storedMidnightSnapshot, storedTheme, storedChangeDisplayMode, storedLargeText, storedSilverMilestone, storedGoldMilestone, storedLastSilverReached, storedLastGoldReached, storedGuestMode, storedHideWidgetValues, hasSeenV15Tutorial, storedAdvisorCount] = await Promise.all([
         AsyncStorage.getItem('stack_silver'),
         AsyncStorage.getItem('stack_gold'),
         AsyncStorage.getItem('stack_platinum'),
@@ -1483,6 +1491,8 @@ function AppContent() {
         AsyncStorage.getItem('stack_last_gold_milestone_reached'),
         AsyncStorage.getItem('stack_guest_mode'),
         AsyncStorage.getItem('stack_hide_widget_values'),
+        AsyncStorage.getItem('has_seen_v1_5_tutorial'),
+        AsyncStorage.getItem('stack_advisor_count'),
       ]);
 
       // Safely parse JSON data with fallbacks
@@ -1551,6 +1561,22 @@ function AppContent() {
       // Show tutorial if user hasn't seen it
       if (!hasSeenTutorial) {
         setShowTutorial(true);
+      }
+
+      // Show v1.5 tutorial if user hasn't seen it (and has seen the original)
+      if (hasSeenTutorial && !hasSeenV15Tutorial) {
+        setShowV15Tutorial(true);
+      }
+
+      // Load advisor daily question count (reset if from a different day)
+      if (storedAdvisorCount) {
+        try {
+          const parsed = JSON.parse(storedAdvisorCount);
+          const today = new Date().toDateString();
+          if (parsed.date === today) {
+            setAdvisorQuestionsToday(parsed.count || 0);
+          }
+        } catch (e) { /* ignore */ }
       }
 
       // Mark data as loaded BEFORE fetching prices - this prevents the save useEffect from overwriting
@@ -2437,6 +2463,73 @@ function AppContent() {
     } catch (error) {
       console.error('Error saving tutorial status:', error);
       setShowTutorial(false);
+    }
+  };
+
+  // v1.5 Tutorial completion handler
+  const handleV15TutorialComplete = async () => {
+    try {
+      await AsyncStorage.setItem('has_seen_v1_5_tutorial', 'true');
+      setShowV15Tutorial(false);
+    } catch (error) {
+      console.error('Error saving v1.5 tutorial status:', error);
+      setShowV15Tutorial(false);
+    }
+  };
+
+  // v1.5 Tutorial slides
+  const v15TutorialSlides = [
+    { emoji: '☀️', title: 'Meet Your New Today Tab', description: 'Get AI-powered market intelligence every morning at 6:30 AM. See what moved, what changed, and what it means for your stack.' },
+    { emoji: '🏦', title: 'COMEX Vault Watch', description: 'Track real-time COMEX warehouse inventory for gold, silver, platinum, and palladium. See when supply gets tight.' },
+    { emoji: '💬', title: 'AI Stack Advisor', description: "Ask questions about your portfolio and get personalized answers. 'Should I buy more silver?' 'What's my break-even?' The AI knows your stack." },
+    { emoji: '🔴🟡⚪🟢', title: 'Platinum & Palladium', description: 'Now track all four precious metals. Your portfolio just got more powerful.' },
+    { emoji: '🖥️', title: 'New Web App', description: 'Access your full portfolio at app.stacktrackergold.com — same account, same data, bigger screen. Your Bloomberg terminal for precious metals.', button: { label: 'Visit Web App', url: 'https://app.stacktrackergold.com' } },
+    { emoji: '✅', title: "You're All Set!", description: 'Enjoy Stack Tracker Gold v1.5.0. We build this for stackers, by stackers.', highlight: 'Stack on! 🪙' },
+  ];
+
+  // AI Stack Advisor — send message
+  const sendAdvisorMessage = async (messageText) => {
+    const text = (messageText || advisorInput).trim();
+    if (!text || advisorLoading) return;
+
+    if (advisorQuestionsToday >= 25) {
+      Alert.alert('Daily Limit', 'You\'ve used all 25 questions for today. Check back tomorrow!');
+      return;
+    }
+
+    const userMsg = { role: 'user', text, timestamp: Date.now() };
+    setAdvisorMessages(prev => [...prev, userMsg]);
+    setAdvisorInput('');
+    setAdvisorLoading(true);
+
+    // Update daily count
+    const newCount = advisorQuestionsToday + 1;
+    setAdvisorQuestionsToday(newCount);
+    AsyncStorage.setItem('stack_advisor_count', JSON.stringify({ date: new Date().toDateString(), count: newCount }));
+
+    try {
+      const history = advisorMessages.map(m => ({ role: m.role, content: m.text }));
+      const response = await fetch(`${API_BASE_URL}/api/advisor/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: supabaseUser?.id || null,
+          message: text,
+          conversationHistory: history,
+        }),
+      });
+      const data = await response.json();
+      if (data.response) {
+        setAdvisorMessages(prev => [...prev, { role: 'assistant', text: data.response, timestamp: Date.now() }]);
+      } else {
+        setAdvisorMessages(prev => [...prev, { role: 'assistant', text: 'Sorry, I couldn\'t process that. Please try again.', timestamp: Date.now() }]);
+      }
+    } catch (error) {
+      console.error('Advisor error:', error);
+      setAdvisorMessages(prev => [...prev, { role: 'assistant', text: 'Connection error. Please check your internet and try again.', timestamp: Date.now() }]);
+    } finally {
+      setAdvisorLoading(false);
+      setTimeout(() => advisorScrollRef.current?.scrollToEnd({ animated: true }), 100);
     }
   };
 
@@ -6038,6 +6131,196 @@ function AppContent() {
                 )}
               </View>
 
+              {/* ===== SECTION 4.5: AI STACK ADVISOR (Gold-only) ===== */}
+              <View style={{ position: 'relative', marginBottom: 16 }}>
+                <View style={{ opacity: hasGoldAccess ? 1 : 0.4 }} pointerEvents={hasGoldAccess ? 'auto' : 'none'}>
+                  {/* Section header with gold divider */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6, gap: 10 }}>
+                    <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '600', letterSpacing: 1.2, textTransform: 'uppercase', marginLeft: 4 }}>
+                      {'\u2728'} AI Stack Advisor
+                    </Text>
+                    <View style={{ flex: 1, height: 1, backgroundColor: 'rgba(212,168,67,0.2)' }} />
+                  </View>
+                  <Text style={{ color: colors.muted, fontSize: 11, marginBottom: 12, marginLeft: 4 }}>Ask anything about your portfolio</Text>
+
+                  {!supabaseUser ? (
+                    <View style={{
+                      backgroundColor: todayCardBg,
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: todayCardBorder,
+                      padding: 24,
+                      alignItems: 'center',
+                    }}>
+                      <Text style={{ color: colors.muted, fontSize: 14, textAlign: 'center', marginBottom: 12 }}>Sign in to use AI Stack Advisor</Text>
+                      <TouchableOpacity
+                        style={{ backgroundColor: colors.gold, paddingVertical: 10, paddingHorizontal: 24, borderRadius: 10 }}
+                        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setGuestMode(false); }}
+                      >
+                        <Text style={{ color: '#000', fontWeight: '700', fontSize: 14 }}>Sign In</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View style={{
+                      backgroundColor: todayCardBg,
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: todayCardBorder,
+                      overflow: 'hidden',
+                    }}>
+                      {/* Chat area */}
+                      <ScrollView
+                        ref={advisorScrollRef}
+                        style={{ maxHeight: 400, padding: 12 }}
+                        onContentSizeChange={() => advisorScrollRef.current?.scrollToEnd({ animated: true })}
+                      >
+                        {advisorMessages.length === 0 ? (
+                          <View style={{ gap: 8, paddingVertical: 8 }}>
+                            <Text style={{ color: colors.muted, fontSize: 13, textAlign: 'center', marginBottom: 8 }}>Try asking:</Text>
+                            {[
+                              'How is my portfolio performing?',
+                              'Should I buy more silver or gold?',
+                              'Analyze my gold-to-silver ratio',
+                              'What if silver hits $100?',
+                              "What's my best and worst purchase?",
+                            ].map((q, i) => (
+                              <TouchableOpacity
+                                key={i}
+                                style={{
+                                  backgroundColor: isDarkMode ? 'rgba(212,168,67,0.08)' : 'rgba(212,168,67,0.1)',
+                                  borderRadius: 16,
+                                  paddingVertical: 10,
+                                  paddingHorizontal: 14,
+                                  borderWidth: 1,
+                                  borderColor: 'rgba(212,168,67,0.2)',
+                                  alignSelf: 'flex-start',
+                                }}
+                                onPress={() => {
+                                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                  sendAdvisorMessage(q);
+                                }}
+                              >
+                                <Text style={{ color: '#D4A843', fontSize: 13 }}>{q}</Text>
+                              </TouchableOpacity>
+                            ))}
+                          </View>
+                        ) : (
+                          <View style={{ gap: 10 }}>
+                            {advisorMessages.map((msg, i) => (
+                              <View
+                                key={i}
+                                style={{
+                                  alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                                  backgroundColor: msg.role === 'user' ? '#D4A843' : (isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'),
+                                  borderRadius: 14,
+                                  paddingVertical: 10,
+                                  paddingHorizontal: 14,
+                                  maxWidth: '85%',
+                                }}
+                              >
+                                <Text style={{
+                                  color: msg.role === 'user' ? '#000' : colors.text,
+                                  fontSize: 14,
+                                  lineHeight: 20,
+                                }}>{msg.text}</Text>
+                              </View>
+                            ))}
+                            {advisorLoading && (
+                              <View style={{
+                                alignSelf: 'flex-start',
+                                backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+                                borderRadius: 14,
+                                paddingVertical: 10,
+                                paddingHorizontal: 14,
+                              }}>
+                                <Text style={{ color: colors.muted, fontSize: 13, fontStyle: 'italic' }}>Thinking...</Text>
+                              </View>
+                            )}
+                          </View>
+                        )}
+                      </ScrollView>
+
+                      {/* Input bar */}
+                      <View style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        borderTopWidth: 1,
+                        borderTopColor: todayCardBorder,
+                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                        gap: 8,
+                      }}>
+                        <TextInput
+                          style={{
+                            flex: 1,
+                            backgroundColor: isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+                            borderRadius: 20,
+                            paddingVertical: 8,
+                            paddingHorizontal: 14,
+                            color: colors.text,
+                            fontSize: 14,
+                          }}
+                          placeholder="Ask about your portfolio..."
+                          placeholderTextColor={colors.muted}
+                          value={advisorInput}
+                          onChangeText={setAdvisorInput}
+                          onSubmitEditing={() => sendAdvisorMessage()}
+                          returnKeyType="send"
+                          editable={!advisorLoading}
+                        />
+                        <TouchableOpacity
+                          onPress={() => sendAdvisorMessage()}
+                          disabled={!advisorInput.trim() || advisorLoading}
+                          style={{
+                            width: 36,
+                            height: 36,
+                            borderRadius: 18,
+                            backgroundColor: advisorInput.trim() ? '#D4A843' : (isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'),
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <Text style={{ color: advisorInput.trim() ? '#000' : colors.muted, fontSize: 16, fontWeight: '700' }}>{'\u2191'}</Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {/* Questions remaining */}
+                      <View style={{ paddingHorizontal: 12, paddingBottom: 8 }}>
+                        <Text style={{ color: colors.muted, fontSize: 10, textAlign: 'center' }}>
+                          {25 - advisorQuestionsToday} questions remaining today
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+                </View>
+
+                {/* Gold-only overlay */}
+                {!hasGoldAccess && (
+                  <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
+                    <View style={{
+                      backgroundColor: isDarkMode ? 'rgba(26, 26, 46, 0.95)' : 'rgba(255,255,255,0.95)',
+                      borderRadius: 16,
+                      padding: 20,
+                      marginHorizontal: 20,
+                      alignItems: 'center',
+                      borderWidth: 1,
+                      borderColor: 'rgba(212, 168, 67, 0.3)',
+                    }}>
+                      <Text style={{ color: colors.gold, fontSize: scaledFonts.medium, fontWeight: '700', marginBottom: 6 }}>Unlock AI Stack Advisor</Text>
+                      <Text style={{ color: colors.muted, textAlign: 'center', marginBottom: 14, fontSize: scaledFonts.small, lineHeight: 18 }}>
+                        Get personalized advice about your precious metals portfolio
+                      </Text>
+                      <TouchableOpacity
+                        style={{ backgroundColor: colors.gold, paddingVertical: 10, paddingHorizontal: 24, borderRadius: 10 }}
+                        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setShowPaywallModal(true); }}
+                      >
+                        <Text style={{ color: '#000', fontWeight: '700', fontSize: scaledFonts.normal }}>Upgrade to Gold</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+              </View>
+
               {/* ===== SECTION 5: FOOTER ===== */}
               <View style={{ alignItems: 'center', paddingVertical: 24, marginBottom: 20 }}>
                 <Text style={{ color: colors.muted, fontSize: 11, opacity: 0.6 }}>Powered by Stack Tracker Gold</Text>
@@ -7790,6 +8073,18 @@ function AppContent() {
                     setShowHelpModal(true);
                   }}
                   isFirst={false}
+                  isLast={false}
+                />
+                <RowSeparator />
+                <SettingsRow
+                  label="What's New in v1.5.0"
+                  subtitle="See the latest features"
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    AsyncStorage.removeItem('has_seen_v1_5_tutorial');
+                    setShowV15Tutorial(true);
+                  }}
+                  isFirst={false}
                   isLast={true}
                 />
               </View>
@@ -7980,8 +8275,8 @@ function AppContent() {
       {/* Bottom Tabs */}
       <View style={[styles.bottomTabs, { backgroundColor: isDarkMode ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.95)', borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom, 10) }]}>
         {[
-          { key: 'dashboard', label: 'Dashboard', Icon: DashboardIcon },
           { key: 'today', label: 'Today', Icon: TodayIcon },
+          { key: 'dashboard', label: 'Dashboard', Icon: DashboardIcon },
           { key: 'holdings', label: 'Holdings', Icon: HoldingsIcon },
           { key: 'analytics', label: 'Analytics', Icon: AnalyticsIcon },
           { key: 'tools', label: 'Tools', Icon: ToolsIcon },
@@ -9588,6 +9883,13 @@ function AppContent() {
       <Tutorial
         visible={showTutorial}
         onComplete={handleTutorialComplete}
+      />
+
+      {/* v1.5 Update Tutorial */}
+      <Tutorial
+        visible={showV15Tutorial}
+        onComplete={handleV15TutorialComplete}
+        slides={v15TutorialSlides}
       />
     </SafeAreaView>
   );
