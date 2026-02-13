@@ -4168,6 +4168,85 @@ app.post('/api/stripe/customer-portal', async (req, res) => {
   }
 });
 
+// POST /api/stripe/verify-session — Fallback: verify checkout session directly
+app.post('/api/stripe/verify-session', async (req, res) => {
+  try {
+    if (!stripe) {
+      return res.status(503).json({ error: 'Stripe is not configured' });
+    }
+    if (!isSupabaseAvailable()) {
+      return res.status(503).json({ error: 'Database not available' });
+    }
+
+    const { session_id } = req.body;
+    if (!session_id || typeof session_id !== 'string') {
+      return res.status(400).json({ error: 'session_id is required' });
+    }
+
+    const session = await stripe.checkout.sessions.retrieve(session_id, {
+      expand: ['subscription'],
+    });
+
+    const userId = session.client_reference_id || session.metadata?.user_id;
+    if (!userId || !isUUID(userId)) {
+      return res.status(400).json({ error: 'No valid user_id in session' });
+    }
+
+    // Check if payment/trial is successful
+    const subscription = session.subscription; // expanded object
+    const subStatus = subscription?.status;
+    const isPaid = session.payment_status === 'paid';
+    const isTrialing = subStatus === 'trialing';
+    const isActive = subStatus === 'active';
+
+    if (!isPaid && !isTrialing && !isActive) {
+      return res.json({ success: false, reason: 'Session not yet paid or trialing' });
+    }
+
+    // Determine tier
+    let tier = session.metadata?.tier || 'gold';
+    let subscriptionStatus = 'active';
+    let trialEnd = null;
+
+    if (subscription) {
+      const priceId = subscription.items?.data?.[0]?.price?.id;
+      if (priceId) {
+        tier = mapStripePriceToTier(priceId);
+      }
+      subscriptionStatus = subscription.status || 'active';
+      if (subscription.trial_end) {
+        trialEnd = new Date(subscription.trial_end * 1000).toISOString();
+      }
+    } else if (session.mode === 'payment') {
+      tier = session.metadata?.tier || 'lifetime';
+    }
+
+    // Update profiles
+    const supabaseClient = getSupabase();
+    const { error } = await supabaseClient
+      .from('profiles')
+      .update({
+        subscription_tier: tier,
+        stripe_customer_id: session.customer,
+        subscription_status: subscriptionStatus,
+        trial_end: trialEnd,
+      })
+      .eq('id', userId);
+
+    if (error) {
+      console.error('❌ [Stripe Verify] Failed to update profile:', error.message);
+      return res.status(500).json({ error: 'Failed to update subscription' });
+    }
+
+    console.log(`✅ [Stripe Verify] Session verified: user=${userId}, tier=${tier}, status=${subscriptionStatus}`);
+    return res.json({ success: true, tier });
+
+  } catch (error) {
+    console.error('❌ [Stripe Verify] Error:', error.message);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
 // ============================================
 // STARTUP
 // ============================================
