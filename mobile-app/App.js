@@ -852,7 +852,7 @@ function AppContent() {
   const [showPremiumAnalysisModal, setShowPremiumAnalysisModal] = useState(false);
   const [showPaywallModal, setShowPaywallModal] = useState(false);
   const [showTutorial, setShowTutorial] = useState(false);
-  const [showV15Tutorial, setShowV15Tutorial] = useState(false);
+  const [showV20Tutorial, setShowV20Tutorial] = useState(false);
 
   // AI Stack Advisor state
   const [advisorMessages, setAdvisorMessages] = useState([]);
@@ -900,9 +900,6 @@ function AppContent() {
   // Lifetime Access (granted via RevenueCat)
   const [hasLifetimeAccess, setHasLifetimeAccess] = useState(false);
   const [revenueCatUserId, setRevenueCatUserId] = useState(null);
-
-  // Upgrade Banner (session-only dismissal)
-  const [upgradeBannerDismissed, setUpgradeBannerDismissed] = useState(false);
 
   // iCloud Sync State
   const [iCloudSyncEnabled, setICloudSyncEnabled] = useState(false);
@@ -1470,7 +1467,7 @@ function AppContent() {
 
   const loadData = async () => {
     try {
-      const [silver, gold, platinum, palladium, silverS, goldS, platinumS, palladiumS, timestamp, hasSeenTutorial, storedMidnightSnapshot, storedTheme, storedChangeDisplayMode, storedLargeText, storedSilverMilestone, storedGoldMilestone, storedLastSilverReached, storedLastGoldReached, storedGuestMode, storedHideWidgetValues, hasSeenV15Tutorial, storedAdvisorCount] = await Promise.all([
+      const [silver, gold, platinum, palladium, silverS, goldS, platinumS, palladiumS, timestamp, hasSeenTutorial, storedMidnightSnapshot, storedTheme, storedChangeDisplayMode, storedLargeText, storedSilverMilestone, storedGoldMilestone, storedLastSilverReached, storedLastGoldReached, storedGuestMode, storedHideWidgetValues, hasSeenV20Tutorial, storedAdvisorCount] = await Promise.all([
         AsyncStorage.getItem('stack_silver'),
         AsyncStorage.getItem('stack_gold'),
         AsyncStorage.getItem('stack_platinum'),
@@ -1491,7 +1488,7 @@ function AppContent() {
         AsyncStorage.getItem('stack_last_gold_milestone_reached'),
         AsyncStorage.getItem('stack_guest_mode'),
         AsyncStorage.getItem('stack_hide_widget_values'),
-        AsyncStorage.getItem('has_seen_v1_5_tutorial'),
+        AsyncStorage.getItem('has_seen_v2_0_tutorial'),
         AsyncStorage.getItem('stack_advisor_count'),
       ]);
 
@@ -1563,9 +1560,9 @@ function AppContent() {
         setShowTutorial(true);
       }
 
-      // Show v1.5 tutorial if user hasn't seen it (and has seen the original)
-      if (hasSeenTutorial && !hasSeenV15Tutorial) {
-        setShowV15Tutorial(true);
+      // Show v2.0 tutorial if user hasn't seen it (and has seen the original)
+      if (hasSeenTutorial && !hasSeenV20Tutorial) {
+        setShowV20Tutorial(true);
       }
 
       // Load advisor daily question count (reset if from a different day)
@@ -2481,25 +2478,26 @@ function AppContent() {
     }
   };
 
-  // v1.5 Tutorial completion handler
-  const handleV15TutorialComplete = async () => {
+  // v2.0 Tutorial completion handler
+  const handleV20TutorialComplete = async () => {
     try {
-      await AsyncStorage.setItem('has_seen_v1_5_tutorial', 'true');
-      setShowV15Tutorial(false);
+      await AsyncStorage.setItem('has_seen_v2_0_tutorial', 'true');
+      setShowV20Tutorial(false);
     } catch (error) {
-      console.error('Error saving v1.5 tutorial status:', error);
-      setShowV15Tutorial(false);
+      console.error('Error saving v2.0 tutorial status:', error);
+      setShowV20Tutorial(false);
     }
   };
 
-  // v1.5 Tutorial slides
-  const v15TutorialSlides = [
+  // v2.0 Tutorial slides
+  const v20TutorialSlides = [
     { emoji: '☀️', title: 'Meet Your New Today Tab', description: 'Get AI-powered market intelligence every morning at 6:30 AM. See what moved, what changed, and what it means for your stack.' },
     { emoji: '🏦', title: 'COMEX Vault Watch', description: 'Track real-time COMEX warehouse inventory for gold, silver, platinum, and palladium. See when supply gets tight.' },
     { emoji: '💬', title: 'AI Stack Advisor', description: "Ask questions about your portfolio and get personalized answers. 'Should I buy more silver?' 'What's my break-even?' The AI knows your stack." },
     { emoji: '🔴🟡⚪🟢', title: 'Platinum & Palladium', description: 'Now track all four precious metals. Your portfolio just got more powerful.' },
     { emoji: '🖥️', title: 'New Web App', description: 'Access your full portfolio at app.stacktrackergold.com — same account, same data, bigger screen. Your Bloomberg terminal for precious metals.', button: { label: 'Visit Web App', url: 'https://app.stacktrackergold.com' } },
-    { emoji: '✅', title: "You're All Set!", description: 'Enjoy Stack Tracker Gold v1.5.0. We build this for stackers, by stackers.', highlight: 'Stack on! 🪙' },
+    { emoji: '🧭', title: 'New Look, Same Power', description: "We've streamlined your navigation. Portfolio combines your dashboard and holdings in one place. Settings now lives in the tab bar. Everything you need, fewer taps." },
+    { emoji: '✅', title: "You're All Set!", description: 'Enjoy Stack Tracker Gold v2.0. Built for stackers, by stackers.', highlight: 'Stack on! 🪙' },
   ];
 
   // AI Stack Advisor — send message
@@ -4613,7 +4611,7 @@ function AppContent() {
           setScannedItems([]);
           setScannedMetadata({ purchaseDate: '', purchaseTime: '', dealer: '' });
           setMetalTab('both');
-          setTab('holdings');
+          setTab('portfolio');
         }}]
       );
     } catch (error) {
@@ -4657,7 +4655,7 @@ function AppContent() {
       Alert.alert('All Items Added', 'All scanned items have been added to your holdings!', [
         { text: 'View Holdings', onPress: () => {
           setShowScannedItemsPreview(false);
-          setTab('holdings');
+          setTab('portfolio');
         }}
       ]);
     }
@@ -5238,22 +5236,6 @@ function AppContent() {
             )}
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            {/* Settings gear icon */}
-            <TouchableOpacity
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: 18,
-                backgroundColor: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderWidth: 1,
-                borderColor: isDarkMode ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)',
-              }}
-              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setTab('settings'); }}
-            >
-              <SettingsIcon size={18} color={tab === 'settings' ? colors.gold : colors.muted} />
-            </TouchableOpacity>
             {supabaseUser ? (
               // Signed in - show profile icon that goes to account
               <TouchableOpacity
@@ -5295,12 +5277,11 @@ function AppContent() {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         refreshControl={
-          (tab === 'dashboard' || tab === 'analytics' || tab === 'holdings' || tab === 'today') ? (
+          (tab === 'portfolio' || tab === 'analytics' || tab === 'today') ? (
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={
-                tab === 'dashboard' ? onRefreshDashboard :
-                tab === 'holdings' ? onRefreshDashboard :
+                tab === 'portfolio' ? onRefreshDashboard :
                 tab === 'today' ? onRefreshToday :
                 onRefreshAnalytics
               }
@@ -5310,255 +5291,6 @@ function AppContent() {
           ) : undefined
         }
       >
-
-        {/* DASHBOARD TAB */}
-        {tab === 'dashboard' && (
-          <>
-            {/* Portfolio Value */}
-            <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.large }]}>Portfolio Value</Text>
-                <View style={{ flexDirection: 'row', borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: isDarkMode ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)' }}>
-                  <TouchableOpacity
-                    style={{ paddingHorizontal: 10, paddingVertical: 4, backgroundColor: spotChangeDisplayMode === 'amount' ? colors.gold : 'transparent' }}
-                    onPress={() => { if (spotChangeDisplayMode !== 'amount') toggleSpotChangeDisplayMode(); }}
-                  >
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: spotChangeDisplayMode === 'amount' ? '#18181b' : colors.muted }}>$</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={{ paddingHorizontal: 10, paddingVertical: 4, backgroundColor: spotChangeDisplayMode === 'percent' ? colors.gold : 'transparent' }}
-                    onPress={() => { if (spotChangeDisplayMode !== 'percent') toggleSpotChangeDisplayMode(); }}
-                  >
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: spotChangeDisplayMode === 'percent' ? '#18181b' : colors.muted }}>%</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-              <Text
-                style={{ color: colors.text, fontSize: Math.round(36 * fontScale), fontWeight: '700', marginBottom: 4 }}
-                numberOfLines={1}
-                adjustsFontSizeToFit={true}
-              >
-                ${formatSmartCurrency(totalMeltValue)}
-              </Text>
-              <Text
-                style={{ color: totalGainLoss >= 0 ? colors.success : colors.error, fontSize: scaledFonts.medium }}
-                numberOfLines={1}
-                adjustsFontSizeToFit={true}
-              >
-                {totalGainLoss >= 0 ? '▲' : '▼'} {spotChangeDisplayMode === 'amount' ? `$${formatSmartCurrency(Math.abs(totalGainLoss))}` : `${totalGainLossPct >= 0 ? '+' : ''}${totalGainLossPct.toFixed(1)}%`}
-              </Text>
-            </View>
-
-            {/* Holdings Card */}
-            <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-              <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.large }]}>Holdings Value</Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-                <View style={{ flex: 1, minWidth: '40%' }}>
-                  <Text style={{ color: colors.gold, fontSize: scaledFonts.small, fontWeight: '600' }}>Gold</Text>
-                  <Text style={{ color: colors.text, fontSize: scaledFonts.xlarge, fontWeight: '700' }} numberOfLines={1} adjustsFontSizeToFit={true}>
-                    ${formatSmartCurrency(goldMeltValue)}
-                  </Text>
-                  <Text style={{ color: goldGainLoss >= 0 ? colors.success : colors.error, fontSize: scaledFonts.small, marginTop: 2 }} numberOfLines={1} adjustsFontSizeToFit={true}>
-                    {goldGainLoss >= 0 ? '▲' : '▼'} {spotChangeDisplayMode === 'amount' ? `$${formatSmartCurrency(Math.abs(goldGainLoss))}` : `${goldGainLossPct >= 0 ? '+' : ''}${goldGainLossPct.toFixed(1)}%`}
-                  </Text>
-                </View>
-                <View style={{ flex: 1, minWidth: '40%' }}>
-                  <Text style={{ color: colors.silver, fontSize: scaledFonts.small, fontWeight: '600' }}>Silver</Text>
-                  <Text style={{ color: colors.text, fontSize: scaledFonts.xlarge, fontWeight: '700' }} numberOfLines={1} adjustsFontSizeToFit={true}>
-                    ${formatSmartCurrency(silverMeltValue)}
-                  </Text>
-                  <Text style={{ color: silverGainLoss >= 0 ? colors.success : colors.error, fontSize: scaledFonts.small, marginTop: 2 }} numberOfLines={1} adjustsFontSizeToFit={true}>
-                    {silverGainLoss >= 0 ? '▲' : '▼'} {spotChangeDisplayMode === 'amount' ? `$${formatSmartCurrency(Math.abs(silverGainLoss))}` : `${silverGainLossPct >= 0 ? '+' : ''}${silverGainLossPct.toFixed(1)}%`}
-                  </Text>
-                </View>
-                {totalPlatinumOzt > 0 && (
-                  <View style={{ flex: 1, minWidth: '40%' }}>
-                    <Text style={{ color: colors.platinum, fontSize: scaledFonts.small, fontWeight: '600' }}>Platinum</Text>
-                    <Text style={{ color: colors.text, fontSize: scaledFonts.xlarge, fontWeight: '700' }} numberOfLines={1} adjustsFontSizeToFit={true}>
-                      ${formatSmartCurrency(platinumMeltValue)}
-                    </Text>
-                    <Text style={{ color: platinumGainLoss >= 0 ? colors.success : colors.error, fontSize: scaledFonts.small, marginTop: 2 }} numberOfLines={1} adjustsFontSizeToFit={true}>
-                      {platinumGainLoss >= 0 ? '▲' : '▼'} {spotChangeDisplayMode === 'amount' ? `$${formatSmartCurrency(Math.abs(platinumGainLoss))}` : `${platinumGainLossPct >= 0 ? '+' : ''}${platinumGainLossPct.toFixed(1)}%`}
-                    </Text>
-                  </View>
-                )}
-                {totalPalladiumOzt > 0 && (
-                  <View style={{ flex: 1, minWidth: '40%' }}>
-                    <Text style={{ color: colors.palladium, fontSize: scaledFonts.small, fontWeight: '600' }}>Palladium</Text>
-                    <Text style={{ color: colors.text, fontSize: scaledFonts.xlarge, fontWeight: '700' }} numberOfLines={1} adjustsFontSizeToFit={true}>
-                      ${formatSmartCurrency(palladiumMeltValue)}
-                    </Text>
-                    <Text style={{ color: palladiumGainLoss >= 0 ? colors.success : colors.error, fontSize: scaledFonts.small, marginTop: 2 }} numberOfLines={1} adjustsFontSizeToFit={true}>
-                      {palladiumGainLoss >= 0 ? '▲' : '▼'} {spotChangeDisplayMode === 'amount' ? `$${formatSmartCurrency(Math.abs(palladiumGainLoss))}` : `${palladiumGainLossPct >= 0 ? '+' : ''}${palladiumGainLossPct.toFixed(1)}%`}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </View>
-
-            {/* Today's Change */}
-            <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-              <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.large }]}>Today's Change</Text>
-              {showDailyChange ? (
-                <>
-                  <Text
-                    style={{ color: isDailyChangePositive ? colors.success : colors.error, fontSize: scaledFonts.huge, fontWeight: '700', marginBottom: 4 }}
-                    numberOfLines={1}
-                    adjustsFontSizeToFit={true}
-                  >
-                    {isDailyChangePositive ? '+' : ''}{dailyChange >= 0 ? '' : '-'}${formatSmartCurrency(Math.abs(dailyChange))}
-                  </Text>
-                  <Text
-                    style={{ color: isDailyChangePositive ? colors.success : colors.error, fontSize: scaledFonts.medium }}
-                    numberOfLines={1}
-                    adjustsFontSizeToFit={true}
-                  >
-                    {isDailyChangePositive ? '▲' : '▼'} {isDailyChangePositive ? '+' : ''}{dailyChangePct.toFixed(2)}%
-                  </Text>
-                  <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny, marginTop: 8 }}>
-                    Baseline: ${formatSmartCurrency(midnightBaseline)} (@ Ag ${midnightSnapshot?.silverSpot}, Au ${midnightSnapshot?.goldSpot})
-                  </Text>
-                </>
-              ) : (
-                <View style={{ paddingVertical: 12 }}>
-                  <Text style={{ color: colors.muted, fontSize: scaledFonts.xlarge, textAlign: 'center' }}>—</Text>
-                  <Text style={{ color: colors.muted, fontSize: scaledFonts.small, textAlign: 'center', marginTop: 4 }}>
-                    {!spotPricesLive ? 'Waiting for live prices...' :
-                     !midnightSnapshot ? 'No baseline yet. Check back tomorrow!' :
-                     'No data yet'}
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            {/* Live Spot Prices */}
-            <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-              <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.large, marginBottom: 12 }]}>Live Spot Prices</Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-                {[
-                  { key: 'gold', label: 'Gold', spot: goldSpot, color: colors.gold },
-                  { key: 'silver', label: 'Silver', spot: silverSpot, color: colors.silver },
-                  { key: 'platinum', label: 'Platinum', spot: platinumSpot, color: colors.platinum },
-                  { key: 'palladium', label: 'Palladium', spot: palladiumSpot, color: colors.palladium },
-                ].map(m => (
-                  <View key={m.key} style={{ width: '47%', backgroundColor: `${m.color}22`, padding: 16, borderRadius: 12 }}>
-                    <Text style={{ color: m.color, fontSize: scaledFonts.small }}>{m.label}</Text>
-                    <Text
-                      style={{ color: colors.text, fontSize: scaledFonts.xlarge, fontWeight: '700' }}
-                      numberOfLines={1}
-                      adjustsFontSizeToFit={true}
-                    >
-                      ${formatCurrency(m.spot)}
-                    </Text>
-                    {spotChange[m.key]?.percent != null && spotChange[m.key]?.amount != null ? (
-                      <Text style={{
-                        color: spotChange[m.key].amount >= 0 ? '#22C55E' : '#EF4444',
-                        fontSize: scaledFonts.small,
-                        fontWeight: '600',
-                        marginTop: 4
-                      }} numberOfLines={1} adjustsFontSizeToFit={true}>
-                        {spotChangeDisplayMode === 'percent'
-                          ? `${spotChange[m.key].percent >= 0 ? '+' : ''}${spotChange[m.key].percent.toFixed(2)}%`
-                          : `${spotChange[m.key].amount >= 0 ? '+' : ''}$${spotChange[m.key].amount.toFixed(2)}`
-                        }
-                      </Text>
-                    ) : (
-                      <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny, marginTop: 4 }}>Change: --</Text>
-                    )}
-                  </View>
-                ))}
-              </View>
-              {/* Gold/Silver Ratio row */}
-              <View style={{ marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Text style={{ color: colors.muted, fontSize: scaledFonts.small }}>Gold/Silver Ratio</Text>
-                <Text style={{ color: colors.text, fontSize: scaledFonts.normal, fontWeight: '600' }}>{goldSilverRatio.toFixed(1)}:1</Text>
-              </View>
-              <View style={{ marginTop: 8 }}>
-                <Text style={{ color: colors.muted, fontSize: 10, textAlign: 'center' }}>
-                  Source: {priceSource}
-                  {priceTimestamp && ` • Updated ${new Date(priceTimestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`}
-                </Text>
-              </View>
-            </View>
-
-            {/* Holdings Breakdown */}
-            {totalMeltValue > 0 && (
-              <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border, alignItems: 'center' }]}>
-                <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium, marginBottom: 12, alignSelf: 'flex-start' }]}>Holdings Breakdown</Text>
-                <PieChart
-                  data={[
-                    { label: 'Gold', value: goldMeltValue, color: colors.gold },
-                    { label: 'Silver', value: silverMeltValue, color: colors.silver },
-                    { label: 'Platinum', value: platinumMeltValue, color: colors.platinum },
-                    { label: 'Palladium', value: palladiumMeltValue, color: colors.palladium },
-                  ].filter(d => d.value > 0)}
-                  size={140}
-                  cardBgColor={colors.cardBg}
-                  textColor={colors.text}
-                  mutedColor={colors.muted}
-                />
-              </View>
-            )}
-
-            {/* Quick Stats */}
-            <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-              <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>Quick Stats</Text>
-              <View style={styles.statRow}>
-                <Text style={[styles.statRowLabel, { fontSize: scaledFonts.small }]}>Silver Holdings</Text>
-                <Text style={[styles.statRowValue, { color: colors.silver, fontSize: scaledFonts.normal }]}>{formatOunces(totalSilverOzt)} oz</Text>
-              </View>
-              <View style={styles.statRow}>
-                <Text style={[styles.statRowLabel, { fontSize: scaledFonts.small }]}>Gold Holdings</Text>
-                <Text style={[styles.statRowValue, { color: colors.gold, fontSize: scaledFonts.normal }]}>{formatOunces(totalGoldOzt, 3)} oz</Text>
-              </View>
-              {totalPlatinumOzt > 0 && (
-                <View style={styles.statRow}>
-                  <Text style={[styles.statRowLabel, { fontSize: scaledFonts.small }]}>Platinum Holdings</Text>
-                  <Text style={[styles.statRowValue, { color: colors.platinum, fontSize: scaledFonts.normal }]}>{formatOunces(totalPlatinumOzt, 3)} oz</Text>
-                </View>
-              )}
-              {totalPalladiumOzt > 0 && (
-                <View style={styles.statRow}>
-                  <Text style={[styles.statRowLabel, { fontSize: scaledFonts.small }]}>Palladium Holdings</Text>
-                  <Text style={[styles.statRowValue, { color: colors.palladium, fontSize: scaledFonts.normal }]}>{formatOunces(totalPalladiumOzt, 3)} oz</Text>
-                </View>
-              )}
-              <View style={[styles.divider, { backgroundColor: colors.border }]} />
-              <View style={styles.statRow}>
-                <Text style={[styles.statRowLabel, { fontSize: scaledFonts.small }]}>Cost Basis</Text>
-                <Text style={[styles.statRowValue, { color: colors.text, fontSize: scaledFonts.normal }]}>${totalCostBasis.toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
-              </View>
-              <View style={[styles.divider, { backgroundColor: colors.border }]} />
-              <View style={styles.statRow}>
-                <Text style={[styles.statRowLabel, { fontSize: scaledFonts.small }]}>Avg Silver Cost</Text>
-                <Text style={[styles.statRowValue, { color: colors.text, fontSize: scaledFonts.normal }]}>${formatCurrency(avgSilverCostPerOz)}/oz</Text>
-              </View>
-              <View style={styles.statRow}>
-                <Text style={[styles.statRowLabel, { fontSize: scaledFonts.small }]}>Avg Gold Cost</Text>
-                <Text style={[styles.statRowValue, { color: colors.text, fontSize: scaledFonts.normal }]}>${formatCurrency(avgGoldCostPerOz)}/oz</Text>
-              </View>
-              {totalPlatinumOzt > 0 && (
-                <View style={styles.statRow}>
-                  <Text style={[styles.statRowLabel, { fontSize: scaledFonts.small }]}>Avg Platinum Cost</Text>
-                  <Text style={[styles.statRowValue, { color: colors.text, fontSize: scaledFonts.normal }]}>${formatCurrency(avgPlatinumCostPerOz)}/oz</Text>
-                </View>
-              )}
-              {totalPalladiumOzt > 0 && (
-                <View style={styles.statRow}>
-                  <Text style={[styles.statRowLabel, { fontSize: scaledFonts.small }]}>Avg Palladium Cost</Text>
-                  <Text style={[styles.statRowValue, { color: colors.text, fontSize: scaledFonts.normal }]}>${formatCurrency(avgPalladiumCostPerOz)}/oz</Text>
-                </View>
-              )}
-            </View>
-
-            {/* Export CSV */}
-            <TouchableOpacity style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]} onPress={exportCSV}>
-              <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>📤 Export CSV</Text>
-              <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>Download holdings spreadsheet</Text>
-            </TouchableOpacity>
-
-          </>
-        )}
 
         {/* TODAY TAB */}
         {tab === 'today' && (() => {
@@ -6331,9 +6063,34 @@ function AppContent() {
           );
         })()}
 
-        {/* HOLDINGS TAB */}
-        {tab === 'holdings' && (
+        {/* PORTFOLIO TAB */}
+        {tab === 'portfolio' && (
           <>
+            {/* Portfolio Summary Card */}
+            <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+              <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.large }]}>Portfolio Value</Text>
+              <Text
+                style={{ color: colors.text, fontSize: Math.round(32 * fontScale), fontWeight: '700', marginBottom: 4 }}
+                numberOfLines={1}
+                adjustsFontSizeToFit={true}
+              >
+                ${formatSmartCurrency(totalMeltValue)}
+              </Text>
+              {showDailyChange ? (
+                <Text
+                  style={{ color: isDailyChangePositive ? colors.success : colors.error, fontSize: scaledFonts.medium }}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit={true}
+                >
+                  {isDailyChangePositive ? '▲' : '▼'} {isDailyChangePositive ? '+' : ''}{dailyChange >= 0 ? '' : '-'}${formatSmartCurrency(Math.abs(dailyChange))} ({isDailyChangePositive ? '+' : ''}{dailyChangePct.toFixed(2)}%)
+                </Text>
+              ) : (
+                <Text style={{ color: colors.muted, fontSize: scaledFonts.small }}>
+                  {!spotPricesLive ? 'Waiting for live prices...' : 'Daily change available tomorrow'}
+                </Text>
+              )}
+            </View>
+
             {/* Segmented Control Filter */}
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 10 }}>
               <View style={{
@@ -8031,12 +7788,12 @@ function AppContent() {
                 />
                 <RowSeparator />
                 <SettingsRow
-                  label="What's New in v1.5.0"
+                  label="What's New in v2.0"
                   subtitle="See the latest features"
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    AsyncStorage.removeItem('has_seen_v1_5_tutorial');
-                    setShowV15Tutorial(true);
+                    AsyncStorage.removeItem('has_seen_v2_0_tutorial');
+                    setShowV20Tutorial(true);
                   }}
                   isFirst={false}
                   isLast={true}
@@ -8195,16 +7952,17 @@ function AppContent() {
         })()}
 
         <View style={{ height: (tab === 'settings' || tab === 'analytics') ? 300 : 100 }} />
+
       </ScrollView>
 
       {/* Bottom Tabs */}
       <View style={[styles.bottomTabs, { backgroundColor: isDarkMode ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.95)', borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom, 10) }]}>
         {[
           { key: 'today', label: 'Today', Icon: TodayIcon },
-          { key: 'dashboard', label: 'Dashboard', Icon: DashboardIcon },
-          { key: 'holdings', label: 'Holdings', Icon: HoldingsIcon },
-          { key: 'analytics', label: 'Analytics', Icon: AnalyticsIcon },
+          { key: 'portfolio', label: 'Portfolio', Icon: HoldingsIcon },
+          { key: 'analytics', label: 'Analytics', Icon: DashboardIcon },
           { key: 'tools', label: 'Tools', Icon: ToolsIcon },
+          { key: 'settings', label: 'Settings', Icon: SettingsIcon },
         ].map(t => (
           <TouchableOpacity key={t.key} style={styles.bottomTab} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setTab(t.key); }}>
             <t.Icon size={22} color={tab === t.key ? colors.gold : colors.muted} />
@@ -9810,11 +9568,11 @@ function AppContent() {
         onComplete={handleTutorialComplete}
       />
 
-      {/* v1.5 Update Tutorial */}
+      {/* v2.0 Update Tutorial */}
       <Tutorial
-        visible={showV15Tutorial}
-        onComplete={handleV15TutorialComplete}
-        slides={v15TutorialSlides}
+        visible={showV20Tutorial}
+        onComplete={handleV20TutorialComplete}
+        slides={v20TutorialSlides}
       />
     </SafeAreaView>
   );
