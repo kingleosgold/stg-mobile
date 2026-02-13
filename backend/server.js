@@ -3957,6 +3957,16 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
       sessionParams.invoice_creation = { enabled: true };
     }
 
+    // For subscriptions (not lifetime), add 7-day free trial
+    if (!isLifetime) {
+      sessionParams.subscription_data = {
+        trial_period_days: 7,
+        trial_settings: {
+          end_behavior: { missing_payment_method: 'cancel' },
+        },
+      };
+    }
+
     const session = await stripe.checkout.sessions.create(sessionParams);
 
     console.log(`💳 [Stripe] Checkout session created for user ${user_id}, tier=${tier}`);
@@ -4006,6 +4016,9 @@ app.post('/api/webhooks/stripe', async (req, res) => {
         // Determine tier from metadata or by looking up the price
         let tier = session.metadata?.tier || 'gold';
 
+        let subscriptionStatus = 'active';
+        let trialEnd = null;
+
         if (session.subscription) {
           // Subscription checkout — look up price_id from subscription
           try {
@@ -4013,6 +4026,10 @@ app.post('/api/webhooks/stripe', async (req, res) => {
             const priceId = subscription.items?.data?.[0]?.price?.id;
             if (priceId) {
               tier = mapStripePriceToTier(priceId);
+            }
+            subscriptionStatus = subscription.status || 'active';
+            if (subscription.trial_end) {
+              trialEnd = new Date(subscription.trial_end * 1000).toISOString();
             }
           } catch (e) {
             console.warn('⚠️ [Stripe Webhook] Could not retrieve subscription:', e.message);
@@ -4027,6 +4044,8 @@ app.post('/api/webhooks/stripe', async (req, res) => {
           .update({
             subscription_tier: tier,
             stripe_customer_id: session.customer,
+            subscription_status: subscriptionStatus,
+            trial_end: trialEnd,
           })
           .eq('id', userId);
 
@@ -4053,12 +4072,21 @@ app.post('/api/webhooks/stripe', async (req, res) => {
           // Don't downgrade lifetime users via subscription events
           if (profile.subscription_tier === 'lifetime') break;
 
-          const newTier = subscription.status === 'active' ? 'gold' : 'free';
+          const newTier = (subscription.status === 'active' || subscription.status === 'trialing') ? 'gold' : 'free';
+          const updateData = {
+            subscription_tier: newTier,
+            subscription_status: subscription.status,
+          };
+          if (subscription.trial_end) {
+            updateData.trial_end = new Date(subscription.trial_end * 1000).toISOString();
+          } else {
+            updateData.trial_end = null;
+          }
           await supabaseClient
             .from('profiles')
-            .update({ subscription_tier: newTier })
+            .update(updateData)
             .eq('id', profile.id);
-          console.log(`✅ [Stripe Webhook] subscription.updated: user=${profile.id}, tier=${newTier}`);
+          console.log(`✅ [Stripe Webhook] subscription.updated: user=${profile.id}, tier=${newTier}, status=${subscription.status}`);
         }
         break;
       }
