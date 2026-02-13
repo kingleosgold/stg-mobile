@@ -7476,6 +7476,39 @@ function AppContent() {
 
           return (
             <View style={{ flex: 1, backgroundColor: settingsBg, marginHorizontal: -20, marginTop: -20, paddingHorizontal: 16, paddingTop: 8 }}>
+              {/* Web App */}
+              <SectionHeader title="Web App" />
+              <View style={{ borderRadius: 10, overflow: 'hidden' }}>
+                <TouchableOpacity
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    backgroundColor: groupBg,
+                    paddingVertical: 12,
+                    paddingHorizontal: 16,
+                    minHeight: 44,
+                    borderRadius: 10,
+                  }}
+                  onPress={() => Linking.openURL('https://app.stacktrackergold.com')}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    <View style={{ width: 30, height: 30, borderRadius: 6, backgroundColor: '#5856D6', alignItems: 'center', justifyContent: 'center' }}>
+                      <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                        <Path d="M3 5C3 3.89543 3.89543 3 5 3H19C20.1046 3 21 3.89543 21 5V15C21 16.1046 20.1046 17 19 17H5C3.89543 17 3 16.1046 3 15V5Z" stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                        <Path d="M8 21H16" stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" />
+                        <Path d="M12 17V21" stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" />
+                      </Svg>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>Web App</Text>
+                      <Text style={{ color: colors.muted, fontSize: scaledFonts.small, marginTop: 2 }}>Access your portfolio on desktop</Text>
+                    </View>
+                  </View>
+                  <Text style={{ color: chevronColor, fontSize: 18, fontWeight: '600' }}>›</Text>
+                </TouchableOpacity>
+              </View>
+
               {/* Account Section */}
               <SectionHeader title="Account" />
               <View style={{ borderRadius: 10, overflow: 'hidden' }}>
