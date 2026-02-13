@@ -10,7 +10,8 @@
  * - Each GLD share represents ~0.092 oz gold (1/10th oz, also erodes slowly)
  */
 
-const yahooFinance = require('yahoo-finance2').default;
+const YahooFinance = require('yahoo-finance2').default;
+const yahooFinance = new YahooFinance();
 const { supabase, isSupabaseAvailable } = require('../supabaseClient');
 
 // Default conversion ratios (these get calibrated daily)
