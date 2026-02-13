@@ -40,8 +40,11 @@ app.use(helmet({
 // Stripe webhook needs raw body for signature verification — must come BEFORE express.json()
 app.use('/api/webhooks/stripe', express.raw({ type: 'application/json' }));
 
-// Increase JSON limit for base64 image uploads
-app.use(express.json({ limit: '20mb' }));
+// JSON parsing for everything EXCEPT Stripe webhook (which needs the raw Buffer)
+app.use((req, res, next) => {
+  if (req.originalUrl === '/api/webhooks/stripe') return next();
+  express.json({ limit: '20mb' })(req, res, next);
+});
 
 // Rate limiting
 const limiter = rateLimit({
