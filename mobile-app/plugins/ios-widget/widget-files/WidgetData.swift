@@ -185,12 +185,18 @@ struct WidgetData: Codable {
     /// Compute portfolio sparkline from metal sparklines and ounce holdings
     func portfolioSparkline() -> [Double] {
         guard goldSparkline.count >= 2 else { return [] }
-        let count = min(goldSparkline.count, silverSparkline.count)
-        return (0..<count).map { i in
-            goldOzt * goldSparkline[i] +
-            silverOzt * silverSparkline[i] +
-            platinumOzt * (i < platinumSparkline.count ? platinumSparkline[i] : platinumSpot) +
-            palladiumOzt * (i < palladiumSparkline.count ? palladiumSparkline[i] : palladiumSpot)
+        let count: Int = min(goldSparkline.count, silverSparkline.count)
+        var result: [Double] = []
+        for i in 0..<count {
+            let g: Double = goldOzt * goldSparkline[i]
+            let s: Double = silverOzt * silverSparkline[i]
+            let ptPrice: Double = i < platinumSparkline.count ? platinumSparkline[i] : platinumSpot
+            let pt: Double = platinumOzt * ptPrice
+            let pdPrice: Double = i < palladiumSparkline.count ? palladiumSparkline[i] : palladiumSpot
+            let pd: Double = palladiumOzt * pdPrice
+            let total: Double = g + s + pt + pd
+            result.append(total)
         }
+        return result
     }
 }
