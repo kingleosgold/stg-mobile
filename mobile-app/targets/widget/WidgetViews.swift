@@ -545,6 +545,19 @@ struct SpotCardInfo: View {
     }
 }
 
+// MARK: - Widget Background Extension
+
+extension View {
+    @ViewBuilder
+    func widgetBackground<B: View>(_ bg: B) -> some View {
+        if #available(iOSApplicationExtension 17.0, *) {
+            self.containerBackground(for: .widget) { bg }
+        } else {
+            self.background(bg)
+        }
+    }
+}
+
 // MARK: - Main Entry View
 
 struct StackTrackerWidgetEntryView: View {
@@ -554,7 +567,7 @@ struct StackTrackerWidgetEntryView: View {
     var body: some View {
         widgetContent
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(wBgGradient)
+            .widgetBackground(wBgGradient)
     }
 
     @ViewBuilder
@@ -907,7 +920,7 @@ struct LargeHeader: View {
     private var titleRow: some View {
         WBoldCurrencyText(
             text: wPrivacy(wFormatCurrency(data.portfolioValue), data.hideValues),
-            size: 32
+            size: 34
         )
     }
 

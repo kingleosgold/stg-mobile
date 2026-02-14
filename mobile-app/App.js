@@ -3793,19 +3793,28 @@ function AppContent() {
   // ============================================
 
   const fetchDailyBrief = async () => {
-    if (!supabaseUser || !hasGoldAccess) return;
+    if (!supabaseUser || !hasGoldAccess) {
+      if (__DEV__) console.log(`📰 [Brief] Skipped: supabaseUser=${!!supabaseUser}, hasGoldAccess=${hasGoldAccess}`);
+      return;
+    }
     try {
       setDailyBriefLoading(true);
-      const today = new Date().toISOString().split('T')[0];
-      const response = await fetch(`${API_BASE_URL}/api/daily-brief?userId=${supabaseUser.id}&date=${today}`);
+      // Use EST date to match backend
+      const todayEST = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+      const url = `${API_BASE_URL}/api/daily-brief?userId=${supabaseUser.id}&date=${todayEST}`;
+      if (__DEV__) console.log(`📰 [Brief] Fetching: ${url}`);
+      const response = await fetch(url);
+      if (__DEV__) console.log(`📰 [Brief] HTTP ${response.status}`);
       const data = await response.json();
+      if (__DEV__) console.log(`📰 [Brief] Response:`, JSON.stringify(data).slice(0, 200));
       if (data.success && data.brief) {
         setDailyBrief(data.brief);
       } else {
+        if (__DEV__) console.log(`📰 [Brief] No brief returned (success=${data.success}, brief=${!!data.brief}, error=${data.error})`);
         setDailyBrief(null);
       }
     } catch (error) {
-      console.log('Daily brief fetch error:', error.message);
+      console.error('📰 [Brief] Fetch error:', error.message);
     } finally {
       setDailyBriefLoading(false);
     }
@@ -3845,14 +3854,20 @@ function AppContent() {
     }
   };
 
-  // Fetch intelligence + vault + daily brief data on mount and when switching to Today tab
+  // Fetch intelligence + vault data when switching to Today tab
   useEffect(() => {
     if (tab === 'today') {
       if (!intelligenceLastFetched) fetchIntelligenceBriefs();
       if (!vaultLastFetched) fetchVaultData();
-      if (!dailyBrief && hasGoldAccess && supabaseUser) fetchDailyBrief();
     }
   }, [tab]);
+
+  // Fetch daily brief when tab, user, or subscription status changes
+  useEffect(() => {
+    if (tab === 'today' && !dailyBrief && hasGoldAccess && supabaseUser) {
+      fetchDailyBrief();
+    }
+  }, [tab, supabaseUser, hasGoldAccess]);
 
   const onRefreshToday = async () => {
     setIsRefreshing(true);

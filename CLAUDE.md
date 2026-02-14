@@ -5,7 +5,7 @@
 2. Before any build, run: cat app.json | grep buildNumber — confirm it's HIGHER than the last submitted build.
 3. The current highest build number Apple has received is 65. Next build must be 66 or higher.
 4. If a build FAILS, the buildNumber may still have been auto-incremented by EAS. Always check app.json after a failed build.
-5. After every successful submission, update this number: LAST SUBMITTED BUILD: 65
+5. After every successful submission, update this number: LAST SUBMITTED BUILD: 67
 
 ## Project Overview
 Stack Tracker Pro is a privacy-first iOS app for tracking precious metals portfolios (gold, silver, platinum, palladium). Built with React Native/Expo, Node.js backend on Railway, RevenueCat for subscriptions.
