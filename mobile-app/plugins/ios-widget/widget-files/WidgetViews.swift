@@ -33,39 +33,48 @@ struct SparklineView: View {
 
     var body: some View {
         GeometryReader { geo in
-            let w = geo.size.width
-            let h = geo.size.height
-            let points = normalizedPoints(width: w, height: h)
+            sparklineContent(width: geo.size.width, height: geo.size.height)
+        }
+    }
 
+    private func sparklineContent(width: CGFloat, height: CGFloat) -> some View {
+        let points = normalizedPoints(width: width, height: height)
+        return ZStack {
             if points.count >= 2 {
-                // Line
-                Path { path in
-                    path.move(to: points[0])
-                    for i in 1..<points.count {
-                        path.addLine(to: points[i])
-                    }
-                }
-                .stroke(color, lineWidth: lineWidth)
+                sparklinePath(points: points)
+                    .stroke(color, lineWidth: lineWidth)
 
-                // Optional gradient fill under the line
                 if showFill {
-                    Path { path in
-                        path.move(to: CGPoint(x: points[0].x, y: h))
-                        for pt in points {
-                            path.addLine(to: pt)
-                        }
-                        path.addLine(to: CGPoint(x: points.last!.x, y: h))
-                        path.closeSubpath()
-                    }
-                    .fill(
-                        LinearGradient(
-                            colors: [color.opacity(0.3), color.opacity(0.0)],
-                            startPoint: .top,
-                            endPoint: .bottom
+                    sparklineFillPath(points: points, height: height)
+                        .fill(
+                            LinearGradient(
+                                colors: [color.opacity(0.3), color.opacity(0.0)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
                         )
-                    )
                 }
             }
+        }
+    }
+
+    private func sparklinePath(points: [CGPoint]) -> Path {
+        Path { path in
+            path.move(to: points[0])
+            for i in 1..<points.count {
+                path.addLine(to: points[i])
+            }
+        }
+    }
+
+    private func sparklineFillPath(points: [CGPoint], height: CGFloat) -> Path {
+        Path { path in
+            path.move(to: CGPoint(x: points[0].x, y: height))
+            for pt in points {
+                path.addLine(to: pt)
+            }
+            path.addLine(to: CGPoint(x: points[points.count - 1].x, y: height))
+            path.closeSubpath()
         }
     }
 
@@ -125,11 +134,192 @@ private func formatPercent(_ value: Double) -> String {
     return "\(prefix)\(String(format: "%.1f", value))%"
 }
 
-/// Gold shimmer accent line at top of widget (flush at 0px)
-private func goldAccentLine() -> some View {
-    Rectangle()
-        .fill(goldAccent)
-        .frame(height: 2)
+// MARK: - Reusable Sub-Views
+
+/// Gold accent bar — used with negative horizontal padding to go edge-to-edge
+struct GoldAccentBar: View {
+    var body: some View {
+        Rectangle()
+            .fill(goldAccent)
+            .frame(height: 2)
+    }
+}
+
+/// Portfolio header: icon + label
+struct PortfolioLabel: View {
+    let iconSize: CGFloat
+    let fontSize: CGFloat
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image("AppIcon")
+                .resizable()
+                .frame(width: iconSize, height: iconSize)
+                .cornerRadius(4)
+            Text("PORTFOLIO")
+                .font(.system(size: fontSize, weight: .semibold))
+                .foregroundColor(mutedColor)
+                .kerning(1.2)
+        }
+    }
+}
+
+/// Daily change row: arrow + amount + percent
+struct DailyChangeRow: View {
+    let amount: Double
+    let percent: Double
+    let hideValues: Bool
+    let arrowSize: CGFloat
+    let amountSize: CGFloat
+    let percentSize: CGFloat
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Text(amount >= 0 ? "▲" : "▼")
+                .font(.system(size: arrowSize, weight: .bold))
+                .foregroundColor(changeColor(amount))
+            Text(privacyText(formatChange(amount), hideValues))
+                .font(.system(size: amountSize, weight: .semibold))
+                .foregroundColor(changeColor(amount))
+            Text("(\(formatPercent(percent)))")
+                .font(.system(size: percentSize))
+                .foregroundColor(changeColor(amount))
+        }
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
+    }
+}
+
+/// Metal row for medium widget right panel
+struct MetalRowMedium: View {
+    let symbol: String
+    let price: Double
+    let changePercent: Double
+    let changeAmount: Double
+    let sparkline: [Double]
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 6) {
+            metalInfo
+            Spacer()
+            metalSparkline
+        }
+    }
+
+    private var metalInfo: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 4) {
+                Circle().fill(color).frame(width: 6, height: 6)
+                Text(symbol)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(color)
+            }
+            Text(formatSpotPrice(price))
+                .font(.system(size: 14, weight: .bold))
+                .foregroundColor(.white)
+                .minimumScaleFactor(0.6)
+                .lineLimit(1)
+            Text(formatPercent(changePercent))
+                .font(.system(size: 9, weight: .medium))
+                .foregroundColor(changeColor(changeAmount))
+        }
+    }
+
+    @ViewBuilder
+    private var metalSparkline: some View {
+        if sparkline.count >= 2 {
+            SparklineView(
+                data: sparkline,
+                color: changeAmount >= 0 ? greenColor : redColor,
+                lineWidth: 1.0
+            )
+            .frame(width: 48, height: 22)
+        }
+    }
+}
+
+/// Spot price card for large widget grid
+struct SpotCardLarge: View {
+    let symbol: String
+    let price: Double
+    let changePercent: Double
+    let changeAmount: Double
+    let sparkline: [Double]
+    let color: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            cardInfo
+            cardSparkline
+        }
+        .padding(10)
+        .background(Color.white.opacity(0.04))
+        .cornerRadius(8)
+    }
+
+    private var cardInfo: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 4) {
+                    Circle().fill(color).frame(width: 6, height: 6)
+                    Text(symbol)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(color)
+                }
+                Text(formatSpotPrice(price))
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundColor(.white)
+                    .minimumScaleFactor(0.6)
+                    .lineLimit(1)
+                Text(formatPercent(changePercent))
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundColor(changeColor(changeAmount))
+            }
+            Spacer()
+        }
+    }
+
+    @ViewBuilder
+    private var cardSparkline: some View {
+        if sparkline.count >= 2 {
+            SparklineView(
+                data: sparkline,
+                color: changeAmount >= 0 ? greenColor : redColor,
+                lineWidth: 1.0
+            )
+            .frame(height: 20)
+            .padding(.top, 4)
+        }
+    }
+}
+
+/// Locked/upgrade prompt view
+struct LockedView: View {
+    let showIcon: Bool
+    let titleSize: CGFloat
+    let subtitleSize: CGFloat
+
+    var body: some View {
+        VStack(spacing: showIcon ? 8 : 4) {
+            if showIcon {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: titleSize > 16 ? 36 : 28))
+                    .foregroundColor(mutedColor)
+            }
+            Spacer()
+            Text("Upgrade to Gold")
+                .font(.system(size: titleSize, weight: .semibold))
+                .foregroundColor(goldAccent)
+            Text(showIcon ? "Get portfolio widgets on your home screen" : "for widget access")
+                .font(.system(size: subtitleSize))
+                .foregroundColor(mutedColor)
+                .multilineTextAlignment(.center)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+        .padding()
+    }
 }
 
 // MARK: - Main Entry View
@@ -158,92 +348,75 @@ struct SmallWidgetView: View {
     let data: WidgetData
 
     var body: some View {
-        Group {
+        ZStack(alignment: .topLeading) {
+            bgGradient
             if data.hasSubscription {
-                VStack(alignment: .leading, spacing: 0) {
-                    goldAccentLine()
-
-                    VStack(alignment: .leading, spacing: 0) {
-                        // Logo + label
-                        HStack(spacing: 6) {
-                            Image("AppIcon")
-                                .resizable()
-                                .frame(width: 18, height: 18)
-                                .cornerRadius(4)
-                            Text("PORTFOLIO")
-                                .font(.system(size: 9, weight: .semibold))
-                                .foregroundColor(mutedColor)
-                                .kerning(1.2)
-                        }
-                        .padding(.top, 10)
-                        .padding(.bottom, 4)
-
-                        // Portfolio value
-                        Text(privacyText(formatCurrency(data.portfolioValue), data.hideValues))
-                            .font(.system(size: 26, weight: .bold))
-                            .foregroundColor(.white)
-                            .minimumScaleFactor(0.5)
-                            .lineLimit(1)
-                            .padding(.bottom, 2)
-
-                        // Daily change
-                        HStack(spacing: 3) {
-                            Text(data.dailyChangeAmount >= 0 ? "▲" : "▼")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundColor(changeColor(data.dailyChangeAmount))
-                            Text(privacyText(formatChange(data.dailyChangeAmount), data.hideValues))
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundColor(changeColor(data.dailyChangeAmount))
-                            Text("(\(formatPercent(data.dailyChangePercent)))")
-                                .font(.system(size: 9))
-                                .foregroundColor(changeColor(data.dailyChangeAmount))
-                        }
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-
-                        Spacer()
-
-                        // Full-width sparkline at bottom
-                        let sparkline = data.portfolioSparkline()
-                        if sparkline.count >= 2 {
-                            SparklineView(
-                                data: sparkline,
-                                color: data.dailyChangeAmount >= 0 ? greenColor : redColor,
-                                lineWidth: 1.5,
-                                showFill: true
-                            )
-                            .frame(height: 32)
-                            .padding(.bottom, 6)
-                        } else {
-                            // Fallback: colored dots for held metals
-                            HStack(spacing: 6) {
-                                if data.goldValue > 0 { Circle().fill(goldAccent).frame(width: 8, height: 8) }
-                                if data.silverValue > 0 { Circle().fill(silverColor).frame(width: 8, height: 8) }
-                                if data.platinumValue > 0 { Circle().fill(platinumColor).frame(width: 8, height: 8) }
-                                if data.palladiumValue > 0 { Circle().fill(palladiumColor).frame(width: 8, height: 8) }
-                            }
-                            .padding(.bottom, 6)
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                }
+                subscribedContent
             } else {
-                VStack(spacing: 4) {
-                    Spacer()
-                    Text("Upgrade to Gold")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(goldAccent)
-                    Text("for widget access")
-                        .font(.system(size: 11))
-                        .foregroundColor(mutedColor)
-                    Spacer()
-                }
-                .frame(maxWidth: .infinity)
+                LockedView(showIcon: false, titleSize: 14, subtitleSize: 11)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .contentMarginsDisabled()
-        .containerBackground(for: .widget) { bgGradient }
+    }
+
+    private var subscribedContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            GoldAccentBar()
+            innerContent
+                .padding(.horizontal, 12)
+        }
+    }
+
+    private var innerContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            PortfolioLabel(iconSize: 18, fontSize: 9)
+                .padding(.top, 10)
+                .padding(.bottom, 4)
+
+            Text(privacyText(formatCurrency(data.portfolioValue), data.hideValues))
+                .font(.system(size: 26, weight: .bold))
+                .foregroundColor(.white)
+                .minimumScaleFactor(0.5)
+                .lineLimit(1)
+                .padding(.bottom, 2)
+
+            DailyChangeRow(
+                amount: data.dailyChangeAmount,
+                percent: data.dailyChangePercent,
+                hideValues: data.hideValues,
+                arrowSize: 9, amountSize: 11, percentSize: 9
+            )
+
+            Spacer()
+
+            bottomSection
+        }
+    }
+
+    @ViewBuilder
+    private var bottomSection: some View {
+        let sparkline = data.portfolioSparkline()
+        if sparkline.count >= 2 {
+            SparklineView(
+                data: sparkline,
+                color: data.dailyChangeAmount >= 0 ? greenColor : redColor,
+                lineWidth: 1.5,
+                showFill: true
+            )
+            .frame(height: 32)
+            .padding(.bottom, 6)
+        } else {
+            metalDots
+                .padding(.bottom, 6)
+        }
+    }
+
+    private var metalDots: some View {
+        HStack(spacing: 6) {
+            if data.goldValue > 0 { Circle().fill(goldAccent).frame(width: 8, height: 8) }
+            if data.silverValue > 0 { Circle().fill(silverColor).frame(width: 8, height: 8) }
+            if data.platinumValue > 0 { Circle().fill(platinumColor).frame(width: 8, height: 8) }
+            if data.palladiumValue > 0 { Circle().fill(palladiumColor).frame(width: 8, height: 8) }
+        }
     }
 }
 
@@ -253,152 +426,99 @@ struct MediumWidgetView: View {
     let data: WidgetData
 
     var body: some View {
-        Group {
+        ZStack(alignment: .topLeading) {
+            bgGradient
             if data.hasSubscription {
-                VStack(alignment: .leading, spacing: 0) {
-                    goldAccentLine()
-
-                    HStack(spacing: 0) {
-                        // LEFT HALF: Portfolio + sparkline
-                        VStack(alignment: .leading, spacing: 0) {
-                            HStack(spacing: 5) {
-                                Image("AppIcon")
-                                    .resizable()
-                                    .frame(width: 16, height: 16)
-                                    .cornerRadius(3)
-                                Text("PORTFOLIO")
-                                    .font(.system(size: 8, weight: .semibold))
-                                    .foregroundColor(mutedColor)
-                                    .kerning(1.0)
-                            }
-                            .padding(.top, 8)
-                            .padding(.bottom, 4)
-
-                            Text(privacyText(formatCurrency(data.portfolioValue), data.hideValues))
-                                .font(.system(size: 24, weight: .bold))
-                                .foregroundColor(.white)
-                                .minimumScaleFactor(0.5)
-                                .lineLimit(1)
-                                .padding(.bottom, 2)
-
-                            HStack(spacing: 3) {
-                                Text(data.dailyChangeAmount >= 0 ? "▲" : "▼")
-                                    .font(.system(size: 9, weight: .bold))
-                                    .foregroundColor(changeColor(data.dailyChangeAmount))
-                                Text(privacyText(formatChange(data.dailyChangeAmount), data.hideValues))
-                                    .font(.system(size: 11, weight: .semibold))
-                                    .foregroundColor(changeColor(data.dailyChangeAmount))
-                                Text("(\(formatPercent(data.dailyChangePercent)))")
-                                    .font(.system(size: 9))
-                                    .foregroundColor(changeColor(data.dailyChangeAmount))
-                            }
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-
-                            Spacer()
-
-                            let sparkline = data.portfolioSparkline()
-                            if sparkline.count >= 2 {
-                                SparklineView(
-                                    data: sparkline,
-                                    color: data.dailyChangeAmount >= 0 ? greenColor : redColor,
-                                    lineWidth: 1.5,
-                                    showFill: true
-                                )
-                                .frame(height: 30)
-                                .padding(.bottom, 8)
-                            }
-                        }
-                        .padding(.horizontal, 12)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                        // Vertical divider
-                        Rectangle()
-                            .fill(goldAccent.opacity(0.15))
-                            .frame(width: 1)
-                            .padding(.vertical, 10)
-
-                        // RIGHT HALF: Au + Ag with inline sparklines
-                        VStack(spacing: 6) {
-                            Spacer(minLength: 4)
-                            metalRowMedium(
-                                symbol: "Au",
-                                price: data.goldSpot,
-                                changePercent: data.goldChangePercent,
-                                changeAmount: data.goldChangeAmount,
-                                sparkline: data.goldSparkline,
-                                color: goldAccent
-                            )
-                            Rectangle()
-                                .fill(Color.white.opacity(0.05))
-                                .frame(height: 1)
-                            metalRowMedium(
-                                symbol: "Ag",
-                                price: data.silverSpot,
-                                changePercent: data.silverChangePercent,
-                                changeAmount: data.silverChangeAmount,
-                                sparkline: data.silverSparkline,
-                                color: silverColor
-                            )
-                            Spacer(minLength: 4)
-                        }
-                        .padding(.horizontal, 10)
-                        .frame(maxWidth: .infinity)
-                    }
-                }
+                subscribedContent
             } else {
-                VStack(spacing: 8) {
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: 28))
-                        .foregroundColor(mutedColor)
-                    Text("Upgrade to Gold")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(goldAccent)
-                    Text("Get portfolio widgets on your home screen")
-                        .font(.system(size: 12))
-                        .foregroundColor(mutedColor)
-                        .multilineTextAlignment(.center)
-                }
-                .padding()
+                LockedView(showIcon: true, titleSize: 16, subtitleSize: 12)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .contentMarginsDisabled()
-        .containerBackground(for: .widget) { bgGradient }
     }
 
-    private func metalRowMedium(symbol: String, price: Double, changePercent: Double, changeAmount: Double, sparkline: [Double], color: Color) -> some View {
-        HStack(spacing: 6) {
-            // Symbol + price
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    Circle().fill(color).frame(width: 6, height: 6)
-                    Text(symbol)
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(color)
-                }
-                Text(formatSpotPrice(price))
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(.white)
-                    .minimumScaleFactor(0.6)
-                    .lineLimit(1)
-                Text(formatPercent(changePercent))
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundColor(changeColor(changeAmount))
+    private var subscribedContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            GoldAccentBar()
+            HStack(spacing: 0) {
+                leftPanel
+                verticalDivider
+                rightPanel
             }
+        }
+    }
+
+    private var leftPanel: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            PortfolioLabel(iconSize: 16, fontSize: 8)
+                .padding(.top, 8)
+                .padding(.bottom, 4)
+
+            Text(privacyText(formatCurrency(data.portfolioValue), data.hideValues))
+                .font(.system(size: 24, weight: .bold))
+                .foregroundColor(.white)
+                .minimumScaleFactor(0.5)
+                .lineLimit(1)
+                .padding(.bottom, 2)
+
+            DailyChangeRow(
+                amount: data.dailyChangeAmount,
+                percent: data.dailyChangePercent,
+                hideValues: data.hideValues,
+                arrowSize: 9, amountSize: 11, percentSize: 9
+            )
 
             Spacer()
 
-            // Inline sparkline
-            if sparkline.count >= 2 {
-                SparklineView(
-                    data: sparkline,
-                    color: changeAmount >= 0 ? greenColor : redColor,
-                    lineWidth: 1.0
-                )
-                .frame(width: 48, height: 22)
-            }
+            leftSparkline
         }
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var leftSparkline: some View {
+        let sparkline = data.portfolioSparkline()
+        if sparkline.count >= 2 {
+            SparklineView(
+                data: sparkline,
+                color: data.dailyChangeAmount >= 0 ? greenColor : redColor,
+                lineWidth: 1.5,
+                showFill: true
+            )
+            .frame(height: 30)
+            .padding(.bottom, 8)
+        }
+    }
+
+    private var verticalDivider: some View {
+        Rectangle()
+            .fill(goldAccent.opacity(0.15))
+            .frame(width: 1)
+            .padding(.vertical, 10)
+    }
+
+    private var rightPanel: some View {
+        VStack(spacing: 6) {
+            Spacer(minLength: 4)
+            MetalRowMedium(
+                symbol: "Au", price: data.goldSpot,
+                changePercent: data.goldChangePercent,
+                changeAmount: data.goldChangeAmount,
+                sparkline: data.goldSparkline, color: goldAccent
+            )
+            Rectangle()
+                .fill(Color.white.opacity(0.05))
+                .frame(height: 1)
+            MetalRowMedium(
+                symbol: "Ag", price: data.silverSpot,
+                changePercent: data.silverChangePercent,
+                changeAmount: data.silverChangeAmount,
+                sparkline: data.silverSparkline, color: silverColor
+            )
+            Spacer(minLength: 4)
+        }
+        .padding(.horizontal, 10)
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -413,138 +533,101 @@ struct LargeWidgetView: View {
     ]
 
     var body: some View {
-        Group {
+        ZStack(alignment: .topLeading) {
+            bgGradient
             if data.hasSubscription {
-                VStack(alignment: .leading, spacing: 0) {
-                    goldAccentLine()
-
-                    VStack(alignment: .leading, spacing: 0) {
-                        // Logo + portfolio value
-                        HStack(spacing: 8) {
-                            Image("AppIcon")
-                                .resizable()
-                                .frame(width: 20, height: 20)
-                                .cornerRadius(4)
-                            VStack(alignment: .leading, spacing: 0) {
-                                Text(privacyText(formatCurrency(data.portfolioValue), data.hideValues))
-                                    .font(.system(size: 32, weight: .bold))
-                                    .foregroundColor(.white)
-                                    .minimumScaleFactor(0.5)
-                                    .lineLimit(1)
-                            }
-                        }
-                        .padding(.top, 10)
-
-                        // Daily change
-                        HStack(spacing: 4) {
-                            Text(data.dailyChangeAmount >= 0 ? "▲" : "▼")
-                                .font(.system(size: 11, weight: .bold))
-                                .foregroundColor(changeColor(data.dailyChangeAmount))
-                            Text(privacyText(formatChange(data.dailyChangeAmount), data.hideValues))
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundColor(changeColor(data.dailyChangeAmount))
-                            Text("(\(formatPercent(data.dailyChangePercent)))")
-                                .font(.system(size: 11))
-                                .foregroundColor(changeColor(data.dailyChangeAmount))
-                        }
-                        .padding(.top, 2)
-
-                        // Portfolio sparkline
-                        let sparkline = data.portfolioSparkline()
-                        if sparkline.count >= 2 {
-                            SparklineView(
-                                data: sparkline,
-                                color: data.dailyChangeAmount >= 0 ? greenColor : redColor,
-                                lineWidth: 1.5,
-                                showFill: true
-                            )
-                            .frame(height: 40)
-                            .padding(.top, 6)
-                        }
-
-                        // Divider
-                        Rectangle()
-                            .fill(goldAccent.opacity(0.15))
-                            .frame(height: 1)
-                            .padding(.vertical, 8)
-
-                        // LIVE SPOT section header
-                        Text("LIVE SPOT")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundColor(mutedColor)
-                            .kerning(1.2)
-                            .padding(.bottom, 6)
-
-                        // 2x2 grid of spot price cards with sparklines
-                        LazyVGrid(columns: gridColumns, spacing: 8) {
-                            spotCardLarge(symbol: "Au", price: data.goldSpot, changePercent: data.goldChangePercent, changeAmount: data.goldChangeAmount, sparkline: data.goldSparkline, color: goldAccent)
-                            spotCardLarge(symbol: "Ag", price: data.silverSpot, changePercent: data.silverChangePercent, changeAmount: data.silverChangeAmount, sparkline: data.silverSparkline, color: silverColor)
-                            spotCardLarge(symbol: "Pt", price: data.platinumSpot, changePercent: data.platinumChangePercent, changeAmount: data.platinumChangeAmount, sparkline: data.platinumSparkline, color: platinumColor)
-                            spotCardLarge(symbol: "Pd", price: data.palladiumSpot, changePercent: data.palladiumChangePercent, changeAmount: data.palladiumChangeAmount, sparkline: data.palladiumSparkline, color: palladiumColor)
-                        }
-
-                        Spacer(minLength: 4)
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 8)
-                }
+                subscribedContent
             } else {
-                VStack(spacing: 12) {
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: 36))
-                        .foregroundColor(mutedColor)
-                    Text("Upgrade to Gold")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(goldAccent)
-                    Text("Get portfolio widgets on your home screen")
-                        .font(.system(size: 13))
-                        .foregroundColor(mutedColor)
-                        .multilineTextAlignment(.center)
-                }
-                .padding()
+                LockedView(showIcon: true, titleSize: 18, subtitleSize: 13)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .contentMarginsDisabled()
-        .containerBackground(for: .widget) { bgGradient }
     }
 
-    private func spotCardLarge(symbol: String, price: Double, changePercent: Double, changeAmount: Double, sparkline: [Double], color: Color) -> some View {
+    private var subscribedContent: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 4) {
-                        Circle().fill(color).frame(width: 6, height: 6)
-                        Text(symbol)
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(color)
-                    }
-                    Text(formatSpotPrice(price))
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundColor(.white)
-                        .minimumScaleFactor(0.6)
-                        .lineLimit(1)
-                    Text(formatPercent(changePercent))
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundColor(changeColor(changeAmount))
-                }
-                Spacer()
-            }
-
-            // Sparkline in each card
-            if sparkline.count >= 2 {
-                SparklineView(
-                    data: sparkline,
-                    color: changeAmount >= 0 ? greenColor : redColor,
-                    lineWidth: 1.0
-                )
-                .frame(height: 20)
-                .padding(.top, 4)
-            }
+            GoldAccentBar()
+            mainContent
+                .padding(.horizontal, 14)
+                .padding(.bottom, 8)
         }
-        .padding(10)
-        .background(Color.white.opacity(0.04))
-        .cornerRadius(8)
+    }
+
+    private var mainContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            portfolioHeader
+            portfolioSparklineSection
+            goldDivider
+            spotSection
+            Spacer(minLength: 4)
+        }
+    }
+
+    private var portfolioHeader: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Image("AppIcon")
+                    .resizable()
+                    .frame(width: 20, height: 20)
+                    .cornerRadius(4)
+                Text(privacyText(formatCurrency(data.portfolioValue), data.hideValues))
+                    .font(.system(size: 32, weight: .bold))
+                    .foregroundColor(.white)
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
+            }
+            .padding(.top, 10)
+
+            DailyChangeRow(
+                amount: data.dailyChangeAmount,
+                percent: data.dailyChangePercent,
+                hideValues: data.hideValues,
+                arrowSize: 11, amountSize: 13, percentSize: 11
+            )
+            .padding(.top, 2)
+        }
+    }
+
+    @ViewBuilder
+    private var portfolioSparklineSection: some View {
+        let sparkline = data.portfolioSparkline()
+        if sparkline.count >= 2 {
+            SparklineView(
+                data: sparkline,
+                color: data.dailyChangeAmount >= 0 ? greenColor : redColor,
+                lineWidth: 1.5,
+                showFill: true
+            )
+            .frame(height: 40)
+            .padding(.top, 6)
+        }
+    }
+
+    private var goldDivider: some View {
+        Rectangle()
+            .fill(goldAccent.opacity(0.15))
+            .frame(height: 1)
+            .padding(.vertical, 8)
+    }
+
+    private var spotSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("LIVE SPOT")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundColor(mutedColor)
+                .kerning(1.2)
+                .padding(.bottom, 6)
+
+            spotGrid
+        }
+    }
+
+    private var spotGrid: some View {
+        LazyVGrid(columns: gridColumns, spacing: 8) {
+            SpotCardLarge(symbol: "Au", price: data.goldSpot, changePercent: data.goldChangePercent, changeAmount: data.goldChangeAmount, sparkline: data.goldSparkline, color: goldAccent)
+            SpotCardLarge(symbol: "Ag", price: data.silverSpot, changePercent: data.silverChangePercent, changeAmount: data.silverChangeAmount, sparkline: data.silverSparkline, color: silverColor)
+            SpotCardLarge(symbol: "Pt", price: data.platinumSpot, changePercent: data.platinumChangePercent, changeAmount: data.platinumChangeAmount, sparkline: data.platinumSparkline, color: platinumColor)
+            SpotCardLarge(symbol: "Pd", price: data.palladiumSpot, changePercent: data.palladiumChangePercent, changeAmount: data.palladiumChangeAmount, sparkline: data.palladiumSparkline, color: palladiumColor)
+        }
     }
 }
 
