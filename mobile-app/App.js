@@ -9,7 +9,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput,
   Alert, Modal, Platform, SafeAreaView, StatusBar, ActivityIndicator,
   Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView, Dimensions, AppState, FlatList, Clipboard, Linking,
-  useColorScheme, RefreshControl, Switch, Image, Animated, LayoutAnimation,
+  useColorScheme, RefreshControl, Switch, Image, Animated, LayoutAnimation, PanResponder,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from './ErrorBoundary';
@@ -38,7 +38,7 @@ import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import AuthScreen from './src/screens/AuthScreen';
 import AccountScreen from './src/screens/AccountScreen';
 import ResetPasswordScreen from './src/screens/ResetPasswordScreen';
-import { AppleLogo, GoogleLogo, ProfileIcon, DashboardIcon, HoldingsIcon, AnalyticsIcon, ToolsIcon, SettingsIcon, SortIcon, TodayIcon } from './src/components/icons';
+import { AppleLogo, GoogleLogo, ProfileIcon, DashboardIcon, HoldingsIcon, AnalyticsIcon, ToolsIcon, SettingsIcon, SortIcon, TodayIcon, BellIcon, TrendingUpIcon, CalculatorIcon, TrophyIcon } from './src/components/icons';
 import {
   fetchHoldings,
   addHolding,
@@ -958,6 +958,7 @@ function AppContent() {
   const drawerAnim = useRef(new Animated.Value(-300)).current;
   const drawerOverlayAnim = useRef(new Animated.Value(0)).current;
   const sectionOffsets = useRef({});
+  const drawerOpenRef = useRef(false);
 
   // Today Tab - Intelligence Feed
   const [intelligenceBriefs, setIntelligenceBriefs] = useState([]);
@@ -5319,11 +5320,11 @@ function AppContent() {
       { key: 'breakEvenAnalysis', label: 'Break-Even Analysis' },
     ]},
     { key: 'tools', label: 'Tools', items: [
-      { key: 'shareMyStack', label: 'Share My Stack' },
-      { key: 'junkSilver', label: 'Junk Silver Calculator' },
       { key: 'priceAlerts', label: 'Price Alerts' },
       { key: 'speculationTool', label: 'Speculation Tool' },
+      { key: 'junkSilver', label: 'Junk Silver Calculator' },
       { key: 'stackMilestones', label: 'Stack Milestones' },
+      { key: 'shareMyStack', label: 'Share My Stack' },
     ]},
     { key: 'settings', label: 'Settings', items: [
       { key: 'webApp', label: 'Web App' },
@@ -5335,6 +5336,7 @@ function AppContent() {
   ];
 
   const openDrawer = () => {
+    drawerOpenRef.current = true;
     setDrawerOpen(true);
     Animated.parallel([
       Animated.timing(drawerAnim, { toValue: 0, duration: 250, useNativeDriver: true }),
@@ -5347,6 +5349,7 @@ function AppContent() {
       Animated.timing(drawerAnim, { toValue: -300, duration: 200, useNativeDriver: true }),
       Animated.timing(drawerOverlayAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
     ]).start(() => {
+      drawerOpenRef.current = false;
       setDrawerOpen(false);
     });
   };
@@ -5359,17 +5362,31 @@ function AppContent() {
     setTimeout(() => {
       const y = sectionOffsets.current[sectionKey];
       if (y !== undefined) {
-        scrollRef.current?.scrollTo({ y, animated: true });
+        scrollRef.current?.scrollTo({ y: Math.max(0, y - 10), animated: true });
       }
     }, 100);
   };
+
+  const drawerPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        return !drawerOpenRef.current && evt.nativeEvent.pageX < 60 && gestureState.dx > 10 && Math.abs(gestureState.dy) < 30;
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        if (gestureState.dx > 50) {
+          openDrawer();
+        }
+      },
+    })
+  ).current;
 
   // ============================================
   // MAIN RENDER
   // ============================================
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView {...drawerPanResponder.panHandlers} style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
 
       {/* Header */}
@@ -6711,7 +6728,7 @@ function AppContent() {
                   }}
                 >
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>🔔 Price Alerts</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><BellIcon size={18} color={colors.gold} /><Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>Price Alerts</Text></View>
                     {hasGoldAccess && priceAlerts.length > 0 && (
                       <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny }}>{priceAlerts.length} active</Text>
                     )}
@@ -6726,7 +6743,7 @@ function AppContent() {
                 <View onLayout={(e) => { sectionOffsets.current['speculationTool'] = e.nativeEvent.layout.y; }}>
                 <TouchableOpacity style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]} onPress={() => { if (!hasGoldAccess) { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowPaywallModal(true); return; } setShowSpeculationModal(true); }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>🔮 Speculation Tool</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><TrendingUpIcon size={18} color={colors.gold} /><Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>Speculation Tool</Text></View>
                     {!hasGoldAccess && <Text style={{ color: colors.gold, fontSize: scaledFonts.tiny, fontWeight: '600' }}>GOLD</Text>}
                   </View>
                   <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>What if silver hits $100? What if gold hits $10,000?</Text>
@@ -6735,7 +6752,7 @@ function AppContent() {
 
                 <View onLayout={(e) => { sectionOffsets.current['junkSilver'] = e.nativeEvent.layout.y; }}>
                 <TouchableOpacity style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]} onPress={() => setShowJunkCalcModal(true)}>
-                  <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>🧮 Junk Silver Calculator</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><CalculatorIcon size={18} color={colors.gold} /><Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>Junk Silver Calculator</Text></View>
                   <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>Calculate melt value of constitutional silver</Text>
                 </TouchableOpacity>
                 </View>
@@ -6754,7 +6771,7 @@ function AppContent() {
                 >
                   <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>🏆 Stack Milestones</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><TrophyIcon size={18} color={colors.gold} /><Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>Stack Milestones</Text></View>
                       {hasGoldAccess ? (
                         <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny }}>Tap to edit</Text>
                       ) : (

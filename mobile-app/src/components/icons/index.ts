@@ -8,3 +8,7 @@ export { default as ToolsIcon } from './ToolsIcon';
 export { default as SettingsIcon } from './SettingsIcon';
 export { default as SortIcon } from './SortIcon';
 export { default as TodayIcon } from './TodayIcon';
+export { default as BellIcon } from './BellIcon';
+export { default as TrendingUpIcon } from './TrendingUpIcon';
+export { default as CalculatorIcon } from './CalculatorIcon';
+export { default as TrophyIcon } from './TrophyIcon';
