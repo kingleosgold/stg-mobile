@@ -51,8 +51,7 @@ async function checkPriceAlerts(currentPrices) {
   }
 
   const startTime = Date.now();
-  console.log('🔍 Checking price alerts...');
-  console.log('   Current prices:', currentPrices);
+  console.log(`🔍 Price alert check: ${new Date().toISOString()} — checking against prices: Gold $${currentPrices.gold}, Silver $${currentPrices.silver}`);
 
   let stats = {
     checked: 0,
@@ -75,11 +74,11 @@ async function checkPriceAlerts(currentPrices) {
     }
 
     if (!alerts || alerts.length === 0) {
-      console.log('   No active alerts to check');
+      console.log(`   Price alert check: ${new Date().toISOString()} — 0 active alerts, nothing to check`);
       return stats;
     }
 
-    console.log(`   Found ${alerts.length} active alerts to check`);
+    console.log(`   Checking ${alerts.length} active alerts...`);
     stats.checked = alerts.length;
 
     // Check each alert

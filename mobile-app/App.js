@@ -955,7 +955,7 @@ function AppContent() {
     targetPrice: '',
     direction: 'above', // 'above' or 'below'
   });
-  const [athAlerts, setAthAlerts] = useState({ silver: false, gold: false, platinum: false, palladium: false });
+  // TODO v2.1: Implement ATH alerts with backend tracking
 
   // Analytics State (Gold/Lifetime feature)
   const [analyticsSnapshots, setAnalyticsSnapshots] = useState([]);
@@ -2369,13 +2369,10 @@ function AppContent() {
     }
   }, [revenueCatUserId, hasGold, hasLifetimeAccess]);
 
-  // Load price alerts and ATH preferences from local storage
+  // Load price alerts from local storage
   useEffect(() => {
     if (hasGold || hasLifetimeAccess) {
       fetchPriceAlerts();
-      AsyncStorage.getItem('stack_ath_alerts').then(val => {
-        if (val) try { setAthAlerts(JSON.parse(val)); } catch (e) {}
-      });
     }
   }, [hasGold, hasLifetimeAccess]);
 
@@ -2709,13 +2706,9 @@ function AppContent() {
 
   // ============================================
   // PRICE ALERTS (Gold/Lifetime Feature)
-  // All alert preferences stored locally in AsyncStorage.
-  // TODO: Backend implementation needed:
-  //   - Sync alert preferences to Supabase (user_preferences or price_alerts table)
-  //   - Backend cron job compares cached spot prices against user targets
-  //   - Send push notifications via Expo when conditions are met
-  //   - ATH alerts: track all-time highs and notify when exceeded
-  //   - Custom alerts: check if price crosses targetPrice in specified direction
+  // Alerts stored locally in AsyncStorage and synced to backend via /api/price-alerts/sync.
+  // Backend priceAlertChecker runs every 5 min, sends push via Expo when triggered.
+  // TODO v2.1: Implement ATH alerts with backend tracking
   // ============================================
 
   // Load price alerts from AsyncStorage
@@ -2741,17 +2734,7 @@ function AppContent() {
     }
   };
 
-  // Toggle ATH alert preference
-  const toggleAthAlert = async (metal) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const updated = { ...athAlerts, [metal]: !athAlerts[metal] };
-    setAthAlerts(updated);
-    try {
-      await AsyncStorage.setItem('stack_ath_alerts', JSON.stringify(updated));
-    } catch (error) {
-      console.error('Failed to save ATH alert preference:', error);
-    }
-  };
+  // TODO v2.1: toggleAthAlert removed — implement with backend tracking
 
   // Sync price alerts to backend for push notifications
   // Accepts optional alertsList to avoid stale React state closure issues
@@ -3920,7 +3903,7 @@ function AppContent() {
 
   // Fetch daily brief when tab, user, or subscription status changes
   useEffect(() => {
-    if (tab === 'today' && !dailyBrief && hasGoldAccess && supabaseUser) {
+    if (tab === 'today' && hasGoldAccess && supabaseUser && (!dailyBrief || !dailyBrief.is_current)) {
       fetchDailyBrief();
     }
   }, [tab, supabaseUser, hasGoldAccess]);
@@ -5581,12 +5564,19 @@ function AppContent() {
                   marginBottom: 16,
                 }}>
                   <Text style={{ color: colors.muted, fontSize: 12, fontWeight: '600', marginBottom: 8 }}>
-                    {'☀\uFE0F'} Your Morning Brief · {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                    {'☀\uFE0F'} Your Morning Brief · {dailyBrief && dailyBrief.date && !dailyBrief.is_current
+                      ? new Date(dailyBrief.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+                      : new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
                   </Text>
                   {dailyBriefLoading ? (
                     <ActivityIndicator size="small" color="#D4A843" style={{ paddingVertical: 8 }} />
                   ) : dailyBrief && dailyBrief.brief_text ? (
                     <>
+                      {!dailyBrief.is_current && (
+                        <Text style={{ color: colors.gold, fontSize: 11, fontStyle: 'italic', marginBottom: 6 }}>
+                          Today's brief will be available after 6:30 AM EST. Showing your most recent brief.
+                        </Text>
+                      )}
                       <Text style={{ color: colors.text, fontSize: 14, lineHeight: 20 }} numberOfLines={briefExpanded ? undefined : 2}>{dailyBrief.brief_text}</Text>
                       <TouchableOpacity onPress={() => setBriefExpanded(!briefExpanded)} style={{ marginTop: 4, paddingVertical: 12 }}>
                         <Text style={{ color: '#D4A843', fontSize: 15, fontWeight: '700' }}>{briefExpanded ? 'See less' : 'See more'}</Text>
@@ -5594,7 +5584,7 @@ function AppContent() {
                     </>
                   ) : (
                     <Text style={{ color: colors.muted, fontSize: 13, fontStyle: 'italic' }}>
-                      Your brief is being prepared... Check back after 6:30 AM EST
+                      Your first brief will be available after 6:30 AM EST.
                     </Text>
                   )}
                 </View>
@@ -8325,7 +8315,7 @@ function AppContent() {
             <View style={{ backgroundColor: isDarkMode ? '#1c1c1e' : '#ffffff', borderRadius: 10, overflow: 'hidden', marginBottom: 20 }}>
               {[
                 { icon: '📸', label: 'Unlimited receipt scans' },
-                { icon: '🔔', label: 'Price alerts & all-time high alerts' },
+                { icon: '🔔', label: 'Price alerts & push notifications' },
                 { icon: '📈', label: 'Portfolio analytics with charts' },
                 { icon: '🔮', label: 'What If scenarios & speculation tool' },
                 { icon: '🧮', label: 'Junk silver calculator' },
@@ -8880,7 +8870,7 @@ function AppContent() {
             </View>
           </View>
           <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>• Price Alerts — Get notified when gold or silver hits your target price</Text>
-          <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>• All-Time High Alerts — Be the first to know when spot prices set new records</Text>
+          <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>• Price Alerts — Get notified when gold or silver hits your target price</Text>
           <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>• What If Scenarios — See portfolio value at hypothetical spot prices</Text>
           <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>• Junk Silver Calculator — Calculate melt value of constitutional silver</Text>
           <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>• Stack Milestones — Set and track oz goals for your stack</Text>
@@ -8948,54 +8938,11 @@ function AppContent() {
         colors={colors}
         isDarkMode={isDarkMode}
       >
-        {/* All-Time High Alerts */}
-        <View style={{ marginBottom: 24 }}>
-          <Text style={{ color: colors.text, fontWeight: '700', fontSize: 16, marginBottom: 12 }}>All-Time High Alerts</Text>
-          <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 12 }}>
-            Get notified when spot prices reach a new all-time high.
-          </Text>
-          {[
-            { key: 'silver', label: 'Silver', color: colors.silver },
-            { key: 'gold', label: 'Gold', color: colors.gold },
-            { key: 'platinum', label: 'Platinum', color: colors.platinum },
-            { key: 'palladium', label: 'Palladium', color: colors.palladium },
-          ].map((item, idx, arr) => (
-            <View key={item.key} style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              paddingVertical: 12,
-              borderBottomWidth: idx < arr.length - 1 ? 1 : 0,
-              borderBottomColor: colors.border,
-            }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <View style={{
-                  width: 28, height: 28, borderRadius: 6,
-                  backgroundColor: `${item.color}33`,
-                  alignItems: 'center', justifyContent: 'center',
-                }}>
-                  <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: item.color }} />
-                </View>
-                <Text style={{ color: colors.text, fontSize: 15 }}>
-                  {item.label} All-Time High
-                </Text>
-              </View>
-              <Switch
-                value={athAlerts[item.key]}
-                onValueChange={() => toggleAthAlert(item.key)}
-                trackColor={{ false: isDarkMode ? '#39393d' : '#e5e5ea', true: colors.gold }}
-                thumbColor="#fff"
-              />
-            </View>
-          ))}
-        </View>
-
-        {/* Divider */}
-        <View style={{ height: 1, backgroundColor: colors.border, marginBottom: 20 }} />
+        {/* TODO v2.1: ATH alerts section removed — implement with backend tracking */}
 
         {/* Custom Price Alert */}
         <View style={{ marginBottom: 20 }}>
-          <Text style={{ color: colors.text, fontWeight: '700', fontSize: 16, marginBottom: 12 }}>Custom Price Alert</Text>
+          <Text style={{ color: colors.text, fontWeight: '700', fontSize: 16, marginBottom: 12 }}>Price Alert</Text>
           <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 16 }}>
             Get notified when spot prices reach your target
           </Text>

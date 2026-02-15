@@ -97,6 +97,7 @@ const path = require('path');
 // Import web scraper for live spot prices and historical prices
 const { scrapeGoldSilverPrices, fetchHistoricalPrices, areMarketsClosed, saveFridayClose, getFridayClose } = require(path.join(__dirname, 'scrapers', 'gold-silver-scraper.js'));
 const { checkPriceAlerts, startPriceAlertChecker, getLastCheckInfo } = require(path.join(__dirname, 'services', 'priceAlertChecker.js'));
+const { sendPushNotification, isValidExpoPushToken } = require(path.join(__dirname, 'services', 'expoPushNotifications.js'));
 
 // Import historical price services
 const { isSupabaseAvailable, getSupabase } = require('./supabaseClient');
@@ -4110,16 +4111,15 @@ app.get('/api/daily-brief', async (req, res) => {
       .single();
 
     if (error || !data) {
+      // No briefs ever generated for this user
       return res.json({ success: true, brief: null });
     }
 
     // Check if the brief is from today (EST)
     const todayEST = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
-    if (data.date !== todayEST) {
-      return res.json({ success: true, brief: null });
-    }
+    const isCurrent = data.date === todayEST;
 
-    return res.json({ success: true, brief: data });
+    return res.json({ success: true, brief: { ...data, is_current: isCurrent } });
 
   } catch (error) {
     console.error('❌ [Daily Brief] Fetch error:', error.message);
@@ -4636,11 +4636,39 @@ fetchLiveSpotPrices().then(() => {
           let success = 0;
           let failed = 0;
 
+          let pushSent = 0;
           for (const user of goldUsers) {
             try {
-              await generateDailyBrief(user.id);
+              const result = await generateDailyBrief(user.id);
               success++;
               console.log(`📝 [Daily Brief Cron] ✅ ${success}/${goldUsers.length} — user ${user.id}`);
+
+              // Send push notification if user has a valid push token
+              if (result && result.brief && result.brief.brief_text) {
+                try {
+                  const { data: tokenData } = await supabaseClient
+                    .from('push_tokens')
+                    .select('expo_push_token')
+                    .eq('user_id', user.id)
+                    .order('last_active', { ascending: false })
+                    .limit(1)
+                    .single();
+
+                  if (tokenData && isValidExpoPushToken(tokenData.expo_push_token)) {
+                    const firstSentence = result.brief.brief_text.split(/[.!]\s/)[0];
+                    const body = firstSentence.length > 100 ? firstSentence.slice(0, 97) + '...' : firstSentence;
+                    await sendPushNotification(tokenData.expo_push_token, {
+                      title: '\u2600\uFE0F Your Morning Brief is Ready',
+                      body,
+                      data: { type: 'daily_brief' },
+                      sound: 'default',
+                    });
+                    pushSent++;
+                  }
+                } catch (pushErr) {
+                  console.log(`📝 [Daily Brief Cron] Push skipped for ${user.id}: ${pushErr.message}`);
+                }
+              }
             } catch (err) {
               failed++;
               console.error(`📝 [Daily Brief Cron] ❌ user ${user.id}: ${err.message}`);
@@ -4651,7 +4679,7 @@ fetchLiveSpotPrices().then(() => {
             }
           }
 
-          console.log(`📝 [Daily Brief Cron] Done: ${success} success, ${failed} failed out of ${goldUsers.length}`);
+          console.log(`📝 [Daily Brief Cron] Done: ${success} success, ${failed} failed, ${pushSent} push sent out of ${goldUsers.length}`);
         } catch (err) {
           console.error('📝 [Daily Brief Cron] Failed:', err.message);
         }

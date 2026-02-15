@@ -548,13 +548,7 @@ struct StackTrackerWidgetEntryView: View {
     var entry: WidgetEntry
 
     var body: some View {
-        GeometryReader { geo in
-            ZStack {
-                wBgColor
-                widgetContent
-            }
-            .frame(width: geo.size.width, height: geo.size.height)
-        }
+        widgetContent
     }
 
     @ViewBuilder
@@ -578,14 +572,6 @@ struct SmallWidgetView: View {
     let data: WidgetData
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            wBgColor
-            content
-        }
-    }
-
-    @ViewBuilder
-    private var content: some View {
         if data.hasSubscription {
             SmallSubscribed(data: data)
         } else {
@@ -696,14 +682,6 @@ struct MediumWidgetView: View {
     let data: WidgetData
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            wBgColor
-            content
-        }
-    }
-
-    @ViewBuilder
-    private var content: some View {
         if data.hasSubscription {
             MediumSubscribed(data: data)
         } else {
@@ -842,14 +820,6 @@ struct LargeWidgetView: View {
     let data: WidgetData
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            wBgColor
-            content
-        }
-    }
-
-    @ViewBuilder
-    private var content: some View {
         if data.hasSubscription {
             LargeSubscribed(data: data)
         } else {
