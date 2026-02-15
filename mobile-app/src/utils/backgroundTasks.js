@@ -150,25 +150,29 @@ const updateWidgetBackground = async (priceData) => {
  * Define the background fetch task
  * This runs when iOS wakes the app in the background
  */
-TaskManager.defineTask(BACKGROUND_FETCH_TASK, async () => {
-  console.log('[BackgroundFetch] Task started');
+try {
+  TaskManager.defineTask(BACKGROUND_FETCH_TASK, async () => {
+    console.log('[BackgroundFetch] Task started');
 
-  try {
-    const priceData = await fetchSpotPricesBackground();
+    try {
+      const priceData = await fetchSpotPricesBackground();
 
-    if (priceData) {
-      await updateWidgetBackground(priceData);
-      console.log('[BackgroundFetch] Task completed successfully');
-      return BackgroundFetch.BackgroundFetchResult.NewData;
+      if (priceData) {
+        await updateWidgetBackground(priceData);
+        console.log('[BackgroundFetch] Task completed successfully');
+        return BackgroundFetch.BackgroundFetchResult.NewData;
+      }
+
+      console.log('[BackgroundFetch] Task completed - no new data');
+      return BackgroundFetch.BackgroundFetchResult.NoData;
+    } catch (error) {
+      console.error('[BackgroundFetch] Task failed:', error.message);
+      return BackgroundFetch.BackgroundFetchResult.Failed;
     }
-
-    console.log('[BackgroundFetch] Task completed - no new data');
-    return BackgroundFetch.BackgroundFetchResult.NoData;
-  } catch (error) {
-    console.error('[BackgroundFetch] Task failed:', error.message);
-    return BackgroundFetch.BackgroundFetchResult.Failed;
-  }
-});
+  });
+} catch (e) {
+  console.log('[BackgroundFetch] Task definition skipped:', e?.message);
+}
 
 /**
  * Register the background fetch task with iOS

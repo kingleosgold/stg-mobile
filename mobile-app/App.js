@@ -959,6 +959,20 @@ function AppContent() {
   const drawerOverlayAnim = useRef(new Animated.Value(0)).current;
   const sectionOffsets = useRef({});
   const drawerOpenRef = useRef(false);
+  const openDrawerRef = useRef(null);
+  const drawerPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        return !drawerOpenRef.current && evt.nativeEvent.pageX < 60 && gestureState.dx > 10 && Math.abs(gestureState.dy) < 30;
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        if (gestureState.dx > 50 && openDrawerRef.current) {
+          openDrawerRef.current();
+        }
+      },
+    })
+  ).current;
 
   // Today Tab - Intelligence Feed
   const [intelligenceBriefs, setIntelligenceBriefs] = useState([]);
@@ -2085,7 +2099,7 @@ function AppContent() {
             expo_push_token: token,
             platform: Platform.OS,
             app_version: Constants.expoConfig?.version,
-            user_id: user?.id || null,
+            user_id: supabaseUser?.id || null,
             device_id: deviceId,
           }),
         });
@@ -5343,6 +5357,7 @@ function AppContent() {
       Animated.timing(drawerOverlayAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
     ]).start();
   };
+  openDrawerRef.current = openDrawer;
 
   const closeDrawer = () => {
     Animated.parallel([
@@ -5366,20 +5381,6 @@ function AppContent() {
       }
     }, 100);
   };
-
-  const drawerPanResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (evt, gestureState) => {
-        return !drawerOpenRef.current && evt.nativeEvent.pageX < 60 && gestureState.dx > 10 && Math.abs(gestureState.dy) < 30;
-      },
-      onPanResponderRelease: (evt, gestureState) => {
-        if (gestureState.dx > 50) {
-          openDrawer();
-        }
-      },
-    })
-  ).current;
 
   // ============================================
   // MAIN RENDER
