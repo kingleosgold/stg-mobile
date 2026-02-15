@@ -3,11 +3,7 @@ import WidgetKit
 
 // MARK: - Design Constants
 
-let wBgGradient = LinearGradient(
-    colors: [Color(hex: "#1a1a1a"), Color(hex: "#0d0d0d")],
-    startPoint: .top,
-    endPoint: .bottom
-)
+let wBgColor = Color.black
 let wGold = Color(hex: "#D4A843")
 let wGreen = Color(hex: "#4CAF50")
 let wRed = Color(hex: "#F44336")
@@ -554,7 +550,7 @@ struct StackTrackerWidgetEntryView: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                wBgGradient
+                wBgColor
                 widgetContent
             }
             .frame(width: geo.size.width, height: geo.size.height)
@@ -583,7 +579,7 @@ struct SmallWidgetView: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            wBgGradient
+            wBgColor
             content
         }
     }
@@ -603,7 +599,6 @@ struct SmallSubscribed: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            GoldAccentBar()
             SmallInner(data: data)
         }
     }
@@ -702,7 +697,7 @@ struct MediumWidgetView: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            wBgGradient
+            wBgColor
             content
         }
     }
@@ -722,7 +717,6 @@ struct MediumSubscribed: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            GoldAccentBar()
             panels
         }
     }
@@ -849,7 +843,7 @@ struct LargeWidgetView: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            wBgGradient
+            wBgColor
             content
         }
     }
@@ -869,7 +863,6 @@ struct LargeSubscribed: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            GoldAccentBar()
             LargeMain(data: data)
         }
     }
@@ -911,7 +904,7 @@ struct LargeHeader: View {
     private var titleRow: some View {
         WBoldCurrencyText(
             text: wPrivacy(wFormatCurrency(data.portfolioValue), data.hideValues),
-            size: 34
+            size: 48
         )
     }
 
@@ -920,7 +913,7 @@ struct LargeHeader: View {
             amount: data.dailyChangeAmount,
             percent: data.dailyChangePercent,
             hideValues: data.hideValues,
-            arrowSize: 11, amountSize: 13, pctSize: 11
+            arrowSize: 13, amountSize: 15, pctSize: 13
         )
         .padding(.top, 2)
     }

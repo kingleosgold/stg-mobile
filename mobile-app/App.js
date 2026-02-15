@@ -9,7 +9,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput,
   Alert, Modal, Platform, SafeAreaView, StatusBar, ActivityIndicator,
   Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView, Dimensions, AppState, FlatList, Clipboard, Linking,
-  useColorScheme, RefreshControl, Switch, Image,
+  useColorScheme, RefreshControl, Switch, Image, Animated, LayoutAnimation,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from './ErrorBoundary';
@@ -951,6 +951,13 @@ function AppContent() {
   const [dailyBrief, setDailyBrief] = useState(null); // { brief_text, date }
   const [dailyBriefLoading, setDailyBriefLoading] = useState(false);
   const [briefExpanded, setBriefExpanded] = useState(false);
+
+  // Side Drawer
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [expandedDrawerTab, setExpandedDrawerTab] = useState(null);
+  const drawerAnim = useRef(new Animated.Value(-300)).current;
+  const drawerOverlayAnim = useRef(new Animated.Value(0)).current;
+  const sectionOffsets = useRef({});
 
   // Today Tab - Intelligence Feed
   const [intelligenceBriefs, setIntelligenceBriefs] = useState([]);
@@ -5287,6 +5294,77 @@ function AppContent() {
   const spot = metalSpotMap[metalTab] || goldSpot;
 
   // ============================================
+  // SIDE DRAWER
+  // ============================================
+
+  const drawerSections = [
+    { key: 'today', label: 'Today', items: [
+      { key: 'morningBrief', label: 'Morning Brief' },
+      { key: 'portfolioPulse', label: 'Portfolio Pulse' },
+      { key: 'metalMovers', label: 'Metal Movers' },
+      { key: 'whatChanged', label: 'What Changed Today' },
+      { key: 'vaultWatch', label: 'Vault Watch' },
+      { key: 'intelligenceFeed', label: 'Intelligence Feed' },
+      { key: 'aiStackAdvisor', label: 'AI Stack Advisor' },
+    ]},
+    { key: 'portfolio', label: 'Portfolio', items: [
+      { key: 'portfolioSummary', label: 'Summary' },
+      { key: 'holdings', label: 'Holdings' },
+    ]},
+    { key: 'analytics', label: 'Analytics', items: [
+      { key: 'portfolioValueChart', label: 'Portfolio Value Chart' },
+      { key: 'spotPriceHistory', label: 'Spot Price History' },
+      { key: 'holdingsBreakdown', label: 'Holdings Breakdown' },
+      { key: 'purchaseStatistics', label: 'Purchase Statistics' },
+      { key: 'breakEvenAnalysis', label: 'Break-Even Analysis' },
+    ]},
+    { key: 'tools', label: 'Tools', items: [
+      { key: 'shareMyStack', label: 'Share My Stack' },
+      { key: 'junkSilver', label: 'Junk Silver Calculator' },
+      { key: 'priceAlerts', label: 'Price Alerts' },
+      { key: 'speculationTool', label: 'Speculation Tool' },
+      { key: 'stackMilestones', label: 'Stack Milestones' },
+    ]},
+    { key: 'settings', label: 'Settings', items: [
+      { key: 'webApp', label: 'Web App' },
+      { key: 'account', label: 'Account' },
+      { key: 'notifications', label: 'Notifications' },
+      { key: 'whatsNew', label: "What's New in v2.0" },
+      { key: 'about', label: 'About' },
+    ]},
+  ];
+
+  const openDrawer = () => {
+    setDrawerOpen(true);
+    Animated.parallel([
+      Animated.timing(drawerAnim, { toValue: 0, duration: 250, useNativeDriver: true }),
+      Animated.timing(drawerOverlayAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
+    ]).start();
+  };
+
+  const closeDrawer = () => {
+    Animated.parallel([
+      Animated.timing(drawerAnim, { toValue: -300, duration: 200, useNativeDriver: true }),
+      Animated.timing(drawerOverlayAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
+    ]).start(() => {
+      setDrawerOpen(false);
+    });
+  };
+
+  const navigateToSection = (tabKey, sectionKey) => {
+    closeDrawer();
+    if (tab !== tabKey) {
+      setTab(tabKey);
+    }
+    setTimeout(() => {
+      const y = sectionOffsets.current[sectionKey];
+      if (y !== undefined) {
+        scrollRef.current?.scrollTo({ y, animated: true });
+      }
+    }, 100);
+  };
+
+  // ============================================
   // MAIN RENDER
   // ============================================
 
@@ -5297,7 +5375,7 @@ function AppContent() {
       {/* Header */}
       <View style={[styles.header, { backgroundColor: isDarkMode ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.8)', borderBottomColor: colors.border }]}>
         <View style={styles.headerContent}>
-          <View style={styles.logo}>
+          <TouchableOpacity onPress={openDrawer} activeOpacity={0.7} style={styles.logo}>
             <Image source={require('./assets/icon.png')} style={{ width: 40, height: 40, borderRadius: 8 }} />
             <Text style={[styles.logoTitle, { color: colors.text }]}>Stack Tracker Gold</Text>
             {/* Sync Status Indicator */}
@@ -5314,7 +5392,7 @@ function AppContent() {
                 <Text style={{ color: colors.error, fontSize: 16 }}>!</Text>
               </TouchableOpacity>
             )}
-          </View>
+          </TouchableOpacity>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {supabaseUser ? (
               // Signed in - show profile icon that goes to account
@@ -5438,6 +5516,7 @@ function AppContent() {
             <View style={{ backgroundColor: isDarkMode ? '#0d0d0d' : colors.bg, marginHorizontal: -20, paddingHorizontal: 16, paddingTop: 4, minHeight: Dimensions.get('window').height - 200 }}>
 
               {/* ===== YOUR DAILY BRIEF ===== */}
+              <View onLayout={(e) => { sectionOffsets.current['morningBrief'] = e.nativeEvent.layout.y; }}>
               {hasGoldAccess ? (
                 <View style={{
                   backgroundColor: todayCardBg,
@@ -5457,8 +5536,8 @@ function AppContent() {
                   ) : dailyBrief && dailyBrief.brief_text ? (
                     <>
                       <Text style={{ color: colors.text, fontSize: 14, lineHeight: 20 }} numberOfLines={briefExpanded ? undefined : 2}>{dailyBrief.brief_text}</Text>
-                      <TouchableOpacity onPress={() => setBriefExpanded(!briefExpanded)} style={{ marginTop: 6 }}>
-                        <Text style={{ color: '#D4A843', fontSize: 13, fontWeight: '600' }}>{briefExpanded ? 'See less' : 'See more'}</Text>
+                      <TouchableOpacity onPress={() => setBriefExpanded(!briefExpanded)} style={{ marginTop: 4, paddingVertical: 12 }}>
+                        <Text style={{ color: '#D4A843', fontSize: 15, fontWeight: '700' }}>{briefExpanded ? 'See less' : 'See more'}</Text>
                       </TouchableOpacity>
                     </>
                   ) : (
@@ -5492,9 +5571,10 @@ function AppContent() {
                   </View>
                 </TouchableOpacity>
               )}
+              </View>
 
               {/* ===== SECTION 1: PORTFOLIO PULSE ===== */}
-              <View style={{
+              <View onLayout={(e) => { sectionOffsets.current['portfolioPulse'] = e.nativeEvent.layout.y; }} style={{
                 backgroundColor: todayCardBg,
                 borderRadius: 16,
                 borderWidth: 1,
@@ -5548,7 +5628,7 @@ function AppContent() {
               </View>
 
               {/* ===== SECTION 2: METAL MOVERS (2x2 Grid) ===== */}
-              <View style={{ marginBottom: 16 }}>
+              <View onLayout={(e) => { sectionOffsets.current['metalMovers'] = e.nativeEvent.layout.y; }} style={{ marginBottom: 16 }}>
                 <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '600', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 10, marginLeft: 4 }}>Metal Movers</Text>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
                   {metalMovers.map((m, idx) => {
@@ -5620,7 +5700,7 @@ function AppContent() {
               </View>
 
               {/* ===== SECTION 3: WHAT CHANGED TODAY ===== */}
-              <View style={{ marginBottom: 16 }}>
+              <View onLayout={(e) => { sectionOffsets.current['whatChanged'] = e.nativeEvent.layout.y; }} style={{ marginBottom: 16 }}>
                   {holdingsImpact.length > 0 && (
                     <View>
                       <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '600', letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 10, marginLeft: 4 }}>What Changed Today</Text>
@@ -5697,6 +5777,7 @@ function AppContent() {
               </View>
 
               {/* ===== SECTION 3.5: VAULT WATCH (Gold-only) ===== */}
+              <View onLayout={(e) => { sectionOffsets.current['vaultWatch'] = e.nativeEvent.layout.y; }}>
               {(() => {
                 const vaultMetals = [
                   { key: 'silver', label: 'Ag', color: colors.silver },
@@ -5982,9 +6063,10 @@ function AppContent() {
                   </View>
                 );
               })()}
+              </View>
 
               {/* ===== SECTION 4: INTELLIGENCE FEED ===== */}
-              <View style={{ marginBottom: 16 }}>
+              <View onLayout={(e) => { sectionOffsets.current['intelligenceFeed'] = e.nativeEvent.layout.y; }} style={{ marginBottom: 16 }}>
                   {/* Section header with gold divider */}
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 10 }}>
                     <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '600', letterSpacing: 1.2, textTransform: 'uppercase', marginLeft: 4 }}>Market Intelligence</Text>
@@ -6091,7 +6173,7 @@ function AppContent() {
               </View>
 
               {/* ===== SECTION 4.5: AI STACK ADVISOR ===== */}
-              <View style={{ marginBottom: 16 }}>
+              <View onLayout={(e) => { sectionOffsets.current['aiStackAdvisor'] = e.nativeEvent.layout.y; }} style={{ marginBottom: 16 }}>
                   {/* Section header with gold divider */}
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6, gap: 10 }}>
                     <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '600', letterSpacing: 1.2, textTransform: 'uppercase', marginLeft: 4 }}>
@@ -6267,7 +6349,7 @@ function AppContent() {
         {tab === 'portfolio' && (
           <>
             {/* Portfolio Summary Card */}
-            <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+            <View onLayout={(e) => { sectionOffsets.current['portfolioSummary'] = e.nativeEvent.layout.y; }} style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
               <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.large }]}>Portfolio Value</Text>
               <Text
                 style={{ color: colors.text, fontSize: Math.round(32 * fontScale), fontWeight: '700', marginBottom: 4 }}
@@ -6292,7 +6374,7 @@ function AppContent() {
             </View>
 
             {/* Segmented Control Filter */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 10 }}>
+            <View onLayout={(e) => { sectionOffsets.current['holdings'] = e.nativeEvent.layout.y; }} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 10 }}>
               <View style={{
                 flex: 1,
                 flexDirection: 'row',
@@ -6619,6 +6701,7 @@ function AppContent() {
         {tab === 'tools' && (
           <>
                 {/* Price Alerts */}
+                <View onLayout={(e) => { sectionOffsets.current['priceAlerts'] = e.nativeEvent.layout.y; }}>
                 <TouchableOpacity
                   style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}
                   onPress={() => {
@@ -6638,7 +6721,9 @@ function AppContent() {
                   </View>
                   <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>Set alerts for gold and silver price targets</Text>
                 </TouchableOpacity>
+                </View>
 
+                <View onLayout={(e) => { sectionOffsets.current['speculationTool'] = e.nativeEvent.layout.y; }}>
                 <TouchableOpacity style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]} onPress={() => { if (!hasGoldAccess) { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowPaywallModal(true); return; } setShowSpeculationModal(true); }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>🔮 Speculation Tool</Text>
@@ -6646,13 +6731,17 @@ function AppContent() {
                   </View>
                   <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>What if silver hits $100? What if gold hits $10,000?</Text>
                 </TouchableOpacity>
+                </View>
 
+                <View onLayout={(e) => { sectionOffsets.current['junkSilver'] = e.nativeEvent.layout.y; }}>
                 <TouchableOpacity style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]} onPress={() => setShowJunkCalcModal(true)}>
                   <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>🧮 Junk Silver Calculator</Text>
                   <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>Calculate melt value of constitutional silver</Text>
                 </TouchableOpacity>
+                </View>
 
                 {/* Stack Milestones - Tappable to Edit */}
+                <View onLayout={(e) => { sectionOffsets.current['stackMilestones'] = e.nativeEvent.layout.y; }}>
                 <TouchableOpacity
                   activeOpacity={0.7}
                   onPress={() => {
@@ -6676,8 +6765,10 @@ function AppContent() {
                     <ProgressBar value={totalGoldOzt} max={nextGoldMilestone} color={colors.gold} label={`Gold: ${formatOunces(totalGoldOzt, 2)} / ${nextGoldMilestone} oz${customGoldMilestone ? ' (custom)' : ''}`} />
                   </View>
                 </TouchableOpacity>
+                </View>
 
                 {/* Share My Stack - Inline Card */}
+                <View onLayout={(e) => { sectionOffsets.current['shareMyStack'] = e.nativeEvent.layout.y; }}>
                 {(silverItems.length > 0 || goldItems.length > 0 || platinumItems.length > 0 || palladiumItems.length > 0) && (() => {
                   const shareMetals = [
                     { label: 'Gold', symbol: 'Au', ozt: totalGoldOzt, spot: goldSpot, color: '#D4A843', decimals: 3, value: totalGoldOzt * goldSpot },
@@ -6782,6 +6873,7 @@ function AppContent() {
                     </View>
                   );
                 })()}
+                </View>
           </>
         )}
 
@@ -6856,7 +6948,7 @@ function AppContent() {
                 </View>
 
                 {/* Portfolio Value Chart */}
-                <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+                <View onLayout={(e) => { sectionOffsets.current['portfolioValueChart'] = e.nativeEvent.layout.y; }} style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
                   <Text style={[styles.cardTitle, { color: colors.text, marginBottom: 12, fontSize: scaledFonts.medium }]}>Portfolio Value</Text>
                   {/* Special handling for 1D range */}
                   {analyticsRange === '1D' ? (() => {
@@ -7047,6 +7139,7 @@ function AppContent() {
                 </View>
 
                 {/* Spot Price History — 4 Individual Metal Charts */}
+                <View onLayout={(e) => { sectionOffsets.current['spotPriceHistory'] = e.nativeEvent.layout.y; }} />
                 {[
                   { key: 'gold', label: 'Gold', spot: goldSpot, color: '#D4A843', fillColor: 'rgba(212, 168, 67, 0.15)' },
                   { key: 'silver', label: 'Silver', spot: silverSpot, color: '#C0C0C0', fillColor: 'rgba(192, 192, 192, 0.15)' },
@@ -7174,7 +7267,7 @@ function AppContent() {
                 })}
 
                 {/* Holdings Breakdown */}
-                <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+                <View onLayout={(e) => { sectionOffsets.current['holdingsBreakdown'] = e.nativeEvent.layout.y; }} style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
                   <Text style={[styles.cardTitle, { color: colors.text, marginBottom: 12, fontSize: scaledFonts.medium }]}>Holdings Breakdown</Text>
                   {totalMeltValue > 0 ? (
                     hasGoldAccess ? (
@@ -7376,7 +7469,7 @@ function AppContent() {
                 </View>
 
                 {/* Purchase Stats */}
-                <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+                <View onLayout={(e) => { sectionOffsets.current['purchaseStatistics'] = e.nativeEvent.layout.y; }} style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
                   <Text style={[styles.cardTitle, { color: colors.text, marginBottom: 12, fontSize: scaledFonts.medium }]}>Purchase Statistics</Text>
 
                   {(() => {
@@ -7450,7 +7543,7 @@ function AppContent() {
                 </View>
 
                 {/* Break-Even Analysis */}
-                <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
+                <View onLayout={(e) => { sectionOffsets.current['breakEvenAnalysis'] = e.nativeEvent.layout.y; }} style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
                   <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>Break-Even Analysis</Text>
                   {totalSilverOzt > 0 && (
                     <View style={{ backgroundColor: `${colors.silver}22`, padding: 12, borderRadius: 8, marginBottom: 8 }}>
@@ -7568,6 +7661,7 @@ function AppContent() {
           return (
             <View style={{ flex: 1, backgroundColor: settingsBg, marginHorizontal: -20, marginTop: -20, paddingHorizontal: 16, paddingTop: 8 }}>
               {/* Web App */}
+              <View onLayout={(e) => { sectionOffsets.current['webApp'] = e.nativeEvent.layout.y; }}>
               <SectionHeader title="Web App" />
               <View style={{ borderRadius: 10, overflow: 'hidden' }}>
                 <TouchableOpacity
@@ -7600,7 +7694,9 @@ function AppContent() {
                 </TouchableOpacity>
               </View>
 
+              </View>
               {/* Account Section */}
+              <View onLayout={(e) => { sectionOffsets.current['account'] = e.nativeEvent.layout.y; }}>
               <SectionHeader title="Account" />
               <View style={{ borderRadius: 10, overflow: 'hidden' }}>
                 {supabaseUser ? (
@@ -7757,7 +7853,9 @@ function AppContent() {
                 </>
               )}
 
+              </View>
               {/* Appearance Section */}
+              <View onLayout={(e) => { sectionOffsets.current['notifications'] = e.nativeEvent.layout.y; }}>
               <SectionHeader title="Appearance" />
               <View style={{ borderRadius: 10, overflow: 'hidden' }}>
                 <View style={{
@@ -7891,7 +7989,9 @@ function AppContent() {
               </View>
               <SectionFooter text="Backups include all holdings and settings. Export to Files, iCloud Drive, or any storage." />
 
+              </View>
               {/* Actions Section */}
+              <View onLayout={(e) => { sectionOffsets.current['whatsNew'] = e.nativeEvent.layout.y; }}>
               <SectionHeader title="Help & Info" />
               <View style={{ borderRadius: 10, overflow: 'hidden' }}>
                 <SettingsRow
@@ -7958,7 +8058,9 @@ function AppContent() {
                 </>
               )}
 
+              </View>
               {/* About Section */}
+              <View onLayout={(e) => { sectionOffsets.current['about'] = e.nativeEvent.layout.y; }}>
               <SectionHeader title="About" />
               <View style={{ borderRadius: 10, overflow: 'hidden' }}>
                 <View style={{
@@ -8022,6 +8124,7 @@ function AppContent() {
                 </View>
               </View>
               <SectionFooter text="Share this ID with support if you need help with your account." />
+              </View>
 
               {/* Danger Zone Section */}
               <SectionHeader title="Danger Zone" />
@@ -9706,6 +9809,78 @@ function AppContent() {
         onComplete={handleV20TutorialComplete}
         slides={v20TutorialSlides}
       />
+
+      {/* Side Drawer */}
+      {drawerOpen && (
+        <>
+          <Animated.View
+            style={{
+              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+              backgroundColor: 'rgba(0,0,0,0.5)',
+              opacity: drawerOverlayAnim,
+              zIndex: 998,
+            }}
+          >
+            <TouchableWithoutFeedback onPress={closeDrawer}>
+              <View style={{ flex: 1 }} />
+            </TouchableWithoutFeedback>
+          </Animated.View>
+
+          <Animated.View
+            style={{
+              position: 'absolute', top: 0, left: 0, bottom: 0,
+              width: 300,
+              backgroundColor: '#1a1a1a',
+              transform: [{ translateX: drawerAnim }],
+              zIndex: 999,
+              paddingTop: insets.top,
+            }}
+          >
+            {/* Drawer Header */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(212,168,67,0.15)' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Image source={require('./assets/icon.png')} style={{ width: 32, height: 32, borderRadius: 6 }} />
+                <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700', marginLeft: 10 }}>Stack Tracker Gold</Text>
+              </View>
+              <TouchableOpacity onPress={closeDrawer} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                <Text style={{ color: '#71717a', fontSize: 22, fontWeight: '300' }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Drawer Body */}
+            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+              {drawerSections.map((section) => (
+                <View key={section.key}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                      setExpandedDrawerTab(expandedDrawerTab === section.key ? null : section.key);
+                    }}
+                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' }}
+                  >
+                    <Text style={{ color: tab === section.key ? '#D4A843' : '#fff', fontSize: 16, fontWeight: '600' }}>{section.label}</Text>
+                    <Text style={{ color: '#71717a', fontSize: 14 }}>{expandedDrawerTab === section.key ? '▾' : '▸'}</Text>
+                  </TouchableOpacity>
+                  {expandedDrawerTab === section.key && section.items.map((item) => (
+                    <TouchableOpacity
+                      key={item.key}
+                      onPress={() => navigateToSection(section.key, item.key)}
+                      style={{ paddingLeft: 32, paddingRight: 16, paddingVertical: 11 }}
+                    >
+                      <Text style={{ color: '#9ca3af', fontSize: 14 }}>{item.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ))}
+            </ScrollView>
+
+            {/* Drawer Footer */}
+            <View style={{ paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)' }}>
+              <Text style={{ color: '#71717a', fontSize: 12 }}>v2.0.0</Text>
+            </View>
+          </Animated.View>
+        </>
+      )}
     </SafeAreaView>
   );
 }
