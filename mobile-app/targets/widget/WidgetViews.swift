@@ -598,7 +598,7 @@ struct SmallInner: View {
             header
             valueText
             changeRow
-            Spacer()
+            Spacer(minLength: 4)
             SmallBottom(data: data)
         }
         .padding(.horizontal, 12)
@@ -606,7 +606,7 @@ struct SmallInner: View {
 
     private var header: some View {
         PortfolioLabel(iconSize: 18, fontSize: 9)
-            .padding(.top, 10)
+            .padding(.top, 8)
             .padding(.bottom, 4)
     }
 
@@ -650,8 +650,8 @@ struct SmallBottom: View {
             lineWidth: 1.5,
             showFill: true
         )
-        .frame(height: 32)
-        .padding(.bottom, 6)
+        .frame(maxHeight: 56)
+        .padding(.bottom, 4)
     }
 }
 
@@ -725,7 +725,7 @@ struct MediumLeft: View {
             header
             valueText
             changeRow
-            Spacer()
+            Spacer(minLength: 2)
             sparklineSection
         }
         .padding(.horizontal, 12)
@@ -734,7 +734,7 @@ struct MediumLeft: View {
 
     private var header: some View {
         PortfolioLabel(iconSize: 16, fontSize: 8)
-            .padding(.top, 8)
+            .padding(.top, 6)
             .padding(.bottom, 4)
     }
 
@@ -760,8 +760,8 @@ struct MediumLeft: View {
         let pts = data.portfolioSparkline()
         if pts.count >= 2 {
             SparklineView(data: pts, color: wChangeColor(data.dailyChangeAmount), lineWidth: 1.5, showFill: true)
-                .frame(height: 30)
-                .padding(.bottom, 8)
+                .frame(maxHeight: 48)
+                .padding(.bottom, 4)
         }
     }
 }
