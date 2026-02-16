@@ -1427,51 +1427,6 @@ app.get('/api/spot-price-history', async (req, res) => {
           allPoints.push({ date, gold: g, silver: s });
         }
       }
-
-      // Overlay price_log for recent data (more accurate than monthly averages)
-      if (isSupabaseAvailable()) {
-        try {
-          const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000).toISOString().split('T')[0];
-          const { data: logData } = await getSupabase()
-            .from('price_log')
-            .select('timestamp, gold_price, silver_price, platinum_price, palladium_price')
-            .gte('timestamp', thirtyDaysAgo + 'T00:00:00')
-            .order('timestamp', { ascending: true });
-
-          if (logData && logData.length > 0) {
-            // Group by date, take first entry per day
-            const dailyPrices = {};
-            for (const row of logData) {
-              const d = row.timestamp.split('T')[0];
-              if (!dailyPrices[d]) {
-                dailyPrices[d] = {
-                  gold: parseFloat(row.gold_price),
-                  silver: parseFloat(row.silver_price),
-                  platinum: row.platinum_price ? parseFloat(row.platinum_price) : 0,
-                  palladium: row.palladium_price ? parseFloat(row.palladium_price) : 0,
-                };
-              }
-            }
-            // Override matching points with more accurate price_log data
-            for (const pt of allPoints) {
-              if (dailyPrices[pt.date]) {
-                pt.gold = dailyPrices[pt.date].gold;
-                pt.silver = dailyPrices[pt.date].silver;
-                pt.platinum = dailyPrices[pt.date].platinum;
-                pt.palladium = dailyPrices[pt.date].palladium;
-              }
-            }
-            // Add any price_log dates not already in allPoints
-            for (const [d, prices] of Object.entries(dailyPrices)) {
-              if (d >= startStr && d <= todayStr && !allPoints.find(p => p.date === d)) {
-                allPoints.push({ date: d, gold: prices.gold, silver: prices.silver, platinum: prices.platinum, palladium: prices.palladium });
-              }
-            }
-          }
-        } catch (err) {
-          console.log('price_log overlay failed:', err.message);
-        }
-      }
     } else {
       // Monthly resolution: use first-of-month keys
       const monthKeys = Object.keys(historicalData.gold)
@@ -1484,6 +1439,51 @@ app.get('/api/spot-price-history', async (req, res) => {
         if (g && s) {
           allPoints.push({ date, gold: g, silver: s });
         }
+      }
+    }
+
+    // Overlay price_log for full date range (provides Pt/Pd data and more accurate recent prices)
+    if (isSupabaseAvailable()) {
+      try {
+        const { data: logData } = await getSupabase()
+          .from('price_log')
+          .select('timestamp, gold_price, silver_price, platinum_price, palladium_price')
+          .gte('timestamp', startStr + 'T00:00:00')
+          .order('timestamp', { ascending: true });
+
+        if (logData && logData.length > 0) {
+          // Group by date, take first entry per day
+          const dailyPrices = {};
+          for (const row of logData) {
+            const d = row.timestamp.split('T')[0];
+            if (!dailyPrices[d]) {
+              dailyPrices[d] = {
+                gold: parseFloat(row.gold_price) || 0,
+                silver: parseFloat(row.silver_price) || 0,
+                platinum: row.platinum_price ? parseFloat(row.platinum_price) : 0,
+                palladium: row.palladium_price ? parseFloat(row.palladium_price) : 0,
+              };
+            }
+          }
+          // Override matching points with more accurate price_log data
+          for (const pt of allPoints) {
+            if (dailyPrices[pt.date]) {
+              if (dailyPrices[pt.date].gold > 0) pt.gold = dailyPrices[pt.date].gold;
+              if (dailyPrices[pt.date].silver > 0) pt.silver = dailyPrices[pt.date].silver;
+              pt.platinum = dailyPrices[pt.date].platinum || pt.platinum || 0;
+              pt.palladium = dailyPrices[pt.date].palladium || pt.palladium || 0;
+            }
+          }
+          // Add any price_log dates not already in allPoints
+          const existingDates = new Set(allPoints.map(p => p.date));
+          for (const [d, prices] of Object.entries(dailyPrices)) {
+            if (d >= startStr && d <= todayStr && !existingDates.has(d)) {
+              allPoints.push({ date: d, gold: prices.gold, silver: prices.silver, platinum: prices.platinum, palladium: prices.palladium });
+            }
+          }
+        }
+      } catch (err) {
+        console.log('price_log overlay failed:', err.message);
       }
     }
 

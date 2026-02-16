@@ -1039,6 +1039,235 @@ const ScrubSparkline = ({ dataPoints, timestamps, svgW, svgH, strokeColor, gradi
   );
 };
 
+/**
+ * ScrubChart — larger chart with y-axis labels, x-axis date labels, and long-press scrubber.
+ * Replaces react-native-chart-kit LineChart for Analytics spot price charts.
+ */
+const ScrubChart = ({ data, color, fillColor, width, height, range, decimalPlaces = 0, chartId = 'default' }) => {
+  const [scrubIndex, setScrubIndex] = useState(null);
+  const scrubIndexRef = useRef(null);
+  const containerRef = useRef(null);
+  const containerX = useRef(0);
+  const containerW = useRef(0);
+  const longPressTimer = useRef(null);
+  const isActive = useRef(false);
+  const startPageX = useRef(0);
+  const startPageY = useRef(0);
+  const gradientId = `scrubChartFill-${chartId}`;
+
+  // Chart layout
+  const yLabelW = 44;
+  const xLabelH = 18;
+  const topPad = 6;
+  const chartW = width - yLabelW - 4;
+  const chartH = height - xLabelH - topPad;
+
+  // Data bounds
+  const values = data.map(d => d.value);
+  const minVal = Math.min(...values);
+  const maxVal = Math.max(...values);
+  const valRange = maxVal - minVal || 1;
+  const niceMin = minVal - valRange * 0.02;
+  const niceMax = maxVal + valRange * 0.02;
+  const niceRange = niceMax - niceMin;
+
+  // SVG viewBox dimensions
+  const svgW = chartW;
+  const svgH = chartH;
+
+  // Build path
+  const pathD = data.map((pt, i) => {
+    const x = (i / (data.length - 1)) * svgW;
+    const y = topPad + svgH * (1 - (pt.value - niceMin) / niceRange);
+    return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  const fillD = `${pathD} L${svgW},${topPad + svgH} L0,${topPad + svgH} Z`;
+
+  // Y-axis labels (3 levels)
+  const yLabels = [maxVal, (maxVal + minVal) / 2, minVal];
+  const formatY = (v) => {
+    if (v >= 10000) return `$${(v / 1000).toFixed(0)}k`;
+    if (v >= 1000) return `$${(v / 1000).toFixed(1)}k`;
+    return `$${v.toFixed(0)}`;
+  };
+
+  // X-axis labels (5 evenly spaced)
+  const xLabelCount = 5;
+  const xStep = Math.max(1, Math.floor(data.length / (xLabelCount - 1)));
+  const xLabels = [];
+  for (let i = 0; i < data.length; i++) {
+    if (i === 0 || i === data.length - 1 || i % xStep === 0) {
+      const d = new Date(data[i].date + 'T12:00:00');
+      let label;
+      if (range === 'ALL' || range === '5Y') label = `${d.getFullYear()}`;
+      else if (range === '1Y') label = `${d.getMonth() + 1}/${String(d.getFullYear()).slice(-2)}`;
+      else label = `${d.getMonth() + 1}/${d.getDate()}`;
+      xLabels.push({ i, label, x: (i / (data.length - 1)) * svgW });
+    }
+  }
+
+  // Grid lines (3 horizontal)
+  const gridYs = yLabels.map(v => topPad + svgH * (1 - (v - niceMin) / niceRange));
+
+  // Scrub touch handlers
+  const getScrubIndex = (pageX) => {
+    const relX = pageX - containerX.current - yLabelW;
+    const pct = Math.max(0, Math.min(1, relX / chartW));
+    return Math.round(pct * (data.length - 1));
+  };
+
+  const updateScrub = (pageX) => {
+    const idx = getScrubIndex(pageX);
+    if (idx !== scrubIndexRef.current) {
+      scrubIndexRef.current = idx;
+      setScrubIndex(idx);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+  };
+
+  const handleTouchStart = (e) => {
+    const { pageX, pageY } = e.nativeEvent;
+    startPageX.current = pageX;
+    startPageY.current = pageY;
+    containerRef.current?.measureInWindow?.((x, _y, w) => {
+      containerX.current = x;
+      containerW.current = w;
+    });
+    longPressTimer.current = setTimeout(() => {
+      isActive.current = true;
+      updateScrub(pageX);
+    }, 200);
+  };
+
+  const handleTouchMove = (e) => {
+    const { pageX, pageY } = e.nativeEvent;
+    if (isActive.current) {
+      updateScrub(pageX);
+    } else if (longPressTimer.current) {
+      const dx = Math.abs(pageX - startPageX.current);
+      const dy = Math.abs(pageY - startPageY.current);
+      if (dx > 10 || dy > 10) {
+        clearTimeout(longPressTimer.current);
+        longPressTimer.current = null;
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+    isActive.current = false;
+    scrubIndexRef.current = null;
+    setScrubIndex(null);
+  };
+
+  // Scrub position
+  const scrubXSvg = scrubIndex !== null ? (scrubIndex / (data.length - 1)) * svgW : 0;
+  const scrubYSvg = scrubIndex !== null ? topPad + svgH * (1 - (data[scrubIndex].value - niceMin) / niceRange) : 0;
+
+  const formatDate = (dateStr) => {
+    const d = new Date(dateStr + 'T12:00:00');
+    return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
+  };
+
+  const formatPrice = (v) => {
+    if (decimalPlaces > 0) return `$${v.toFixed(decimalPlaces)}`;
+    return `$${v.toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+  };
+
+  return (
+    <View
+      ref={containerRef}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
+      onStartShouldSetResponder={() => false}
+      onMoveShouldSetResponder={() => isActive.current}
+      onResponderTerminationRequest={() => !isActive.current}
+    >
+      {/* Floating tooltip */}
+      {scrubIndex !== null && (
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: -40,
+            left: Math.max(0, Math.min(yLabelW + (scrubIndex / (data.length - 1)) * chartW - 70, width - 140)),
+            backgroundColor: 'rgba(0,0,0,0.9)',
+            borderRadius: 8,
+            paddingHorizontal: 10,
+            paddingVertical: 5,
+            zIndex: 10,
+            borderWidth: 1,
+            borderColor: 'rgba(255,255,255,0.15)',
+          }}
+        >
+          <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
+            {formatPrice(data[scrubIndex].value)}
+          </Text>
+          <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 10 }}>
+            {formatDate(data[scrubIndex].date)}
+          </Text>
+        </View>
+      )}
+      <View style={{ flexDirection: 'row' }}>
+        {/* Y-axis labels */}
+        <View style={{ width: yLabelW, height: chartH + topPad, justifyContent: 'space-between', paddingVertical: 2 }}>
+          {yLabels.map((v, i) => (
+            <Text key={i} style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, textAlign: 'right', paddingRight: 4 }}>
+              {formatY(v)}
+            </Text>
+          ))}
+        </View>
+        {/* SVG chart */}
+        <Svg width={chartW} height={chartH + topPad}>
+          {/* Grid lines */}
+          {gridYs.map((y, i) => (
+            <Line key={i} x1={0} y1={y} x2={svgW} y2={y} stroke="rgba(255,255,255,0.06)" strokeWidth={1} />
+          ))}
+          {/* Fill */}
+          <Defs>
+            <SvgLinearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor={color} stopOpacity="0.2" />
+              <Stop offset="1" stopColor={color} stopOpacity="0" />
+            </SvgLinearGradient>
+          </Defs>
+          <Path d={fillD} fill={`url(#${gradientId})`} />
+          <Path d={pathD} stroke={color} strokeWidth={2} fill="none" />
+          {/* Crosshair */}
+          {scrubIndex !== null && (
+            <>
+              <Line x1={scrubXSvg} y1={0} x2={scrubXSvg} y2={topPad + svgH} stroke="rgba(255,255,255,0.4)" strokeWidth={1} strokeDasharray="3,2" />
+              <Circle cx={scrubXSvg} cy={scrubYSvg} r={4} fill={color} stroke="#fff" strokeWidth={1.5} />
+            </>
+          )}
+        </Svg>
+      </View>
+      {/* X-axis labels */}
+      <View style={{ flexDirection: 'row', marginLeft: yLabelW, width: chartW, marginTop: 2 }}>
+        {xLabels.map((lbl, i) => (
+          <Text
+            key={i}
+            style={{
+              color: 'rgba(255,255,255,0.4)',
+              fontSize: 10,
+              position: 'absolute',
+              left: lbl.x - 18,
+              width: 36,
+              textAlign: 'center',
+            }}
+          >
+            {lbl.label}
+          </Text>
+        ))}
+      </View>
+    </View>
+  );
+};
+
 // Main app content (wrapped by ErrorBoundary below)
 function AppContent() {
   // Safe area insets for proper spacing around system UI (navigation bar, notch, etc.)
@@ -7617,71 +7846,24 @@ function AppContent() {
                         <View style={{ alignItems: 'center', paddingVertical: 30 }}>
                           <ActivityIndicator size="small" color={metal.color} />
                         </View>
-                      ) : mState.error === 'no_data' ? (
-                        <View style={{ alignItems: 'center', paddingVertical: 30 }}>
-                          <Text style={{ color: colors.muted, fontSize: scaledFonts.normal, textAlign: 'center' }}>Historical data available soon</Text>
-                        </View>
                       ) : mState.error ? (
                         <View style={{ alignItems: 'center', paddingVertical: 30 }}>
-                          <Text style={{ color: colors.muted, fontSize: scaledFonts.normal, textAlign: 'center' }}>{mState.error}</Text>
+                          <Text style={{ color: colors.muted, fontSize: scaledFonts.normal, textAlign: 'center' }}>{mState.error === 'no_data' ? 'No data available for this range' : mState.error}</Text>
                         </View>
-                      ) : mData && mData.length > 1 ? (() => {
-                        // Build labels — max 5 evenly spaced
-                        const labelCount = 5;
-                        const labelStep = Math.max(1, Math.floor(mData.length / (labelCount - 1)));
-                        const chartLabels = mData.map((pt, i) => {
-                          if (i !== 0 && i !== mData.length - 1 && i % labelStep !== 0) return '';
-                          const d = new Date(pt.date + 'T12:00:00');
-                          if (mRange === 'ALL' || mRange === '5Y') return `${d.getFullYear()}`;
-                          if (mRange === '1Y') return `${d.getMonth() + 1}/${String(d.getFullYear()).slice(-2)}`;
-                          return `${d.getMonth() + 1}/${d.getDate()}`;
-                        });
-
-                        return (
-                          <LineChart
-                            key={`spot-${metal.key}-${mRange}`}
-                            data={{
-                              labels: chartLabels,
-                              datasets: [{
-                                data: mData.map(pt => pt.value),
-                                color: (opacity = 1) => metal.color,
-                                strokeWidth: 2,
-                              }],
-                            }}
+                      ) : mData && mData.length > 1 ? (
+                        <View style={{ marginTop: 8 }}>
+                          <ScrubChart
+                            data={mData}
+                            color={metal.color}
+                            fillColor={metal.fillColor}
                             width={SCREEN_WIDTH - 80}
-                            height={160}
-                            yAxisLabel="$"
-                            chartConfig={{
-                              backgroundColor: colors.cardBg,
-                              backgroundGradientFrom: colors.cardBg,
-                              backgroundGradientTo: colors.cardBg,
-                              decimalPlaces: metal.key === 'silver' ? 1 : 0,
-                              color: () => metal.color,
-                              fillShadowGradientFrom: metal.color,
-                              fillShadowGradientFromOpacity: 0.2,
-                              fillShadowGradientTo: metal.color,
-                              fillShadowGradientToOpacity: 0,
-                              labelColor: () => colors.muted,
-                              style: { borderRadius: 8 },
-                              propsForDots: { r: '0' },
-                              propsForBackgroundLines: {
-                                strokeDasharray: '',
-                                stroke: isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-                              },
-                              formatYLabel: (value) => {
-                                const num = parseFloat(value);
-                                if (num >= 10000) return `${(num / 1000).toFixed(0)}k`;
-                                if (num >= 1000) return `${(num / 1000).toFixed(1)}k`;
-                                return num.toFixed(0);
-                              },
-                            }}
-                            fromZero={false}
-                            segments={3}
-                            bezier
-                            style={{ borderRadius: 8 }}
+                            height={175}
+                            range={mRange}
+                            decimalPlaces={metal.key === 'silver' ? 1 : 0}
+                            chartId={metal.key}
                           />
-                        );
-                      })() : (
+                        </View>
+                      ) : (
                         <View style={{ alignItems: 'center', paddingVertical: 30 }}>
                           <Text style={{ color: colors.muted, fontSize: scaledFonts.normal, textAlign: 'center' }}>No data available</Text>
                         </View>
