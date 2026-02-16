@@ -73,3 +73,10 @@ COMMENT ON TABLE etf_daily_cache IS 'Cached ETF OHLC data from Yahoo Finance';
 COMMENT ON COLUMN etf_ratios.slv_ratio IS 'SLV ETF price divided by silver spot - typically ~0.92';
 COMMENT ON COLUMN etf_ratios.gld_ratio IS 'GLD ETF price divided by gold spot - typically ~0.092';
 COMMENT ON COLUMN price_log.source IS 'Source of price data: metalpriceapi, goldapi, etc.';
+
+-- ============================================================================
+-- Migration: Add PPLT/PALL ratio columns to etf_ratios
+-- Run this if the table already exists
+-- ============================================================================
+ALTER TABLE etf_ratios ADD COLUMN IF NOT EXISTS pplt_ratio DECIMAL(10,6);
+ALTER TABLE etf_ratios ADD COLUMN IF NOT EXISTS pall_ratio DECIMAL(10,6);

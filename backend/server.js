@@ -102,7 +102,7 @@ const { sendPushNotification, isValidExpoPushToken } = require(path.join(__dirna
 // Import historical price services
 const { isSupabaseAvailable, getSupabase } = require('./supabaseClient');
 const { validate } = require(path.join(__dirname, 'middleware', 'validation'));
-const { fetchETFHistorical, slvToSpotSilver, gldToSpotGold, hasETFDataForDate, fetchBothETFs } = require('./services/etfPrices');
+const { fetchETFHistorical, slvToSpotSilver, gldToSpotGold, ppltToSpotPlatinum, pallToSpotPalladium, hasETFDataForDate, fetchAllETFs, DEFAULT_PPLT_RATIO, DEFAULT_PALL_RATIO } = require('./services/etfPrices');
 const { calibrateRatios, getRatioForDate, needsCalibration } = require('./services/calibrateRatios');
 const { logPriceFetch, findLoggedPrice, findClosestLoggedPrice, getLogStats } = require('./services/priceLogger');
 const { createAlert, getAlertsForUser, deleteAlert, checkAlerts, getAlertCount } = require('./services/priceAlerts');
@@ -210,7 +210,7 @@ async function fetchLiveSpotPrices() {
     needsCalibration().then(async (needed) => {
       if (needed && spotPriceCache.prices.gold && spotPriceCache.prices.silver) {
         console.log('📐 Running daily ETF ratio calibration...');
-        await calibrateRatios(spotPriceCache.prices.gold, spotPriceCache.prices.silver);
+        await calibrateRatios(spotPriceCache.prices.gold, spotPriceCache.prices.silver, spotPriceCache.prices.platinum, spotPriceCache.prices.palladium);
       }
     }).catch(err => {
       console.log('   Calibration check skipped:', err.message);
@@ -791,16 +791,24 @@ app.get('/api/historical-spot', async (req, res) => {
         console.log(`   Fetching ETF data from Yahoo Finance...`);
 
         try {
-          const { slv: slvData, gld: gldData } = await fetchBothETFs(normalizedDate);
+          const { slv: slvData, gld: gldData, pplt: ppltData, pall: pallData } = await fetchAllETFs(normalizedDate);
 
           if (slvData && gldData) {
             // Get the calibrated ratio for that date (or nearest)
             const ratios = await getRatioForDate(normalizedDate);
-            console.log(`   Using ratios: SLV=${ratios.slv_ratio.toFixed(4)}, GLD=${ratios.gld_ratio.toFixed(4)}`);
+            console.log(`   Using ratios: SLV=${ratios.slv_ratio.toFixed(4)}, GLD=${ratios.gld_ratio.toFixed(4)}, PPLT=${ratios.pplt_ratio.toFixed(4)}, PALL=${ratios.pall_ratio.toFixed(4)}`);
 
             // Convert ETF prices to spot prices
             silverPrice = slvToSpotSilver(slvData.close, ratios.slv_ratio);
             goldPrice = gldToSpotGold(gldData.close, ratios.gld_ratio);
+
+            // Derive platinum/palladium from PPLT/PALL ETFs
+            if (ppltData && !platinumPrice) {
+              platinumPrice = ppltToSpotPlatinum(ppltData.close, ratios.pplt_ratio);
+            }
+            if (pallData && !palladiumPrice) {
+              palladiumPrice = pallToSpotPalladium(pallData.close, ratios.pall_ratio);
+            }
 
             // Provide daily range for user reference
             dailyRange = {
@@ -834,6 +842,12 @@ app.get('/api/historical-spot', async (req, res) => {
                   gldData.open * 0.7 + gldData.close * 0.3,
                   ratios.gld_ratio
                 );
+                if (ppltData && platinumPrice) {
+                  platinumPrice = ppltToSpotPlatinum(ppltData.open * 0.7 + ppltData.close * 0.3, ratios.pplt_ratio);
+                }
+                if (pallData && palladiumPrice) {
+                  palladiumPrice = pallToSpotPalladium(pallData.open * 0.7 + pallData.close * 0.3, ratios.pall_ratio);
+                }
               } else if (hour >= 14) {
                 silverPrice = slvToSpotSilver(
                   slvData.open * 0.3 + slvData.close * 0.7,
@@ -843,6 +857,12 @@ app.get('/api/historical-spot', async (req, res) => {
                   gldData.open * 0.3 + gldData.close * 0.7,
                   ratios.gld_ratio
                 );
+                if (ppltData && platinumPrice) {
+                  platinumPrice = ppltToSpotPlatinum(ppltData.open * 0.3 + ppltData.close * 0.7, ratios.pplt_ratio);
+                }
+                if (pallData && palladiumPrice) {
+                  palladiumPrice = pallToSpotPalladium(pallData.open * 0.3 + pallData.close * 0.7, ratios.pall_ratio);
+                }
               } else {
                 // Midday - use OHLC average
                 silverPrice = slvToSpotSilver(
@@ -853,12 +873,18 @@ app.get('/api/historical-spot', async (req, res) => {
                   (gldData.open + gldData.high + gldData.low + gldData.close) / 4,
                   ratios.gld_ratio
                 );
+                if (ppltData && platinumPrice) {
+                  platinumPrice = ppltToSpotPlatinum((ppltData.open + ppltData.high + ppltData.low + ppltData.close) / 4, ratios.pplt_ratio);
+                }
+                if (pallData && palladiumPrice) {
+                  palladiumPrice = pallToSpotPalladium((pallData.open + pallData.high + pallData.low + pallData.close) / 4, ratios.pall_ratio);
+                }
               }
               granularity = 'estimated_intraday';
               note = `Estimated based on time of day. Actual range: Silver $${dailyRange.silver.low}-${dailyRange.silver.high}, Gold $${dailyRange.gold.low}-${dailyRange.gold.high}`;
             }
 
-            console.log(`   ✅ ETF-derived prices: Gold $${goldPrice?.toFixed(2)}, Silver $${silverPrice?.toFixed(2)}`);
+            console.log(`   ✅ ETF-derived prices: Gold $${goldPrice?.toFixed(2)}, Silver $${silverPrice?.toFixed(2)}, Pt $${platinumPrice?.toFixed(2) || 'N/A'}, Pd $${palladiumPrice?.toFixed(2) || 'N/A'}`);
           } else {
             console.log(`   ETF data not available for ${normalizedDate}`);
           }

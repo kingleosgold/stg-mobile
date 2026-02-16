@@ -17,6 +17,8 @@ const { supabase, isSupabaseAvailable } = require('../supabaseClient');
 // Default conversion ratios (these get calibrated daily)
 const DEFAULT_SLV_RATIO = 0.92;  // SLV price / silver spot
 const DEFAULT_GLD_RATIO = 0.092; // GLD price / gold spot (1/10th oz)
+const DEFAULT_PPLT_RATIO = 0.096; // PPLT price / platinum spot (~1/10th oz)
+const DEFAULT_PALL_RATIO = 0.096; // PALL price / palladium spot (~1/10th oz)
 
 /**
  * Fetch historical ETF data for a specific date
@@ -98,34 +100,34 @@ async function fetchETFIntraday(symbol, dateString) {
 
 /**
  * Get current ETF quotes
- * @returns {Object} Current SLV and GLD quotes
+ * @returns {Object} Current SLV, GLD, PPLT, and PALL quotes
  */
 async function getCurrentETFQuotes() {
   try {
-    const [slvQuote, gldQuote] = await Promise.all([
+    const [slvQuote, gldQuote, ppltQuote, pallQuote] = await Promise.all([
       yahooFinance.quote('SLV'),
-      yahooFinance.quote('GLD')
+      yahooFinance.quote('GLD'),
+      yahooFinance.quote('PPLT').catch(() => null),
+      yahooFinance.quote('PALL').catch(() => null)
     ]);
 
+    const formatQuote = (q) => q ? {
+      price: q.regularMarketPrice,
+      previousClose: q.regularMarketPreviousClose,
+      open: q.regularMarketOpen,
+      dayHigh: q.regularMarketDayHigh,
+      dayLow: q.regularMarketDayLow
+    } : null;
+
     return {
-      slv: slvQuote ? {
-        price: slvQuote.regularMarketPrice,
-        previousClose: slvQuote.regularMarketPreviousClose,
-        open: slvQuote.regularMarketOpen,
-        dayHigh: slvQuote.regularMarketDayHigh,
-        dayLow: slvQuote.regularMarketDayLow
-      } : null,
-      gld: gldQuote ? {
-        price: gldQuote.regularMarketPrice,
-        previousClose: gldQuote.regularMarketPreviousClose,
-        open: gldQuote.regularMarketOpen,
-        dayHigh: gldQuote.regularMarketDayHigh,
-        dayLow: gldQuote.regularMarketDayLow
-      } : null
+      slv: formatQuote(slvQuote),
+      gld: formatQuote(gldQuote),
+      pplt: formatQuote(ppltQuote),
+      pall: formatQuote(pallQuote)
     };
   } catch (error) {
     console.error('Error fetching ETF quotes:', error.message);
-    return { slv: null, gld: null };
+    return { slv: null, gld: null, pplt: null, pall: null };
   }
 }
 
@@ -205,35 +207,70 @@ async function cacheETFData(symbol, dateString, data) {
 }
 
 /**
+ * Convert PPLT ETF price to platinum spot price
+ * @param {number} ppltPrice - PPLT ETF price
+ * @param {number} ratio - Conversion ratio (default ~0.096)
+ * @returns {number} Estimated platinum spot price
+ */
+function ppltToSpotPlatinum(ppltPrice, ratio = DEFAULT_PPLT_RATIO) {
+  if (!ppltPrice || !ratio) return null;
+  return ppltPrice / ratio;
+}
+
+/**
+ * Convert PALL ETF price to palladium spot price
+ * @param {number} pallPrice - PALL ETF price
+ * @param {number} ratio - Conversion ratio (default ~0.096)
+ * @returns {number} Estimated palladium spot price
+ */
+function pallToSpotPalladium(pallPrice, ratio = DEFAULT_PALL_RATIO) {
+  if (!pallPrice || !ratio) return null;
+  return pallPrice / ratio;
+}
+
+/**
  * Check if a date has ETF data available
  * SLV started April 28, 2006
  * GLD started November 18, 2004
+ * PPLT started January 6, 2010
+ * PALL started January 8, 2010
  */
 function hasETFDataForDate(date, metal = 'silver') {
   const checkDate = new Date(date);
   const slvStart = new Date('2006-04-28');
   const gldStart = new Date('2004-11-18');
+  const ppltStart = new Date('2010-01-06');
+  const pallStart = new Date('2010-01-08');
 
-  if (metal === 'silver') {
-    return checkDate >= slvStart;
-  } else if (metal === 'gold') {
-    return checkDate >= gldStart;
-  }
+  if (metal === 'silver') return checkDate >= slvStart;
+  if (metal === 'gold') return checkDate >= gldStart;
+  if (metal === 'platinum') return checkDate >= ppltStart;
+  if (metal === 'palladium') return checkDate >= pallStart;
 
   // Both metals - use the later date (SLV)
   return checkDate >= slvStart;
 }
 
 /**
- * Get ETF data for both SLV and GLD for a date
+ * Get ETF data for SLV, GLD, PPLT, and PALL for a date
  */
-async function fetchBothETFs(dateString) {
-  const [slvData, gldData] = await Promise.all([
+async function fetchAllETFs(dateString) {
+  const [slvData, gldData, ppltData, pallData] = await Promise.all([
     fetchETFHistorical('SLV', dateString),
-    fetchETFHistorical('GLD', dateString)
+    fetchETFHistorical('GLD', dateString),
+    fetchETFHistorical('PPLT', dateString).catch(() => null),
+    fetchETFHistorical('PALL', dateString).catch(() => null)
   ]);
 
-  return { slv: slvData, gld: gldData };
+  return { slv: slvData, gld: gldData, pplt: ppltData, pall: pallData };
+}
+
+/**
+ * Get ETF data for both SLV and GLD for a date (legacy)
+ */
+async function fetchBothETFs(dateString) {
+  const result = await fetchAllETFs(dateString);
+  return { slv: result.slv, gld: result.gld };
 }
 
 module.exports = {
@@ -242,8 +279,13 @@ module.exports = {
   getCurrentETFQuotes,
   slvToSpotSilver,
   gldToSpotGold,
+  ppltToSpotPlatinum,
+  pallToSpotPalladium,
   hasETFDataForDate,
   fetchBothETFs,
+  fetchAllETFs,
   DEFAULT_SLV_RATIO,
-  DEFAULT_GLD_RATIO
+  DEFAULT_GLD_RATIO,
+  DEFAULT_PPLT_RATIO,
+  DEFAULT_PALL_RATIO
 };

@@ -10,13 +10,15 @@
  */
 
 const { supabase, isSupabaseAvailable } = require('../supabaseClient');
-const { getCurrentETFQuotes, DEFAULT_SLV_RATIO, DEFAULT_GLD_RATIO } = require('./etfPrices');
+const { getCurrentETFQuotes, DEFAULT_SLV_RATIO, DEFAULT_GLD_RATIO, DEFAULT_PPLT_RATIO, DEFAULT_PALL_RATIO } = require('./etfPrices');
 
 // In-memory cache for today's ratios
 let ratioCache = {
   date: null,
   slvRatio: DEFAULT_SLV_RATIO,
-  gldRatio: DEFAULT_GLD_RATIO
+  gldRatio: DEFAULT_GLD_RATIO,
+  ppltRatio: DEFAULT_PPLT_RATIO,
+  pallRatio: DEFAULT_PALL_RATIO
 };
 
 /**
@@ -25,9 +27,11 @@ let ratioCache = {
  *
  * @param {number} currentGoldSpot - Current gold spot price (USD/oz)
  * @param {number} currentSilverSpot - Current silver spot price (USD/oz)
+ * @param {number} [currentPlatinumSpot] - Current platinum spot price (USD/oz)
+ * @param {number} [currentPalladiumSpot] - Current palladium spot price (USD/oz)
  * @returns {Object|null} The calculated ratios or null on error
  */
-async function calibrateRatios(currentGoldSpot, currentSilverSpot) {
+async function calibrateRatios(currentGoldSpot, currentSilverSpot, currentPlatinumSpot, currentPalladiumSpot) {
   try {
     // Get current ETF prices
     const quotes = await getCurrentETFQuotes();
@@ -45,13 +49,25 @@ async function calibrateRatios(currentGoldSpot, currentSilverSpot) {
     const slvRatio = slvPrice / currentSilverSpot;
     const gldRatio = gldPrice / currentGoldSpot;
 
+    // Calibrate PPLT/PALL if we have both ETF quotes and spot prices
+    let ppltRatio = ratioCache.ppltRatio;
+    let pallRatio = ratioCache.pallRatio;
+    if (quotes.pplt && currentPlatinumSpot > 0) {
+      ppltRatio = quotes.pplt.price / currentPlatinumSpot;
+    }
+    if (quotes.pall && currentPalladiumSpot > 0) {
+      pallRatio = quotes.pall.price / currentPalladiumSpot;
+    }
+
     const today = new Date().toISOString().split('T')[0];
 
     // Update in-memory cache
     ratioCache = {
       date: today,
       slvRatio,
-      gldRatio
+      gldRatio,
+      ppltRatio,
+      pallRatio
     };
 
     // Save to database if available
@@ -62,6 +78,8 @@ async function calibrateRatios(currentGoldSpot, currentSilverSpot) {
           date: today,
           slv_ratio: slvRatio,
           gld_ratio: gldRatio,
+          pplt_ratio: ppltRatio,
+          pall_ratio: pallRatio,
           slv_price: slvPrice,
           gld_price: gldPrice,
           gold_spot: currentGoldSpot,
@@ -74,11 +92,9 @@ async function calibrateRatios(currentGoldSpot, currentSilverSpot) {
       }
     }
 
-    console.log(`Calibrated ratios for ${today}: SLV=${slvRatio.toFixed(4)}, GLD=${gldRatio.toFixed(4)}`);
-    console.log(`  SLV: $${slvPrice.toFixed(2)} / Silver: $${currentSilverSpot.toFixed(2)}`);
-    console.log(`  GLD: $${gldPrice.toFixed(2)} / Gold: $${currentGoldSpot.toFixed(2)}`);
+    console.log(`Calibrated ratios for ${today}: SLV=${slvRatio.toFixed(4)}, GLD=${gldRatio.toFixed(4)}, PPLT=${ppltRatio.toFixed(4)}, PALL=${pallRatio.toFixed(4)}`);
 
-    return { slvRatio, gldRatio, slvPrice, gldPrice };
+    return { slvRatio, gldRatio, ppltRatio, pallRatio };
   } catch (error) {
     console.error('Calibration error:', error);
     return null;
@@ -97,7 +113,9 @@ async function getRatioForDate(dateString) {
   if (ratioCache.date === dateString) {
     return {
       slv_ratio: ratioCache.slvRatio,
-      gld_ratio: ratioCache.gldRatio
+      gld_ratio: ratioCache.gldRatio,
+      pplt_ratio: ratioCache.ppltRatio,
+      pall_ratio: ratioCache.pallRatio
     };
   }
 
@@ -116,7 +134,9 @@ async function getRatioForDate(dateString) {
       if (!error && data) {
         return {
           slv_ratio: parseFloat(data.slv_ratio),
-          gld_ratio: parseFloat(data.gld_ratio)
+          gld_ratio: parseFloat(data.gld_ratio),
+          pplt_ratio: data.pplt_ratio ? parseFloat(data.pplt_ratio) : DEFAULT_PPLT_RATIO,
+          pall_ratio: data.pall_ratio ? parseFloat(data.pall_ratio) : DEFAULT_PALL_RATIO
         };
       }
     } catch (err) {
@@ -127,7 +147,9 @@ async function getRatioForDate(dateString) {
   // Return defaults if nothing found
   return {
     slv_ratio: DEFAULT_SLV_RATIO,
-    gld_ratio: DEFAULT_GLD_RATIO
+    gld_ratio: DEFAULT_GLD_RATIO,
+    pplt_ratio: DEFAULT_PPLT_RATIO,
+    pall_ratio: DEFAULT_PALL_RATIO
   };
 }
 

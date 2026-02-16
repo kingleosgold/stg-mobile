@@ -4011,36 +4011,15 @@ function AppContent() {
 
   const handleDateChange = async (date) => {
     setForm(prev => ({ ...prev, datePurchased: date }));
-    setSpotPriceSource(null); // Clear previous source while loading
-    setHistoricalSpotSuggestion(null); // Clear previous suggestion
+    setSpotPriceSource(null);
+    setHistoricalSpotSuggestion(null);
 
     if (date.length === 10) {
-      // Include time if already entered
       const result = await fetchHistoricalSpot(date, metalTab, form.timePurchased || null);
       if (result.price) {
-        const currentSpotPrice = parseFloat(form.spotPrice) || 0;
-
-        // Always store the historical price as a suggestion (enables warning display)
-        setHistoricalSpotSuggestion({
-          price: result.price,
-          source: result.source,
-          date: date,
-        });
-
-        // Only auto-fill if user hasn't entered a value yet (empty or 0)
-        if (currentSpotPrice === 0) {
-          setForm(prev => ({ ...prev, spotPrice: result.price.toString() }));
-          setSpotPriceSource(result.source);
-        }
-        // If user has a value, the warning will auto-show if difference > 10%
-
-        // Log daily range info if available (for debugging)
-        if (__DEV__ && result.dailyRange) {
-          console.log(`📈 Daily range: $${result.dailyRange.low} - $${result.dailyRange.high}`);
-        }
-        if (__DEV__ && result.note) {
-          console.log(`📝 ${result.note}`);
-        }
+        setHistoricalSpotSuggestion({ price: result.price, source: result.source, date });
+        setForm(prev => ({ ...prev, spotPrice: result.price.toString() }));
+        setSpotPriceSource(result.source);
       }
     }
   };
@@ -4049,7 +4028,6 @@ function AppContent() {
   const handleTimeChange = async (time) => {
     setForm(prev => ({ ...prev, timePurchased: time }));
 
-    // Validate time format (HH:MM)
     const timeValid = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(time);
     const hasDate = form.datePurchased && form.datePurchased.length === 10;
 
@@ -4059,23 +4037,9 @@ function AppContent() {
 
       const result = await fetchHistoricalSpot(form.datePurchased, metalTab, time);
       if (result.price) {
-        const currentSpotPrice = parseFloat(form.spotPrice) || 0;
-
-        setHistoricalSpotSuggestion({
-          price: result.price,
-          source: result.source,
-          date: form.datePurchased,
-        });
-
-        // Auto-fill if user hasn't entered a value
-        if (currentSpotPrice === 0) {
-          setForm(prev => ({ ...prev, spotPrice: result.price.toString() }));
-          setSpotPriceSource(result.source);
-        }
-
-        if (__DEV__) {
-          console.log(`⏰ Time-based spot price: $${result.price} (${result.source})`);
-        }
+        setHistoricalSpotSuggestion({ price: result.price, source: result.source, date: form.datePurchased });
+        setForm(prev => ({ ...prev, spotPrice: result.price.toString() }));
+        setSpotPriceSource(result.source);
       }
     }
   };
@@ -8517,14 +8481,18 @@ function AppContent() {
                   <FloatingInput label="Product Name" value={form.productName} onChangeText={v => { setForm(p => ({ ...p, productName: v })); if (v) setFormErrors(e => ({ ...e, productName: false })); }} placeholder={{ gold: 'e.g. American Gold Eagle', silver: 'e.g. American Silver Eagle', platinum: 'e.g. American Platinum Eagle', palladium: 'e.g. Canadian Palladium Maple Leaf' }[metalTab] || 'e.g. American Silver Eagle'} colors={colors} isDarkMode={isDarkMode} scaledFonts={scaledFonts} required error={formErrors.productName} />
                   <FloatingInput label="Dealer" value={form.source} onChangeText={v => setForm(p => ({ ...p, source: v }))} placeholder="APMEX" colors={colors} isDarkMode={isDarkMode} scaledFonts={scaledFonts} />
                   <View style={{ flexDirection: 'row', gap: 8 }}>
-                    <TouchableOpacity style={{ flex: 2, backgroundColor: isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)', borderRadius: 10, padding: 14, borderWidth: 1, borderColor: colors.border }} onPress={() => { Keyboard.dismiss(); setShowDatePicker(true); }}>
-                      <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny, marginBottom: 2 }}>Date</Text>
-                      <Text style={{ color: form.datePurchased ? colors.text : colors.muted, fontSize: scaledFonts.normal }}>{form.datePurchased ? (() => { const [y,m,d] = form.datePurchased.split('-'); return `${m}-${d}-${y}`; })() : 'Tap to select'}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={{ flex: 1, backgroundColor: isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)', borderRadius: 10, padding: 14, borderWidth: 1, borderColor: colors.border }} onPress={() => { Keyboard.dismiss(); setShowTimePicker(true); }}>
-                      <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny, marginBottom: 2 }}>Time</Text>
-                      <Text style={{ color: form.timePurchased ? colors.text : colors.muted, fontSize: scaledFonts.normal }}>{form.timePurchased ? (() => { const [h,m] = form.timePurchased.split(':').map(Number); const p = h >= 12 ? 'PM' : 'AM'; const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h; return `${h12}:${String(m).padStart(2,'0')} ${p}`; })() : 'Optional'}</Text>
-                    </TouchableOpacity>
+                    <View style={{ flex: 1 }}>
+                      <TouchableOpacity style={{ backgroundColor: isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)', borderRadius: 10, padding: 14, borderWidth: 1, borderColor: colors.border }} onPress={() => { Keyboard.dismiss(); setShowDatePicker(true); }}>
+                        <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny, marginBottom: 2 }}>Date</Text>
+                        <Text style={{ color: form.datePurchased ? colors.text : colors.muted, fontSize: scaledFonts.normal }}>{form.datePurchased ? (() => { const [y,m,d] = form.datePurchased.split('-'); return `${m}-${d}-${y}`; })() : 'Tap to select'}</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <TouchableOpacity style={{ backgroundColor: isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)', borderRadius: 10, padding: 14, borderWidth: 1, borderColor: colors.border }} onPress={() => { Keyboard.dismiss(); setShowTimePicker(true); }}>
+                        <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny, marginBottom: 2 }}>Time</Text>
+                        <Text style={{ color: form.timePurchased ? colors.text : colors.muted, fontSize: scaledFonts.normal }}>{form.timePurchased ? (() => { const [h,m] = form.timePurchased.split(':').map(Number); const p = h >= 12 ? 'PM' : 'AM'; const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h; return `${h12}:${String(m).padStart(2,'0')} ${p}`; })() : 'Optional'}</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
 
                   <View style={{ flexDirection: 'row', gap: 8 }}>
