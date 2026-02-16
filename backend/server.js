@@ -4144,6 +4144,34 @@ app.post('/api/daily-brief/generate', async (req, res) => {
     }
 
     const result = await generateDailyBrief(userId);
+
+    // Send push notification after successful generation
+    if (result && result.brief && result.brief.brief_text && isSupabaseAvailable()) {
+      try {
+        const { data: tokenData } = await getSupabase()
+          .from('push_tokens')
+          .select('expo_push_token')
+          .eq('user_id', userId)
+          .order('last_active', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (tokenData && isValidExpoPushToken(tokenData.expo_push_token)) {
+          const firstSentence = result.brief.brief_text.split(/[.!]\s/)[0];
+          const body = firstSentence.length > 100 ? firstSentence.slice(0, 97) + '...' : firstSentence;
+          await sendPushNotification(tokenData.expo_push_token, {
+            title: '☀️ Your Morning Brief is Ready',
+            body,
+            data: { type: 'daily_brief' },
+            sound: 'default',
+          });
+          console.log(`📝 [Daily Brief] Push sent to ${userId}`);
+        }
+      } catch (pushErr) {
+        console.log(`📝 [Daily Brief] Push skipped for ${userId}: ${pushErr.message}`);
+      }
+    }
+
     return res.json(result);
 
   } catch (error) {
