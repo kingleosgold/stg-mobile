@@ -816,6 +816,91 @@ function isMarketClosedClientSide() {
   }
 }
 
+// Swipeable alert row — extracted component so Animated.Value and PanResponder persist across renders
+const SwipeableAlertRow = ({ alert, colors, onDelete, onTap }) => {
+  const metalColors = { gold: '#fbbf24', silver: '#9ca3af', platinum: '#7BB3D4', palladium: '#6BBF8A' };
+  const metalBgs = { gold: 'rgba(251,191,36,0.2)', silver: 'rgba(156,163,175,0.2)', platinum: 'rgba(123,179,212,0.2)', palladium: 'rgba(107,191,138,0.2)' };
+  const metalLabel = alert.metal.charAt(0).toUpperCase() + alert.metal.slice(1);
+
+  const translateX = useRef(new Animated.Value(0)).current;
+  const isSwipedOpen = useRef(false);
+
+  const panResponder = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => false,
+    onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 10 && Math.abs(gs.dx) > Math.abs(gs.dy),
+    onPanResponderMove: (_, gs) => {
+      if (gs.dx < 0) translateX.setValue(gs.dx);
+      else if (isSwipedOpen.current) translateX.setValue(-80 + gs.dx);
+    },
+    onPanResponderRelease: (_, gs) => {
+      if (gs.dx < -60) {
+        isSwipedOpen.current = true;
+        Animated.spring(translateX, { toValue: -80, useNativeDriver: true }).start();
+      } else {
+        isSwipedOpen.current = false;
+        Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+      }
+    },
+  })).current;
+
+  const handleDelete = () => {
+    Animated.timing(translateX, { toValue: -400, duration: 200, useNativeDriver: true }).start(() => {
+      onDelete(alert.id);
+    });
+  };
+
+  const handleTap = () => {
+    if (isSwipedOpen.current) {
+      isSwipedOpen.current = false;
+      Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+    } else if (onTap) {
+      onTap(alert);
+    }
+  };
+
+  return (
+    <View style={{ overflow: 'hidden', borderBottomWidth: 1, borderBottomColor: colors.border }}>
+      {/* Delete button behind */}
+      <TouchableOpacity
+        onPress={handleDelete}
+        style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 80, backgroundColor: '#F44336', alignItems: 'center', justifyContent: 'center' }}
+      >
+        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Delete</Text>
+      </TouchableOpacity>
+      {/* Swipeable row */}
+      <Animated.View
+        style={{
+          backgroundColor: colors.cardBg || colors.background,
+          transform: [{ translateX }],
+        }}
+        {...panResponder.panHandlers}
+      >
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={handleTap}
+          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, paddingHorizontal: 4 }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <View style={{
+              width: 28, height: 28, borderRadius: 6,
+              backgroundColor: metalBgs[alert.metal] || metalBgs.silver,
+              alignItems: 'center', justifyContent: 'center',
+            }}>
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: metalColors[alert.metal] || metalColors.silver }} />
+            </View>
+            <Text style={{ color: colors.text, fontSize: 14 }}>
+              {metalLabel} {alert.direction === 'above' ? 'above' : 'below'} ${parseFloat(alert.targetPrice).toFixed(2)}
+            </Text>
+          </View>
+          <Text style={{ color: colors.muted, fontSize: 12 }}>
+            {alert.enabled === false ? 'Paused' : 'Active'}
+          </Text>
+        </TouchableOpacity>
+      </Animated.View>
+    </View>
+  );
+};
+
 // Main app content (wrapped by ErrorBoundary below)
 function AppContent() {
   // Safe area insets for proper spacing around system UI (navigation bar, notch, etc.)
@@ -2763,7 +2848,7 @@ function AppContent() {
     }
   };
 
-  // Fetch alerts from backend and merge with local (backend is source of truth)
+  // Fetch alerts from backend — backend is source of truth, discard orphaned local alerts
   const syncAlertsFromBackend = async () => {
     try {
       const deviceId = await getDeviceId();
@@ -2774,7 +2859,7 @@ function AppContent() {
 
       if (result.success && result.alerts) {
         const backendAlerts = result.alerts
-          .filter(a => !a.triggered) // Don't show triggered alerts
+          .filter(a => !a.triggered && a.enabled !== false)
           .map(a => ({
             id: a.id,
             metal: a.metal,
@@ -2784,36 +2869,38 @@ function AppContent() {
             createdAt: a.created_at,
           }));
 
-        // Merge: use backend alerts as base, add any local-only alerts (not yet synced)
+        // Try to push any local-only alerts to backend, keep only those that succeed
         const localAlerts = await AsyncStorage.getItem('stack_price_alerts');
         const localParsed = localAlerts ? JSON.parse(localAlerts) : [];
         const backendIds = new Set(backendAlerts.map(a => a.id));
         const localOnly = localParsed.filter(a => !backendIds.has(a.id));
+        const syncedLocal = [];
 
-        // Push local-only alerts to backend
         for (const alert of localOnly) {
           try {
-            const deviceId2 = await getDeviceId();
-            await fetch(`${API_BASE_URL}/api/price-alerts`, {
+            const res = await fetch(`${API_BASE_URL}/api/price-alerts`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 id: alert.id,
-                userId: supabaseUser?.id || null,
-                device_id: deviceId2,
+                userId: userId,
+                device_id: deviceId,
                 metal: alert.metal,
                 targetPrice: alert.targetPrice,
                 direction: alert.direction,
                 enabled: alert.enabled !== false,
               }),
             });
-          } catch (e) { /* silent */ }
+            const r = await res.json();
+            if (r.success) syncedLocal.push(alert);
+          } catch (e) { /* discard orphan */ }
         }
 
-        const merged = [...backendAlerts, ...localOnly];
-        setPriceAlerts(merged);
-        await savePriceAlerts(merged);
-        console.log(`🔔 [Push] Synced from backend: ${backendAlerts.length} remote, ${localOnly.length} local-only pushed`);
+        // Only keep backend alerts + successfully synced local alerts
+        const final = [...backendAlerts, ...syncedLocal];
+        setPriceAlerts(final);
+        await savePriceAlerts(final);
+        console.log(`🔔 [Push] Synced: ${backendAlerts.length} from backend, ${syncedLocal.length} local pushed, ${localOnly.length - syncedLocal.length} orphans discarded`);
       }
     } catch (error) {
       console.error('❌ [Push] Failed to sync alerts from backend:', error);
@@ -9192,60 +9279,14 @@ function AppContent() {
           <View style={{ marginTop: 24 }}>
             <View style={{ height: 1, backgroundColor: colors.border, marginBottom: 16 }} />
             <Text style={{ color: colors.text, fontWeight: '700', fontSize: 16, marginBottom: 12 }}>Your Alerts</Text>
-            {priceAlerts.map((alert) => {
-              const metalColors = { gold: '#fbbf24', silver: '#9ca3af', platinum: '#7BB3D4', palladium: '#6BBF8A' };
-              const metalBgs = { gold: 'rgba(251,191,36,0.2)', silver: 'rgba(156,163,175,0.2)', platinum: 'rgba(123,179,212,0.2)', palladium: 'rgba(107,191,138,0.2)' };
-              const metalLabel = alert.metal.charAt(0).toUpperCase() + alert.metal.slice(1);
-              const translateX = new Animated.Value(0);
-              const panResponder = PanResponder.create({
-                onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 10 && Math.abs(gs.dx) > Math.abs(gs.dy),
-                onPanResponderMove: (_, gs) => { if (gs.dx < 0) translateX.setValue(gs.dx); },
-                onPanResponderRelease: (_, gs) => {
-                  if (gs.dx < -80) {
-                    Animated.spring(translateX, { toValue: -80, useNativeDriver: true }).start();
-                  } else {
-                    Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
-                  }
-                },
-              });
-              return (
-                <View key={alert.id} style={{ overflow: 'hidden', borderBottomWidth: 1, borderBottomColor: colors.border }}>
-                  {/* Delete button behind */}
-                  <TouchableOpacity
-                    onPress={() => {
-                      Animated.timing(translateX, { toValue: -400, duration: 200, useNativeDriver: true }).start(() => {
-                        deletePriceAlertDirect(alert.id);
-                      });
-                    }}
-                    style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 80, backgroundColor: '#F44336', alignItems: 'center', justifyContent: 'center' }}
-                  >
-                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Delete</Text>
-                  </TouchableOpacity>
-                  {/* Swipeable row */}
-                  <Animated.View
-                    {...panResponder.panHandlers}
-                    style={{
-                      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-                      paddingVertical: 10, backgroundColor: colors.cardBg || colors.background,
-                      transform: [{ translateX }],
-                    }}
-                  >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                      <View style={{
-                        width: 28, height: 28, borderRadius: 6,
-                        backgroundColor: metalBgs[alert.metal] || metalBgs.silver,
-                        alignItems: 'center', justifyContent: 'center',
-                      }}>
-                        <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: metalColors[alert.metal] || metalColors.silver }} />
-                      </View>
-                      <Text style={{ color: colors.text, fontSize: 14 }}>
-                        {metalLabel} {alert.direction === 'above' ? 'above' : 'below'} ${parseFloat(alert.targetPrice).toFixed(2)}
-                      </Text>
-                    </View>
-                  </Animated.View>
-                </View>
-              );
-            })}
+            {priceAlerts.map((alert) => (
+              <SwipeableAlertRow
+                key={alert.id}
+                alert={alert}
+                colors={colors}
+                onDelete={deletePriceAlertDirect}
+              />
+            ))}
           </View>
         )}
       </ModalWrapper>
