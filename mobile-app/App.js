@@ -31,6 +31,7 @@ import { syncWidgetData, isWidgetKitAvailable } from './src/utils/widgetKit';
 import { registerBackgroundFetch, getBackgroundFetchStatus } from './src/utils/backgroundTasks';
 import { LineChart } from 'react-native-chart-kit';
 import Svg, { Path, Circle, Line, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
+import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 import GoldPaywall from './src/components/GoldPaywall';
 import Tutorial from './src/components/Tutorial';
 import ViewShot from 'react-native-view-shot';
@@ -816,7 +817,7 @@ function isMarketClosedClientSide() {
   }
 }
 
-// Swipeable alert row with toggle switch and swipe-to-delete
+// Swipeable alert row using react-native-gesture-handler's Swipeable
 const SwipeableAlertRow = ({ alert, colors, onDelete, onToggle, spotPrices }) => {
   const metalAccent = { gold: '#D4A843', silver: '#C0C0C0', platinum: '#7BB3D4', palladium: '#6BBF8A' };
   const metalLabel = alert.metal.charAt(0).toUpperCase() + alert.metal.slice(1);
@@ -824,80 +825,60 @@ const SwipeableAlertRow = ({ alert, colors, onDelete, onToggle, spotPrices }) =>
   const currentSpot = spotPrices?.[alert.metal] || 0;
   const isActive = alert.enabled !== false;
   const arrow = alert.direction === 'above' ? '↑' : '↓';
+  const swipeableRef = useRef(null);
 
-  const translateX = useRef(new Animated.Value(0)).current;
-  const isSwipedOpen = useRef(false);
-
-  // PanResponder on the text content area only — Switch handles its own touches
-  const panResponder = useRef(PanResponder.create({
-    onStartShouldSetPanResponder: () => false,
-    onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 10 && Math.abs(gs.dx) > Math.abs(gs.dy),
-    onPanResponderMove: (_, gs) => {
-      if (gs.dx < 0) translateX.setValue(gs.dx);
-      else if (isSwipedOpen.current) translateX.setValue(-80 + Math.min(gs.dx, 80));
-    },
-    onPanResponderRelease: (_, gs) => {
-      if (gs.dx < -60) {
-        isSwipedOpen.current = true;
-        Animated.spring(translateX, { toValue: -80, useNativeDriver: true }).start();
-      } else {
-        isSwipedOpen.current = false;
-        Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
-      }
-    },
-  })).current;
-
-  const handleDelete = () => {
-    Animated.timing(translateX, { toValue: -400, duration: 200, useNativeDriver: true }).start(() => {
-      onDelete(alert.id);
-    });
-  };
+  const renderRightActions = () => (
+    <TouchableOpacity
+      onPress={() => {
+        swipeableRef.current?.close();
+        onDelete(alert.id);
+      }}
+      style={{
+        backgroundColor: '#D32F2F', justifyContent: 'center', alignItems: 'center',
+        width: 80, borderTopRightRadius: 12, borderBottomRightRadius: 12,
+      }}
+    >
+      <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>Delete</Text>
+    </TouchableOpacity>
+  );
 
   return (
-    <View style={{ overflow: 'hidden', borderRadius: 12, marginBottom: 10 }}>
-      {/* Delete button behind */}
-      <View style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 80, backgroundColor: '#D32F2F', borderTopRightRadius: 12, borderBottomRightRadius: 12, alignItems: 'center', justifyContent: 'center' }}>
-        <TouchableOpacity onPress={handleDelete} style={{ flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>Delete</Text>
-        </TouchableOpacity>
-      </View>
-      {/* Swipeable card */}
-      <Animated.View
-        style={{
-          transform: [{ translateX }],
+    <View style={{ marginBottom: 10, borderRadius: 12, overflow: 'hidden' }}>
+      <Swipeable ref={swipeableRef} renderRightActions={renderRightActions} overshootRight={false} friction={2}>
+        <View style={{
           flexDirection: 'row', alignItems: 'center',
           backgroundColor: '#1e1e1e',
           borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
           overflow: 'hidden',
-        }}
-      >
-        {/* Left accent bar */}
-        <View style={{ width: 4, alignSelf: 'stretch', backgroundColor: accentColor }} />
-        {/* Swipeable text area — panHandlers here, NOT on the Switch */}
-        <View {...panResponder.panHandlers} style={{ flex: 1, paddingVertical: 14, paddingLeft: 12, paddingRight: 4 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-            <Text style={{ color: accentColor, fontWeight: '700', fontSize: 15 }}>{metalLabel}</Text>
-            <Text style={{ color: alert.direction === 'above' ? '#4CAF50' : '#F44336', fontWeight: '700', fontSize: 15 }}>
-              {arrow} {alert.direction === 'above' ? 'Above' : 'Below'}
+        }}>
+          {/* Left accent bar */}
+          <View style={{ width: 4, alignSelf: 'stretch', backgroundColor: accentColor }} />
+          {/* Text content */}
+          <View style={{ flex: 1, paddingVertical: 14, paddingLeft: 12, paddingRight: 4 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+              <Text style={{ color: accentColor, fontWeight: '700', fontSize: 15 }}>{metalLabel}</Text>
+              <Text style={{ color: alert.direction === 'above' ? '#4CAF50' : '#F44336', fontWeight: '700', fontSize: 15 }}>
+                {arrow} {alert.direction === 'above' ? 'Above' : 'Below'}
+              </Text>
+              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>${parseFloat(alert.targetPrice).toFixed(2)}</Text>
+            </View>
+            <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>
+              Current: ${currentSpot > 0 ? currentSpot.toFixed(2) : '—'}/oz
             </Text>
-            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>${parseFloat(alert.targetPrice).toFixed(2)}</Text>
           </View>
-          <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>
-            Current: ${currentSpot > 0 ? currentSpot.toFixed(2) : '—'}/oz
-          </Text>
+          {/* Toggle switch */}
+          <View style={{ paddingRight: 12 }}>
+            <Switch
+              value={isActive}
+              onValueChange={(val) => onToggle(alert.id, val)}
+              trackColor={{ false: '#555', true: '#4CAF50' }}
+              thumbColor="#fff"
+              ios_backgroundColor="#555"
+              style={{ transform: [{ scale: 0.85 }] }}
+            />
+          </View>
         </View>
-        {/* Toggle switch — outside pan area so it handles its own taps */}
-        <View style={{ paddingRight: 12 }}>
-          <Switch
-            value={isActive}
-            onValueChange={(val) => onToggle(alert.id, val)}
-            trackColor={{ false: '#555', true: '#4CAF50' }}
-            thumbColor="#fff"
-            ios_backgroundColor="#555"
-            style={{ transform: [{ scale: 0.85 }] }}
-          />
-        </View>
-      </Animated.View>
+      </Swipeable>
     </View>
   );
 };
@@ -10284,13 +10265,15 @@ function AppContent() {
 // Export App wrapped with SafeAreaProvider, ErrorBoundary, and AuthProvider
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <ErrorBoundary>
-        <AuthProvider>
-          <AppContent />
-        </AuthProvider>
-      </ErrorBoundary>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <ErrorBoundary>
+          <AuthProvider>
+            <AppContent />
+          </AuthProvider>
+        </ErrorBoundary>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
