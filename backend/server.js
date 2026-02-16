@@ -2884,7 +2884,41 @@ app.delete('/api/price-alerts/:id', async (req, res) => {
 });
 
 /**
- * Toggle a price alert on/off
+ * Delete all price alerts for a user/device
+ */
+app.delete('/api/price-alerts', async (req, res) => {
+  try {
+    const { user_id, device_id } = req.query;
+    if (!user_id && !device_id) {
+      return res.status(400).json({ success: false, error: 'Either user_id or device_id is required' });
+    }
+    if (!isSupabaseAvailable()) {
+      return res.status(503).json({ success: false, error: 'Database not configured' });
+    }
+    const supabase = getSupabase();
+    let query = supabase.from('price_alerts').delete();
+    if (user_id && device_id) {
+      query = query.or(`user_id.eq.${user_id},device_id.eq.${device_id}`);
+    } else if (user_id) {
+      query = query.eq('user_id', user_id);
+    } else {
+      query = query.eq('device_id', device_id);
+    }
+    const { error } = await query;
+    if (error) {
+      console.error('Error deleting all price alerts:', error);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+    console.log(`✅ Deleted all price alerts for user_id=${user_id}, device_id=${device_id}`);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error in DELETE /api/price-alerts:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Toggle/update a price alert
  */
 app.patch('/api/price-alerts/:id', async (req, res) => {
   try {

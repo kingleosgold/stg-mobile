@@ -828,6 +828,7 @@ const SwipeableAlertRow = ({ alert, colors, onDelete, onToggle, spotPrices }) =>
   const translateX = useRef(new Animated.Value(0)).current;
   const isSwipedOpen = useRef(false);
 
+  // PanResponder on the text content area only — Switch handles its own touches
   const panResponder = useRef(PanResponder.create({
     onStartShouldSetPanResponder: () => false,
     onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 10 && Math.abs(gs.dx) > Math.abs(gs.dy),
@@ -861,42 +862,40 @@ const SwipeableAlertRow = ({ alert, colors, onDelete, onToggle, spotPrices }) =>
         </TouchableOpacity>
       </View>
       {/* Swipeable card */}
-      <Animated.View style={{ transform: [{ translateX }] }}>
-        <View
-          {...panResponder.panHandlers}
-          style={{
-            flexDirection: 'row', alignItems: 'center',
-            backgroundColor: '#1e1e1e',
-            borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
-            overflow: 'hidden',
-          }}
-        >
-          {/* Left accent bar */}
-          <View style={{ width: 4, alignSelf: 'stretch', backgroundColor: accentColor }} />
-          {/* Content */}
-          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingLeft: 12, paddingRight: 12 }}>
-            <View style={{ flex: 1, marginRight: 12 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                <Text style={{ color: accentColor, fontWeight: '700', fontSize: 15 }}>{metalLabel}</Text>
-                <Text style={{ color: alert.direction === 'above' ? '#4CAF50' : '#F44336', fontWeight: '700', fontSize: 15 }}>
-                  {arrow} {alert.direction === 'above' ? 'Above' : 'Below'}
-                </Text>
-                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>${parseFloat(alert.targetPrice).toFixed(2)}</Text>
-              </View>
-              <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>
-                Current: ${currentSpot > 0 ? currentSpot.toFixed(2) : '—'}/oz
-              </Text>
-            </View>
-            {/* Toggle switch */}
-            <Switch
-              value={isActive}
-              onValueChange={(val) => onToggle(alert.id, val)}
-              trackColor={{ false: 'rgba(255,255,255,0.15)', true: 'rgba(76,175,80,0.4)' }}
-              thumbColor={isActive ? '#4CAF50' : '#888'}
-              ios_backgroundColor="rgba(255,255,255,0.15)"
-              style={{ transform: [{ scale: 0.85 }] }}
-            />
+      <Animated.View
+        style={{
+          transform: [{ translateX }],
+          flexDirection: 'row', alignItems: 'center',
+          backgroundColor: '#1e1e1e',
+          borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Left accent bar */}
+        <View style={{ width: 4, alignSelf: 'stretch', backgroundColor: accentColor }} />
+        {/* Swipeable text area — panHandlers here, NOT on the Switch */}
+        <View {...panResponder.panHandlers} style={{ flex: 1, paddingVertical: 14, paddingLeft: 12, paddingRight: 4 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+            <Text style={{ color: accentColor, fontWeight: '700', fontSize: 15 }}>{metalLabel}</Text>
+            <Text style={{ color: alert.direction === 'above' ? '#4CAF50' : '#F44336', fontWeight: '700', fontSize: 15 }}>
+              {arrow} {alert.direction === 'above' ? 'Above' : 'Below'}
+            </Text>
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>${parseFloat(alert.targetPrice).toFixed(2)}</Text>
           </View>
+          <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>
+            Current: ${currentSpot > 0 ? currentSpot.toFixed(2) : '—'}/oz
+          </Text>
+        </View>
+        {/* Toggle switch — outside pan area so it handles its own taps */}
+        <View style={{ paddingRight: 12 }}>
+          <Switch
+            value={isActive}
+            onValueChange={(val) => onToggle(alert.id, val)}
+            trackColor={{ false: '#555', true: '#4CAF50' }}
+            thumbColor="#fff"
+            ios_backgroundColor="#555"
+            style={{ transform: [{ scale: 0.85 }] }}
+          />
         </View>
       </Animated.View>
     </View>
@@ -3181,6 +3180,29 @@ function AppContent() {
     try {
       await fetch(`${API_BASE_URL}/api/price-alerts/${alertId}`, { method: 'DELETE' });
     } catch (e) { /* silent */ }
+  };
+
+  // Clear all price alerts (local + backend batch delete)
+  const clearAllAlerts = () => {
+    if (priceAlerts.length === 0) return;
+    Alert.alert('Delete All Alerts', `Delete all ${priceAlerts.length} price alert${priceAlerts.length > 1 ? 's' : ''}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete All', style: 'destructive', onPress: async () => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          setPriceAlerts([]);
+          await savePriceAlerts([]);
+          try {
+            const deviceId = await getDeviceId();
+            const params = new URLSearchParams();
+            if (supabaseUser?.id) params.append('user_id', supabaseUser.id);
+            if (deviceId) params.append('device_id', deviceId);
+            await fetch(`${API_BASE_URL}/api/price-alerts?${params.toString()}`, { method: 'DELETE' });
+          } catch (e) { /* silent */ }
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        },
+      },
+    ]);
   };
 
   // ============================================
@@ -9475,7 +9497,12 @@ function AppContent() {
         {priceAlerts.length > 0 && (
           <View style={{ marginTop: 24 }}>
             <View style={{ height: 1, backgroundColor: colors.border, marginBottom: 16 }} />
-            <Text style={{ color: colors.text, fontWeight: '700', fontSize: 16, marginBottom: 12 }}>Your Alerts</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <Text style={{ color: colors.text, fontWeight: '700', fontSize: 16 }}>Your Alerts</Text>
+              <TouchableOpacity onPress={clearAllAlerts} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={{ color: '#F44336', fontSize: 13, fontWeight: '600' }}>Clear All</Text>
+              </TouchableOpacity>
+            </View>
             {priceAlerts.map((alert) => (
               <SwipeableAlertRow
                 key={alert.id}
