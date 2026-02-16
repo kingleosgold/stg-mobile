@@ -816,8 +816,8 @@ function isMarketClosedClientSide() {
   }
 }
 
-// Swipeable alert row — extracted component so Animated.Value and PanResponder persist across renders
-const SwipeableAlertRow = ({ alert, colors, onDelete, onTap, spotPrices }) => {
+// Swipeable alert row with toggle switch and swipe-to-delete
+const SwipeableAlertRow = ({ alert, colors, onDelete, onToggle, spotPrices }) => {
   const metalAccent = { gold: '#D4A843', silver: '#C0C0C0', platinum: '#7BB3D4', palladium: '#6BBF8A' };
   const metalLabel = alert.metal.charAt(0).toUpperCase() + alert.metal.slice(1);
   const accentColor = metalAccent[alert.metal] || metalAccent.silver;
@@ -827,23 +827,15 @@ const SwipeableAlertRow = ({ alert, colors, onDelete, onTap, spotPrices }) => {
 
   const translateX = useRef(new Animated.Value(0)).current;
   const isSwipedOpen = useRef(false);
-  const isSwiping = useRef(false);
 
   const panResponder = useRef(PanResponder.create({
     onStartShouldSetPanResponder: () => false,
-    onMoveShouldSetPanResponder: (_, gs) => {
-      if (Math.abs(gs.dx) > 10 && Math.abs(gs.dx) > Math.abs(gs.dy)) {
-        isSwiping.current = true;
-        return true;
-      }
-      return false;
-    },
+    onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 10 && Math.abs(gs.dx) > Math.abs(gs.dy),
     onPanResponderMove: (_, gs) => {
       if (gs.dx < 0) translateX.setValue(gs.dx);
       else if (isSwipedOpen.current) translateX.setValue(-80 + Math.min(gs.dx, 80));
     },
     onPanResponderRelease: (_, gs) => {
-      isSwiping.current = false;
       if (gs.dx < -60) {
         isSwipedOpen.current = true;
         Animated.spring(translateX, { toValue: -80, useNativeDriver: true }).start();
@@ -852,23 +844,12 @@ const SwipeableAlertRow = ({ alert, colors, onDelete, onTap, spotPrices }) => {
         Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
       }
     },
-    onPanResponderTerminate: () => { isSwiping.current = false; },
   })).current;
 
   const handleDelete = () => {
     Animated.timing(translateX, { toValue: -400, duration: 200, useNativeDriver: true }).start(() => {
       onDelete(alert.id);
     });
-  };
-
-  const handleTap = () => {
-    if (isSwiping.current) return;
-    if (isSwipedOpen.current) {
-      isSwipedOpen.current = false;
-      Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
-    } else if (onTap) {
-      onTap(alert);
-    }
   };
 
   return (
@@ -879,50 +860,43 @@ const SwipeableAlertRow = ({ alert, colors, onDelete, onTap, spotPrices }) => {
           <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>Delete</Text>
         </TouchableOpacity>
       </View>
-      {/* Swipeable card — pan handlers on outer View, tap on inner TouchableOpacity */}
+      {/* Swipeable card */}
       <Animated.View style={{ transform: [{ translateX }] }}>
-        <View {...panResponder.panHandlers}>
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={handleTap}
-            style={{
-              flexDirection: 'row', alignItems: 'center',
-              backgroundColor: '#1e1e1e',
-              borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
-              overflow: 'hidden',
-            }}
-          >
-            {/* Left accent bar */}
-            <View style={{ width: 4, alignSelf: 'stretch', backgroundColor: accentColor }} />
-            {/* Content */}
-            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingLeft: 12, paddingRight: 10 }}>
-              {/* Left side: metal + target */}
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                  <Text style={{ color: accentColor, fontWeight: '700', fontSize: 15 }}>{metalLabel}</Text>
-                  <Text style={{ color: alert.direction === 'above' ? '#4CAF50' : '#F44336', fontWeight: '700', fontSize: 15 }}>
-                    {arrow} {alert.direction === 'above' ? 'Above' : 'Below'}
-                  </Text>
-                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>${parseFloat(alert.targetPrice).toFixed(2)}</Text>
-                </View>
-                <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>
-                  Current: ${currentSpot > 0 ? currentSpot.toFixed(2) : '—'}/oz
+        <View
+          {...panResponder.panHandlers}
+          style={{
+            flexDirection: 'row', alignItems: 'center',
+            backgroundColor: '#1e1e1e',
+            borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)',
+            overflow: 'hidden',
+          }}
+        >
+          {/* Left accent bar */}
+          <View style={{ width: 4, alignSelf: 'stretch', backgroundColor: accentColor }} />
+          {/* Content */}
+          <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingLeft: 12, paddingRight: 12 }}>
+            <View style={{ flex: 1, marginRight: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                <Text style={{ color: accentColor, fontWeight: '700', fontSize: 15 }}>{metalLabel}</Text>
+                <Text style={{ color: alert.direction === 'above' ? '#4CAF50' : '#F44336', fontWeight: '700', fontSize: 15 }}>
+                  {arrow} {alert.direction === 'above' ? 'Above' : 'Below'}
                 </Text>
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>${parseFloat(alert.targetPrice).toFixed(2)}</Text>
               </View>
-              {/* Right side: status badge + chevron */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <View style={{
-                  paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10,
-                  backgroundColor: isActive ? 'rgba(76,175,80,0.2)' : 'rgba(255,255,255,0.1)',
-                }}>
-                  <Text style={{ color: isActive ? '#4CAF50' : 'rgba(255,255,255,0.4)', fontSize: 11, fontWeight: '600' }}>
-                    {isActive ? 'Active' : 'Paused'}
-                  </Text>
-                </View>
-                <Text style={{ color: 'rgba(255,255,255,0.3)', fontSize: 18 }}>›</Text>
-              </View>
+              <Text style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12 }}>
+                Current: ${currentSpot > 0 ? currentSpot.toFixed(2) : '—'}/oz
+              </Text>
             </View>
-          </TouchableOpacity>
+            {/* Toggle switch */}
+            <Switch
+              value={isActive}
+              onValueChange={(val) => onToggle(alert.id, val)}
+              trackColor={{ false: 'rgba(255,255,255,0.15)', true: 'rgba(76,175,80,0.4)' }}
+              thumbColor={isActive ? '#4CAF50' : '#888'}
+              ios_backgroundColor="rgba(255,255,255,0.15)"
+              style={{ transform: [{ scale: 0.85 }] }}
+            />
+          </View>
         </View>
       </Animated.View>
     </View>
@@ -1241,7 +1215,6 @@ function AppContent() {
     targetPrice: '',
     direction: 'above', // 'above' or 'below'
   });
-  const [editingAlertId, setEditingAlertId] = useState(null); // null = create mode, id = edit mode
   // TODO v2.1: Implement ATH alerts with backend tracking
 
   // Analytics State (Gold/Lifetime feature)
@@ -3149,43 +3122,19 @@ function AppContent() {
     );
   };
 
-  // Update an existing price alert (local + backend PATCH)
-  const updatePriceAlert = async () => {
-    const targetPrice = parseFloat(newAlert.targetPrice);
-    if (isNaN(targetPrice) || targetPrice <= 0) {
-      Alert.alert('Invalid Price', 'Please enter a valid target price.');
-      return;
-    }
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-    // PATCH backend
-    try {
-      await fetch(`${API_BASE_URL}/api/price-alerts/${editingAlertId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          metal: newAlert.metal,
-          targetPrice: targetPrice,
-          direction: newAlert.direction,
-        }),
-      });
-    } catch (error) {
-      console.error('Failed to update alert on backend:', error);
-    }
-
-    // Update locally
-    const updated = priceAlerts.map(a =>
-      a.id === editingAlertId
-        ? { ...a, metal: newAlert.metal, targetPrice, direction: newAlert.direction }
-        : a
-    );
+  // Toggle a price alert enabled/disabled (local + backend PATCH)
+  const togglePriceAlert = async (alertId, enabled) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const updated = priceAlerts.map(a => a.id === alertId ? { ...a, enabled } : a);
     setPriceAlerts(updated);
     await savePriceAlerts(updated);
-
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setEditingAlertId(null);
-    setNewAlert({ metal: 'silver', targetPrice: '', direction: 'above' });
-    setShowAddAlertModal(false);
+    try {
+      await fetch(`${API_BASE_URL}/api/price-alerts/${alertId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      });
+    } catch (e) { /* silent */ }
   };
 
   // Delete a price alert (local + backend)
@@ -9364,15 +9313,14 @@ function AppContent() {
         onPurchaseSuccess={checkEntitlements}
       />
 
-      {/* Add/Edit Price Alert Modal */}
+      {/* Add Price Alert Modal */}
       <ModalWrapper
         visible={showAddAlertModal}
         onClose={() => {
           setShowAddAlertModal(false);
-          setEditingAlertId(null);
           setNewAlert({ metal: 'silver', targetPrice: '', direction: 'above' });
         }}
-        title={editingAlertId ? "Edit Alert" : "Price Alerts"}
+        title="Price Alerts"
         colors={colors}
         isDarkMode={isDarkMode}
       >
@@ -9380,9 +9328,9 @@ function AppContent() {
 
         {/* Custom Price Alert */}
         <View style={{ marginBottom: 20 }}>
-          <Text style={{ color: colors.text, fontWeight: '700', fontSize: 16, marginBottom: 12 }}>{editingAlertId ? 'Edit Alert' : 'New Alert'}</Text>
+          <Text style={{ color: colors.text, fontWeight: '700', fontSize: 16, marginBottom: 12 }}>New Alert</Text>
           <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 16 }}>
-            {editingAlertId ? 'Update your alert settings below' : 'Get notified when spot prices reach your target'}
+            Get notified when spot prices reach your target
           </Text>
 
           {/* Metal Selection */}
@@ -9487,9 +9435,9 @@ function AppContent() {
             borderRadius: 10,
             alignItems: 'center',
           }}
-          onPress={editingAlertId ? updatePriceAlert : createPriceAlert}
+          onPress={createPriceAlert}
         >
-          <Text style={{ color: '#000', fontWeight: '700', fontSize: 16 }}>{editingAlertId ? 'Update Alert' : 'Create Alert'}</Text>
+          <Text style={{ color: '#000', fontWeight: '700', fontSize: 16 }}>Create Alert</Text>
         </TouchableOpacity>
 
         {!expoPushToken && (
@@ -9534,12 +9482,8 @@ function AppContent() {
                 alert={alert}
                 colors={colors}
                 onDelete={deletePriceAlertDirect}
+                onToggle={togglePriceAlert}
                 spotPrices={{ gold: goldSpot, silver: silverSpot, platinum: platinumSpot, palladium: palladiumSpot }}
-                onTap={(a) => {
-                  setEditingAlertId(a.id);
-                  setNewAlert({ metal: a.metal, targetPrice: String(a.targetPrice), direction: a.direction });
-                  setShowAddAlertModal(true);
-                }}
               />
             ))}
           </View>
