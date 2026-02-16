@@ -30,7 +30,7 @@ import { initializePurchases, loginRevenueCat, hasGoldEntitlement, getUserEntitl
 import { syncWidgetData, isWidgetKitAvailable } from './src/utils/widgetKit';
 import { registerBackgroundFetch, getBackgroundFetchStatus } from './src/utils/backgroundTasks';
 import { LineChart } from 'react-native-chart-kit';
-import Svg, { Path, Circle } from 'react-native-svg';
+import Svg, { Path, Circle, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
 import GoldPaywall from './src/components/GoldPaywall';
 import Tutorial from './src/components/Tutorial';
 import ViewShot from 'react-native-view-shot';
@@ -987,8 +987,8 @@ function AppContent() {
     palladium: { range: '1Y', data: null, loading: false, error: null },
   });
 
-  // Sparkline data for Metal Movers + Portfolio Pulse (7-day trend)
-  const [sparklineData, setSparklineData] = useState(null); // { gold: [7 numbers], silver: [...], ... }
+  // Sparkline data for Metal Movers + Portfolio Pulse (24-hour trend)
+  const [sparklineData, setSparklineData] = useState(null); // { gold: [N numbers], silver: [...], ... }
   const sparklineFetchedRef = useRef(false);
 
   // Share My Stack
@@ -3327,20 +3327,23 @@ function AppContent() {
     setSpotHistoryMetal(prev => ({ ...prev, [metal]: { ...prev[metal], range } }));
   };
 
-  /** Fetch 7-day sparkline data for Metal Movers + Portfolio Pulse */
+  /** Fetch 24-hour sparkline data for Metal Movers + Portfolio Pulse */
   const fetchSparklineData = async () => {
     if (sparklineFetchedRef.current) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/api/spot-price-history?range=1M&maxPoints=7`);
+      const response = await fetch(`${API_BASE_URL}/api/sparkline-24h`);
       const result = await response.json();
-      if (result.success && result.data && result.data.length > 1) {
-        setSparklineData({
-          gold: result.data.map(pt => pt.gold),
-          silver: result.data.map(pt => pt.silver),
-          platinum: result.data.map(pt => pt.platinum || 0),
-          palladium: result.data.map(pt => pt.palladium || 0),
-        });
-        sparklineFetchedRef.current = true;
+      if (result.success && result.sparklines) {
+        const s = result.sparklines;
+        if (s.gold && s.gold.length >= 2) {
+          setSparklineData({
+            gold: s.gold,
+            silver: s.silver || [],
+            platinum: s.platinum || [],
+            palladium: s.palladium || [],
+          });
+          sparklineFetchedRef.current = true;
+        }
       }
     } catch (e) { /* silent */ }
   };
@@ -5652,32 +5655,42 @@ function AppContent() {
 
                 <Text style={{ color: colors.muted, fontSize: 13, fontWeight: '500', marginBottom: 4, marginTop: 4 }}>Today, {dateStr}</Text>
 
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <Text style={{ color: colors.text, fontSize: 36, fontWeight: '700' }}>${formatCurrency(totalMeltValue, 0)}</Text>
-                  {sparklineData && sparklineData.gold.length >= 2 && totalMeltValue > 0 && (() => {
-                    const goldPts = sparklineData.gold;
-                    const silverPts = sparklineData.silver;
-                    const portfolioPoints = goldPts.map((g, i) => (totalGoldOzt * g) + (totalSilverOzt * (silverPts[i] || 0)) + (totalPlatinumOzt * (sparklineData.platinum[i] || 0)) + (totalPalladiumOzt * (sparklineData.palladium[i] || 0)));
-                    const min = Math.min(...portfolioPoints);
-                    const max = Math.max(...portfolioPoints);
-                    const range = max - min || 1;
-                    const sparkColor = marketsClosed ? '#71717a' : (dailyChange >= 0 ? '#4CAF50' : '#F44336');
-                    return (
-                      <Svg width={60} height={28} viewBox={`0 0 ${(portfolioPoints.length - 1) * 10} 24`}>
-                        <Path
-                          d={portfolioPoints.map((v, i) => {
-                            const x = i * 10;
-                            const y = 22 - ((v - min) / range) * 20;
-                            return `${i === 0 ? 'M' : 'L'}${x},${y}`;
-                          }).join(' ')}
-                          stroke={sparkColor}
-                          strokeWidth={2}
-                          fill="none"
-                        />
+                <Text style={{ color: colors.text, fontSize: 36, fontWeight: '700', marginBottom: 2 }}>${formatCurrency(totalMeltValue, 0)}</Text>
+
+                {sparklineData && sparklineData.gold.length >= 2 && totalMeltValue > 0 && (() => {
+                  const goldPts = sparklineData.gold;
+                  const silverPts = sparklineData.silver;
+                  const portfolioPoints = goldPts.map((g, i) => (totalGoldOzt * g) + (totalSilverOzt * (silverPts[i] || 0)) + (totalPlatinumOzt * (sparklineData.platinum[i] || 0)) + (totalPalladiumOzt * (sparklineData.palladium[i] || 0)));
+                  const min = Math.min(...portfolioPoints);
+                  const max = Math.max(...portfolioPoints);
+                  const range = max - min || 1;
+                  const isUp = portfolioPoints[portfolioPoints.length - 1] >= portfolioPoints[0];
+                  const sparkColor = isUp ? '#4CAF50' : '#F44336';
+                  const svgW = 300;
+                  const svgH = 60;
+                  const pathD = portfolioPoints.map((v, i) => {
+                    const x = (i / (portfolioPoints.length - 1)) * svgW;
+                    const y = 4 + (svgH - 8) * (1 - (v - min) / range);
+                    return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+                  }).join(' ');
+                  const firstX = '0';
+                  const lastX = svgW.toFixed(1);
+                  const fillD = `${pathD} L${lastX},${svgH} L${firstX},${svgH} Z`;
+                  return (
+                    <View style={{ marginBottom: 4 }}>
+                      <Svg width="100%" height={60} viewBox={`0 0 ${svgW} ${svgH}`} preserveAspectRatio="none">
+                        <Defs>
+                          <SvgLinearGradient id="portfolioGrad" x1="0" y1="0" x2="0" y2="1">
+                            <Stop offset="0" stopColor={sparkColor} stopOpacity="0.3" />
+                            <Stop offset="1" stopColor={sparkColor} stopOpacity="0" />
+                          </SvgLinearGradient>
+                        </Defs>
+                        <Path d={fillD} fill="url(#portfolioGrad)" />
+                        <Path d={pathD} stroke={sparkColor} strokeWidth={2} fill="none" />
                       </Svg>
-                    );
-                  })()}
-                </View>
+                    </View>
+                  );
+                })()}
 
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 }}>
                   <Text style={{ color: displayDailyChange >= 0 ? '#4CAF50' : '#F44336', fontSize: 15, fontWeight: '600' }}>
@@ -5698,6 +5711,8 @@ function AppContent() {
                   {metalMovers.map((m, idx) => {
                     const metalKey = m.label.toLowerCase();
                     const points = sparklineData?.[metalKey] || [];
+                    const isUp = points.length >= 2 ? points[points.length - 1] >= points[0] : true;
+                    const sparkColor = isUp ? '#4CAF50' : '#F44336';
                     return (
                       <View key={m.symbol} style={{
                         backgroundColor: todayCardBg,
@@ -5710,34 +5725,44 @@ function AppContent() {
                       }}>
                         <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, backgroundColor: m.color }} />
 
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: m.color }} />
-                            <Text style={{ color: m.color, fontSize: 13, fontWeight: '700' }}>{m.label}</Text>
-                            {idx === 0 && !marketsClosed && Math.abs(m.pct) > 0.1 && (
-                              <View style={{ backgroundColor: 'rgba(248,113,113,0.15)', borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 }}>
-                                <Text style={{ color: '#F87171', fontSize: 9, fontWeight: '700' }}>HOT</Text>
-                              </View>
-                            )}
-                          </View>
-                          {points.length >= 2 && (
-                            <Svg width={40} height={20} viewBox={`0 0 ${(points.length - 1) * 6} 20`}>
-                              <Path
-                                d={points.map((v, i) => {
-                                  const min = Math.min(...points);
-                                  const max = Math.max(...points);
-                                  const range = max - min || 1;
-                                  const x = i * 6;
-                                  const y = 18 - ((v - min) / range) * 16;
-                                  return `${i === 0 ? 'M' : 'L'}${x},${y}`;
-                                }).join(' ')}
-                                stroke={marketsClosed ? '#71717a' : m.color}
-                                strokeWidth={1.5}
-                                fill="none"
-                              />
-                            </Svg>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: m.color }} />
+                          <Text style={{ color: m.color, fontSize: 13, fontWeight: '700' }}>{m.label}</Text>
+                          {idx === 0 && !marketsClosed && Math.abs(m.pct) > 0.1 && (
+                            <View style={{ backgroundColor: 'rgba(248,113,113,0.15)', borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 }}>
+                              <Text style={{ color: '#F87171', fontSize: 9, fontWeight: '700' }}>HOT</Text>
+                            </View>
                           )}
                         </View>
+
+                        {points.length >= 2 && (() => {
+                          const min = Math.min(...points);
+                          const max = Math.max(...points);
+                          const range = max - min || 1;
+                          const svgW = 120;
+                          const svgH = 32;
+                          const pathD = points.map((v, i) => {
+                            const x = (i / (points.length - 1)) * svgW;
+                            const y = 2 + (svgH - 4) * (1 - (v - min) / range);
+                            return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+                          }).join(' ');
+                          const fillD = `${pathD} L${svgW},${svgH} L0,${svgH} Z`;
+                          const gradId = `metalGrad_${m.symbol}`;
+                          return (
+                            <View style={{ alignItems: 'center', marginBottom: 6 }}>
+                              <Svg width="100%" height={32} viewBox={`0 0 ${svgW} ${svgH}`} preserveAspectRatio="none">
+                                <Defs>
+                                  <SvgLinearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                                    <Stop offset="0" stopColor={sparkColor} stopOpacity="0.3" />
+                                    <Stop offset="1" stopColor={sparkColor} stopOpacity="0" />
+                                  </SvgLinearGradient>
+                                </Defs>
+                                <Path d={fillD} fill={`url(#${gradId})`} />
+                                <Path d={pathD} stroke={sparkColor} strokeWidth={1.5} fill="none" />
+                              </Svg>
+                            </View>
+                          );
+                        })()}
 
                         <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700', marginBottom: 4 }}>
                           ${m.symbol === 'Ag' ? m.spot.toFixed(2) : formatCurrency(m.spot, 0)}

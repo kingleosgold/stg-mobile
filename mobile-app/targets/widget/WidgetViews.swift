@@ -18,6 +18,11 @@ func wChangeColor(_ val: Double) -> Color {
     return val >= 0 ? wGreen : wRed
 }
 
+func wSparklineColor(_ data: [Double]) -> Color {
+    guard data.count >= 2 else { return wGreen }
+    return data.last! >= data.first! ? wGreen : wRed
+}
+
 func wFormatCurrency(_ val: Double) -> String {
     let f = NumberFormatter()
     f.numberStyle = .currency
@@ -428,13 +433,9 @@ struct MetalRowMedium: View {
     @ViewBuilder
     private var inlineSparkline: some View {
         if sparkline.count >= 2 {
-            SparklineView(data: sparkline, color: sparkColor, lineWidth: 1.0)
+            SparklineView(data: sparkline, color: wSparklineColor(sparkline), lineWidth: 1.0, showFill: true)
                 .frame(width: 48, height: 22)
         }
-    }
-
-    private var sparkColor: Color {
-        wChangeColor(changeAmt)
     }
 }
 
@@ -492,14 +493,10 @@ struct SpotCardLarge: View {
     @ViewBuilder
     private var cardSparkline: some View {
         if sparkline.count >= 2 {
-            SparklineView(data: sparkline, color: sparkColor, lineWidth: 1.0)
+            SparklineView(data: sparkline, color: wSparklineColor(sparkline), lineWidth: 1.0, showFill: true)
                 .frame(height: 20)
                 .padding(.top, 4)
         }
-    }
-
-    private var sparkColor: Color {
-        wChangeColor(changeAmt)
     }
 }
 
@@ -646,7 +643,7 @@ struct SmallBottom: View {
     private var sparklineView: some View {
         SparklineView(
             data: data.portfolioSparkline(),
-            color: wChangeColor(data.dailyChangeAmount),
+            color: wSparklineColor(data.portfolioSparkline()),
             lineWidth: 1.5,
             showFill: true
         )
@@ -759,7 +756,7 @@ struct MediumLeft: View {
     private var sparklineSection: some View {
         let pts = data.portfolioSparkline()
         if pts.count >= 2 {
-            SparklineView(data: pts, color: wChangeColor(data.dailyChangeAmount), lineWidth: 1.5, showFill: true)
+            SparklineView(data: pts, color: wSparklineColor(pts), lineWidth: 1.5, showFill: true)
                 .frame(maxHeight: 48)
                 .padding(.bottom, 4)
         }
@@ -905,7 +902,7 @@ struct LargeSparkline: View {
     private var sparklineView: some View {
         SparklineView(
             data: data.portfolioSparkline(),
-            color: wChangeColor(data.dailyChangeAmount),
+            color: wSparklineColor(data.portfolioSparkline()),
             lineWidth: 1.5,
             showFill: true
         )

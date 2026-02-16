@@ -454,59 +454,50 @@ app.get('/api/widget-data', async (req, res) => {
     const prices = spotPriceCache.prices;
     const change = spotPriceCache.change || {};
 
-    // Build sparkline data from price_log (last 7 days)
+    // Build sparkline data from price_log (last 24 hours, hourly)
     let sparklines = { gold: [], silver: [], platinum: [], palladium: [] };
 
     if (isSupabaseAvailable()) {
       try {
         const supabaseClient = getSupabase();
-        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
         const { data: logs, error: logError } = await supabaseClient
           .from('price_log')
           .select('timestamp, gold_price, silver_price, platinum_price, palladium_price')
-          .gte('timestamp', sevenDaysAgo + 'T00:00:00')
+          .gte('timestamp', twentyFourHoursAgo)
           .order('timestamp', { ascending: true });
 
         if (logError) {
           console.log(`[Widget] price_log query error:`, logError.message);
         }
-        console.log(`[Widget] price_log query: ${logs ? logs.length : 0} rows from ${sevenDaysAgo}`);
         if (logs && logs.length > 0) {
-          // Deduplicate by date (keep last entry per day)
-          const byDate = {};
+          // Downsample to hourly: keep last entry per hour
+          const byHour = {};
           for (const row of logs) {
-            const dateKey = row.timestamp.split('T')[0];
-            byDate[dateKey] = row;
+            const hourKey = row.timestamp.substring(0, 13); // YYYY-MM-DDTHH
+            byHour[hourKey] = row;
           }
-          const sorted = Object.entries(byDate).sort(([a], [b]) => a.localeCompare(b));
-          console.log(`[Widget] Deduplicated to ${sorted.length} days:`, sorted.map(([date, r]) => ({ date, gold: r.gold_price, silver: r.silver_price })));
+          const sorted = Object.entries(byHour).sort(([a], [b]) => a.localeCompare(b));
 
           sparklines.gold = sorted.map(([, r]) => parseFloat(r.gold_price) || 0);
           sparklines.silver = sorted.map(([, r]) => parseFloat(r.silver_price) || 0);
           sparklines.platinum = sorted.map(([, r]) => parseFloat(r.platinum_price) || 0);
           sparklines.palladium = sorted.map(([, r]) => parseFloat(r.palladium_price) || 0);
 
-          // Pad to 7 points if fewer
+          // Append current price as latest point
           for (const metal of ['gold', 'silver', 'platinum', 'palladium']) {
-            while (sparklines[metal].length < 7) {
-              sparklines[metal].unshift(sparklines[metal][0] || prices[metal] || 0);
-            }
-            // Append current price as latest point
             sparklines[metal].push(prices[metal] || 0);
-            // Keep last 7
-            sparklines[metal] = sparklines[metal].slice(-7);
           }
-          console.log(`[Widget] Final sparklines — Gold: [${sparklines.gold.join(', ')}], Silver: [${sparklines.silver.join(', ')}]`);
         }
       } catch (e) {
         console.log('Widget sparkline fetch error:', e.message);
       }
     }
 
-    // If no sparkline data, fill with current price
+    // If no sparkline data, fill with current price (flat line)
     for (const metal of ['gold', 'silver', 'platinum', 'palladium']) {
-      if (sparklines[metal].length === 0) {
-        sparklines[metal] = Array(7).fill(prices[metal] || 0);
+      if (sparklines[metal].length < 2) {
+        sparklines[metal] = [prices[metal] || 0, prices[metal] || 0];
       }
     }
 
@@ -530,6 +521,63 @@ app.get('/api/widget-data', async (req, res) => {
     });
   } catch (error) {
     console.error('Widget data error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * 24-hour sparkline data for Today tab (Portfolio Pulse + Metal Movers)
+ * Returns hourly price points from the last 24 hours
+ */
+app.get('/api/sparkline-24h', async (req, res) => {
+  try {
+    const prices = spotPriceCache.prices;
+    let sparklines = { gold: [], silver: [], platinum: [], palladium: [] };
+
+    if (isSupabaseAvailable()) {
+      try {
+        const supabaseClient = getSupabase();
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        const { data: logs, error: logError } = await supabaseClient
+          .from('price_log')
+          .select('timestamp, gold_price, silver_price, platinum_price, palladium_price')
+          .gte('timestamp', twentyFourHoursAgo)
+          .order('timestamp', { ascending: true });
+
+        if (logError) {
+          console.log(`[Sparkline-24h] price_log query error:`, logError.message);
+        }
+        if (logs && logs.length > 0) {
+          // Downsample to hourly: keep last entry per hour
+          const byHour = {};
+          for (const row of logs) {
+            const hourKey = row.timestamp.substring(0, 13); // YYYY-MM-DDTHH
+            byHour[hourKey] = row;
+          }
+          const sorted = Object.entries(byHour).sort(([a], [b]) => a.localeCompare(b));
+
+          sparklines.gold = sorted.map(([, r]) => parseFloat(r.gold_price) || 0);
+          sparklines.silver = sorted.map(([, r]) => parseFloat(r.silver_price) || 0);
+          sparklines.platinum = sorted.map(([, r]) => parseFloat(r.platinum_price) || 0);
+          sparklines.palladium = sorted.map(([, r]) => parseFloat(r.palladium_price) || 0);
+        }
+      } catch (e) {
+        console.log('Sparkline-24h fetch error:', e.message);
+      }
+    }
+
+    // Append current price as latest point
+    for (const metal of ['gold', 'silver', 'platinum', 'palladium']) {
+      sparklines[metal].push(prices[metal] || 0);
+      // Fallback: if still < 2 points, use current price twice
+      if (sparklines[metal].length < 2) {
+        sparklines[metal] = [prices[metal] || 0, prices[metal] || 0];
+      }
+    }
+
+    res.json({ success: true, sparklines });
+  } catch (error) {
+    console.error('Sparkline-24h error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
