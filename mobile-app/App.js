@@ -963,7 +963,7 @@ function AppContent() {
   // Push Notifications State
   const [expoPushToken, setExpoPushToken] = useState(null);
 
-  // Price Alerts State (Gold/Lifetime feature)
+  // Price Alerts State (free feature)
   const [priceAlerts, setPriceAlerts] = useState([]);
   const [showAddAlertModal, setShowAddAlertModal] = useState(false);
   const [alertsLoading, setAlertsLoading] = useState(false);
@@ -2723,7 +2723,7 @@ function AppContent() {
   };
 
   // ============================================
-  // PRICE ALERTS (Gold/Lifetime Feature)
+  // PRICE ALERTS (Free Feature)
   // Alerts synced to Supabase price_alerts table via REST API. Backend checker sends push notifications.
   // Backend priceAlertChecker runs every 5 min, sends push via Expo when triggered.
   // TODO v2.1: Implement ATH alerts with backend tracking
@@ -2910,6 +2910,17 @@ function AppContent() {
         },
       ]
     );
+  };
+
+  // Direct delete (no confirmation — used by swipe gesture)
+  const deletePriceAlertDirect = async (alertId) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const updated = priceAlerts.filter(a => a.id !== alertId);
+    setPriceAlerts(updated);
+    await savePriceAlerts(updated);
+    try {
+      await fetch(`${API_BASE_URL}/api/price-alerts/${alertId}`, { method: 'DELETE' });
+    } catch (e) { /* silent */ }
   };
 
   // ============================================
@@ -6844,17 +6855,13 @@ function AppContent() {
                   style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    if (!hasGoldAccess) { setShowPaywallModal(true); return; }
                     setShowAddAlertModal(true);
                   }}
                 >
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><View style={{ width: 18, height: 18, justifyContent: 'center', alignItems: 'center' }}><BellIcon size={18} color={colors.gold} /></View><Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium, marginBottom: 0 }]}>Price Alerts</Text></View>
-                    {hasGoldAccess && priceAlerts.length > 0 && (
+                    {priceAlerts.length > 0 && (
                       <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny }}>{priceAlerts.length} active</Text>
-                    )}
-                    {!hasGoldAccess && (
-                      <Text style={{ color: colors.gold, fontSize: scaledFonts.tiny, fontWeight: '600' }}>GOLD</Text>
                     )}
                   </View>
                   <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>Set alerts for gold and silver price targets</Text>
@@ -6862,11 +6869,8 @@ function AppContent() {
                 </View>
 
                 <View onLayout={(e) => { sectionOffsets.current['speculationTool'] = e.nativeEvent.layout.y; }}>
-                <TouchableOpacity style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]} onPress={() => { if (!hasGoldAccess) { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowPaywallModal(true); return; } setShowSpeculationModal(true); }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><View style={{ width: 18, height: 18, justifyContent: 'center', alignItems: 'center' }}><TrendingUpIcon size={18} color={colors.gold} /></View><Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium, marginBottom: 0 }]}>Speculation Tool</Text></View>
-                    {!hasGoldAccess && <Text style={{ color: colors.gold, fontSize: scaledFonts.tiny, fontWeight: '600' }}>GOLD</Text>}
-                  </View>
+                <TouchableOpacity style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowSpeculationModal(true); }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><View style={{ width: 18, height: 18, justifyContent: 'center', alignItems: 'center' }}><TrendingUpIcon size={18} color={colors.gold} /></View><Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium, marginBottom: 0 }]}>Speculation Tool</Text></View>
                   <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>What if silver hits $100? What if gold hits $10,000?</Text>
                 </TouchableOpacity>
                 </View>
@@ -6884,7 +6888,6 @@ function AppContent() {
                   activeOpacity={0.7}
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    if (!hasGoldAccess) { setShowPaywallModal(true); return; }
                     setTempSilverMilestone(customSilverMilestone?.toString() || '');
                     setTempGoldMilestone(customGoldMilestone?.toString() || '');
                     setShowMilestoneModal(true);
@@ -6893,11 +6896,7 @@ function AppContent() {
                   <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><View style={{ width: 18, height: 18, justifyContent: 'center', alignItems: 'center' }}><TrophyIcon size={18} color={colors.gold} /></View><Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium, marginBottom: 0 }]}>Stack Milestones</Text></View>
-                      {hasGoldAccess ? (
-                        <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny }}>Tap to edit</Text>
-                      ) : (
-                        <Text style={{ color: colors.gold, fontSize: scaledFonts.tiny, fontWeight: '600' }}>GOLD</Text>
-                      )}
+                      <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny }}>Tap to edit</Text>
                     </View>
                     <ProgressBar value={totalSilverOzt} max={nextSilverMilestone} color={colors.silver} label={`Silver: ${formatOunces(totalSilverOzt, 0)} / ${nextSilverMilestone} oz${customSilverMilestone ? ' (custom)' : ''}`} />
                     <ProgressBar value={totalGoldOzt} max={nextGoldMilestone} color={colors.gold} label={`Gold: ${formatOunces(totalGoldOzt, 2)} / ${nextGoldMilestone} oz${customGoldMilestone ? ' (custom)' : ''}`} />
@@ -8392,6 +8391,10 @@ function AppContent() {
                 { icon: '📸', label: 'AI receipt scanning (5/month)' },
                 { icon: '📤', label: 'Export CSV & manual backup' },
                 { icon: '🌙', label: 'Dark mode & accessibility' },
+                { icon: '🔔', label: 'Price alerts & push notifications' },
+                { icon: '🔮', label: 'What If scenarios & speculation tool' },
+                { icon: '🧮', label: 'Junk silver calculator' },
+                { icon: '🏆', label: 'Stack milestones & Share My Stack' },
               ].map((item, i, arr) => (
                 <View key={i}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 16 }}>
@@ -8410,13 +8413,13 @@ function AppContent() {
             </Text>
             <View style={{ backgroundColor: isDarkMode ? '#1c1c1e' : '#ffffff', borderRadius: 10, overflow: 'hidden', marginBottom: 20 }}>
               {[
+                { icon: '🧠', label: 'AI Intelligence Feed' },
+                { icon: '🏦', label: 'COMEX Vault Watch' },
+                { icon: '📰', label: 'AI Daily Brief' },
+                { icon: '💬', label: 'AI Stack Advisor' },
+                { icon: '📈', label: 'Spot Price History charts' },
+                { icon: '📊', label: 'Advanced Analytics' },
                 { icon: '📸', label: 'Unlimited receipt scans' },
-                { icon: '🔔', label: 'Price alerts & push notifications' },
-                { icon: '📈', label: 'Portfolio analytics with charts' },
-                { icon: '🔮', label: 'What If scenarios & speculation tool' },
-                { icon: '🧮', label: 'Junk silver calculator' },
-                { icon: '💰', label: 'Break-even & premium analysis' },
-                { icon: '🏆', label: 'Stack milestones & Share My Stack' },
                 { icon: '☁️', label: 'Cloud sync across devices' },
                 ...(Platform.OS === 'ios' ? [{ icon: '📱', label: 'Home screen widgets' }] : []),
               ].map((item, i, arr) => (
@@ -8965,12 +8968,11 @@ function AppContent() {
         <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
             <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>Tools</Text>
-            <View style={{ backgroundColor: 'rgba(251, 191, 36, 0.2)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-              <Text style={{ color: colors.gold, fontSize: scaledFonts.tiny, fontWeight: '600' }}>GOLD</Text>
+            <View style={{ backgroundColor: 'rgba(76, 175, 80, 0.2)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+              <Text style={{ color: '#4CAF50', fontSize: scaledFonts.tiny, fontWeight: '600' }}>FREE</Text>
             </View>
           </View>
-          <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>• Price Alerts — Get notified when gold or silver hits your target price</Text>
-          <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>• Price Alerts — Get notified when gold or silver hits your target price</Text>
+          <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>• Price Alerts — Get notified when metals hit your target price</Text>
           <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>• What If Scenarios — See portfolio value at hypothetical spot prices</Text>
           <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>• Junk Silver Calculator — Calculate melt value of constitutional silver</Text>
           <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>• Stack Milestones — Set and track oz goals for your stack</Text>
@@ -9190,32 +9192,60 @@ function AppContent() {
           <View style={{ marginTop: 24 }}>
             <View style={{ height: 1, backgroundColor: colors.border, marginBottom: 16 }} />
             <Text style={{ color: colors.text, fontWeight: '700', fontSize: 16, marginBottom: 12 }}>Your Alerts</Text>
-            {priceAlerts.map((alert) => (
-              <View key={alert.id} style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                paddingVertical: 10,
-                borderBottomWidth: 1,
-                borderBottomColor: colors.border,
-              }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <View style={{
-                    width: 28, height: 28, borderRadius: 6,
-                    backgroundColor: alert.metal === 'gold' ? 'rgba(251,191,36,0.2)' : 'rgba(156,163,175,0.2)',
-                    alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: alert.metal === 'gold' ? '#fbbf24' : '#9ca3af' }} />
-                  </View>
-                  <Text style={{ color: colors.text, fontSize: 14 }}>
-                    {alert.metal === 'gold' ? 'Gold' : 'Silver'} {alert.direction === 'above' ? 'above' : 'below'} ${parseFloat(alert.targetPrice).toFixed(2)}
-                  </Text>
+            {priceAlerts.map((alert) => {
+              const metalColors = { gold: '#fbbf24', silver: '#9ca3af', platinum: '#7BB3D4', palladium: '#6BBF8A' };
+              const metalBgs = { gold: 'rgba(251,191,36,0.2)', silver: 'rgba(156,163,175,0.2)', platinum: 'rgba(123,179,212,0.2)', palladium: 'rgba(107,191,138,0.2)' };
+              const metalLabel = alert.metal.charAt(0).toUpperCase() + alert.metal.slice(1);
+              const translateX = new Animated.Value(0);
+              const panResponder = PanResponder.create({
+                onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 10 && Math.abs(gs.dx) > Math.abs(gs.dy),
+                onPanResponderMove: (_, gs) => { if (gs.dx < 0) translateX.setValue(gs.dx); },
+                onPanResponderRelease: (_, gs) => {
+                  if (gs.dx < -80) {
+                    Animated.spring(translateX, { toValue: -80, useNativeDriver: true }).start();
+                  } else {
+                    Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+                  }
+                },
+              });
+              return (
+                <View key={alert.id} style={{ overflow: 'hidden', borderBottomWidth: 1, borderBottomColor: colors.border }}>
+                  {/* Delete button behind */}
+                  <TouchableOpacity
+                    onPress={() => {
+                      Animated.timing(translateX, { toValue: -400, duration: 200, useNativeDriver: true }).start(() => {
+                        deletePriceAlertDirect(alert.id);
+                      });
+                    }}
+                    style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 80, backgroundColor: '#F44336', alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Delete</Text>
+                  </TouchableOpacity>
+                  {/* Swipeable row */}
+                  <Animated.View
+                    {...panResponder.panHandlers}
+                    style={{
+                      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                      paddingVertical: 10, backgroundColor: colors.cardBg || colors.background,
+                      transform: [{ translateX }],
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                      <View style={{
+                        width: 28, height: 28, borderRadius: 6,
+                        backgroundColor: metalBgs[alert.metal] || metalBgs.silver,
+                        alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: metalColors[alert.metal] || metalColors.silver }} />
+                      </View>
+                      <Text style={{ color: colors.text, fontSize: 14 }}>
+                        {metalLabel} {alert.direction === 'above' ? 'above' : 'below'} ${parseFloat(alert.targetPrice).toFixed(2)}
+                      </Text>
+                    </View>
+                  </Animated.View>
                 </View>
-                <TouchableOpacity onPress={() => deletePriceAlert(alert.id)} style={{ padding: 4 }}>
-                  <Text style={{ color: colors.error, fontSize: 13 }}>Remove</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
+              );
+            })}
           </View>
         )}
       </ModalWrapper>
