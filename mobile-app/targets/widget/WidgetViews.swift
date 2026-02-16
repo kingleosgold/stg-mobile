@@ -19,7 +19,7 @@ func wChangeColor(_ val: Double) -> Color {
 }
 
 func wSparklineColor(_ data: [Double]) -> Color {
-    guard data.count >= 2 else { return wGreen }
+    guard data.count >= 2 else { return wMuted }
     return data.last! >= data.first! ? wGreen : wRed
 }
 

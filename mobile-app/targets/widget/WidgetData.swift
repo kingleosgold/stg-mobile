@@ -190,9 +190,9 @@ struct WidgetData: Codable {
         for i in 0..<count {
             let g: Double = goldOzt * goldSparkline[i]
             let s: Double = silverOzt * silverSparkline[i]
-            let ptPrice: Double = i < platinumSparkline.count ? platinumSparkline[i] : platinumSpot
+            let ptPrice: Double = (i < platinumSparkline.count && platinumSparkline[i] > 0) ? platinumSparkline[i] : platinumSpot
             let pt: Double = platinumOzt * ptPrice
-            let pdPrice: Double = i < palladiumSparkline.count ? palladiumSparkline[i] : palladiumSpot
+            let pdPrice: Double = (i < palladiumSparkline.count && palladiumSparkline[i] > 0) ? palladiumSparkline[i] : palladiumSpot
             let pd: Double = palladiumOzt * pdPrice
             let total: Double = g + s + pt + pd
             result.append(total)

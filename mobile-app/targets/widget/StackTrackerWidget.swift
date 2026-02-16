@@ -151,8 +151,9 @@ struct Provider: TimelineProvider {
 
             for metal in metals {
                 let symbol = metal["symbol"] as? String ?? ""
-                let price = metal["price"] as? Double ?? 0
-                let sparkline = metal["sparkline"] as? [Double] ?? []
+                let price = (metal["price"] as? NSNumber)?.doubleValue ?? 0
+                // Robust sparkline parsing: handle NSNumber arrays from JSONSerialization
+                let sparkline: [Double] = (metal["sparkline"] as? [Any])?.compactMap { ($0 as? NSNumber)?.doubleValue } ?? []
 
                 switch symbol {
                 case "Au":

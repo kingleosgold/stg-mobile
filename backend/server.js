@@ -479,10 +479,10 @@ app.get('/api/widget-data', async (req, res) => {
           }
           const sorted = Object.entries(byHour).sort(([a], [b]) => a.localeCompare(b));
 
-          sparklines.gold = sorted.map(([, r]) => parseFloat(r.gold_price) || 0);
-          sparklines.silver = sorted.map(([, r]) => parseFloat(r.silver_price) || 0);
-          sparklines.platinum = sorted.map(([, r]) => parseFloat(r.platinum_price) || 0);
-          sparklines.palladium = sorted.map(([, r]) => parseFloat(r.palladium_price) || 0);
+          sparklines.gold = sorted.map(([, r]) => parseFloat(r.gold_price) || prices.gold || 0);
+          sparklines.silver = sorted.map(([, r]) => parseFloat(r.silver_price) || prices.silver || 0);
+          sparklines.platinum = sorted.map(([, r]) => parseFloat(r.platinum_price) || prices.platinum || 0);
+          sparklines.palladium = sorted.map(([, r]) => parseFloat(r.palladium_price) || prices.palladium || 0);
 
           // Append current price as latest point
           for (const metal of ['gold', 'silver', 'platinum', 'palladium']) {
@@ -558,10 +558,10 @@ app.get('/api/sparkline-24h', async (req, res) => {
           const sorted = Object.entries(byHour).sort(([a], [b]) => a.localeCompare(b));
 
           timestamps = sorted.map(([, r]) => r.timestamp);
-          sparklines.gold = sorted.map(([, r]) => parseFloat(r.gold_price) || 0);
-          sparklines.silver = sorted.map(([, r]) => parseFloat(r.silver_price) || 0);
-          sparklines.platinum = sorted.map(([, r]) => parseFloat(r.platinum_price) || 0);
-          sparklines.palladium = sorted.map(([, r]) => parseFloat(r.palladium_price) || 0);
+          sparklines.gold = sorted.map(([, r]) => parseFloat(r.gold_price) || prices.gold || 0);
+          sparklines.silver = sorted.map(([, r]) => parseFloat(r.silver_price) || prices.silver || 0);
+          sparklines.platinum = sorted.map(([, r]) => parseFloat(r.platinum_price) || prices.platinum || 0);
+          sparklines.palladium = sorted.map(([, r]) => parseFloat(r.palladium_price) || prices.palladium || 0);
         }
       } catch (e) {
         console.log('Sparkline-24h fetch error:', e.message);
@@ -582,6 +582,172 @@ app.get('/api/sparkline-24h', async (req, res) => {
     res.json({ success: true, sparklines, timestamps });
   } catch (error) {
     console.error('Sparkline-24h error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * One-time backfill: Populate price_log with historical Pt/Pd data from PPLT/PALL ETFs
+ * Fetches 1 year of daily ETF closing prices, converts to spot using calibration ratios,
+ * and inserts into price_log for dates that don't already have Pt/Pd data.
+ */
+app.post('/api/backfill-price-log', async (req, res) => {
+  if (!isSupabaseAvailable()) {
+    return res.status(503).json({ success: false, error: 'Supabase not available' });
+  }
+
+  try {
+    const supabaseClient = getSupabase();
+    const YahooFinance = require('yahoo-finance2').default;
+    const yahooFinance = new YahooFinance();
+
+    // Get current calibration ratios for ETF→spot conversion
+    const today = new Date().toISOString().split('T')[0];
+    const ratios = await getRatioForDate(today);
+    const ppltRatio = ratios.pplt_ratio || DEFAULT_PPLT_RATIO;
+    const pallRatio = ratios.pall_ratio || DEFAULT_PALL_RATIO;
+
+    console.log(`📊 [Backfill] Starting Pt/Pd backfill with ratios: PPLT=${ppltRatio}, PALL=${pallRatio}`);
+
+    // Fetch 1 year of daily PPLT and PALL data from Yahoo Finance
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
+    const [ppltData, pallData] = await Promise.all([
+      yahooFinance.historical('PPLT', {
+        period1: oneYearAgo,
+        period2: new Date(),
+        interval: '1d',
+      }).catch(e => { console.log('[Backfill] PPLT fetch error:', e.message); return []; }),
+      yahooFinance.historical('PALL', {
+        period1: oneYearAgo,
+        period2: new Date(),
+        interval: '1d',
+      }).catch(e => { console.log('[Backfill] PALL fetch error:', e.message); return []; }),
+    ]);
+
+    console.log(`📊 [Backfill] Fetched ${ppltData.length} PPLT rows, ${pallData.length} PALL rows`);
+
+    // Index PALL data by date for easy lookup
+    const pallByDate = {};
+    for (const row of pallData) {
+      const dateStr = new Date(row.date).toISOString().split('T')[0];
+      pallByDate[dateStr] = row.close;
+    }
+
+    // Also fetch existing GLD/SLV for the same period so we can fill gold/silver too
+    const [gldData, slvData] = await Promise.all([
+      yahooFinance.historical('GLD', {
+        period1: oneYearAgo,
+        period2: new Date(),
+        interval: '1d',
+      }).catch(e => { console.log('[Backfill] GLD fetch error:', e.message); return []; }),
+      yahooFinance.historical('SLV', {
+        period1: oneYearAgo,
+        period2: new Date(),
+        interval: '1d',
+      }).catch(e => { console.log('[Backfill] SLV fetch error:', e.message); return []; }),
+    ]);
+
+    const gldByDate = {};
+    for (const row of gldData) {
+      const dateStr = new Date(row.date).toISOString().split('T')[0];
+      gldByDate[dateStr] = row.close;
+    }
+    const slvByDate = {};
+    for (const row of slvData) {
+      const dateStr = new Date(row.date).toISOString().split('T')[0];
+      slvByDate[dateStr] = row.close;
+    }
+
+    // Check which dates already have Pt/Pd data in price_log
+    const { data: existingDates, error: existErr } = await supabaseClient
+      .from('price_log')
+      .select('timestamp')
+      .not('platinum_price', 'is', null)
+      .gte('timestamp', oneYearAgo.toISOString())
+      .order('timestamp', { ascending: true });
+
+    if (existErr) {
+      console.log('[Backfill] Error checking existing dates:', existErr.message);
+    }
+
+    const existingDateSet = new Set();
+    if (existingDates) {
+      for (const row of existingDates) {
+        existingDateSet.add(row.timestamp.substring(0, 10));
+      }
+    }
+
+    console.log(`📊 [Backfill] ${existingDateSet.size} dates already have Pt/Pd data`);
+
+    // Build rows to insert
+    let inserted = 0;
+    let skipped = 0;
+    const gldRatio = ratios.gld_ratio || 0.092;
+    const slvRatio = ratios.slv_ratio || 0.92;
+
+    for (const ppltRow of ppltData) {
+      const dateStr = new Date(ppltRow.date).toISOString().split('T')[0];
+
+      if (existingDateSet.has(dateStr)) {
+        skipped++;
+        continue;
+      }
+
+      const ppltClose = ppltRow.close;
+      const pallClose = pallByDate[dateStr] || null;
+      const gldClose = gldByDate[dateStr] || null;
+      const slvClose = slvByDate[dateStr] || null;
+
+      // Convert ETF prices to spot
+      const platinumSpot = ppltClose ? Math.round((ppltClose / ppltRatio) * 100) / 100 : null;
+      const palladiumSpot = pallClose ? Math.round((pallClose / pallRatio) * 100) / 100 : null;
+      const goldSpot = gldClose ? Math.round((gldClose / gldRatio) * 100) / 100 : null;
+      const silverSpot = slvClose ? Math.round((slvClose / slvRatio) * 100) / 100 : null;
+
+      // Insert one row per day at market close time (16:00 ET = 21:00 UTC)
+      const timestamp = `${dateStr}T21:00:00.000Z`;
+
+      const { error: insertErr } = await supabaseClient
+        .from('price_log')
+        .insert({
+          timestamp,
+          gold_price: goldSpot,
+          silver_price: silverSpot,
+          platinum_price: platinumSpot,
+          palladium_price: palladiumSpot,
+          source: 'etf-backfill',
+        });
+
+      if (insertErr) {
+        // Skip duplicate timestamp errors silently
+        if (!insertErr.message.includes('duplicate')) {
+          console.log(`[Backfill] Insert error for ${dateStr}:`, insertErr.message);
+        }
+        skipped++;
+      } else {
+        inserted++;
+      }
+    }
+
+    console.log(`✅ [Backfill] Complete: ${inserted} rows inserted, ${skipped} skipped`);
+
+    res.json({
+      success: true,
+      message: `Backfill complete: ${inserted} rows inserted, ${skipped} skipped`,
+      details: {
+        ppltDays: ppltData.length,
+        pallDays: pallData.length,
+        gldDays: gldData.length,
+        slvDays: slvData.length,
+        inserted,
+        skipped,
+        ratios: { ppltRatio, pallRatio, gldRatio, slvRatio },
+      },
+    });
+  } catch (error) {
+    console.error('[Backfill] Error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });

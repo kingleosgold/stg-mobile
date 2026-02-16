@@ -137,7 +137,7 @@ try {
  */
 let lastSavedDate = null;
 
-function savePreviousDayPrices(gold, silver) {
+function savePreviousDayPrices(gold, silver, platinum, palladium) {
   const today = new Date().toISOString().split('T')[0];
 
   // Only save once per day, and only if we have valid prices
@@ -149,13 +149,9 @@ function savePreviousDayPrices(gold, silver) {
   // Mark that we've processed today (will save at end of day via the file)
   lastSavedDate = today;
 
-  // If this is a NEW day and we have stored prices, those are yesterday's prices
-  // We should NOT overwrite them until end of day
-  // Instead, schedule the save for later (or just save current as "today's baseline")
-
   // For simplicity: save current prices with today's date
   // Tomorrow, when date changes, these become "yesterday's" prices
-  const dataToSave = { gold, silver, date: today };
+  const dataToSave = { gold, silver, platinum: platinum || 0, palladium: palladium || 0, date: today };
 
   try {
     const dataDir = path.join(__dirname, '..', 'data');
@@ -254,10 +250,12 @@ async function getYesterdayPrices() {
 
     const loggedPrice = await findClosestLoggedPrice(lastTradingDay, '23:59'); // Get end of day price
     if (loggedPrice && loggedPrice.gold && loggedPrice.silver) {
-      console.log(`📊 Using price_log for last trading day (${lastTradingDay}): Gold $${loggedPrice.gold}, Silver $${loggedPrice.silver}`);
+      console.log(`📊 Using price_log for last trading day (${lastTradingDay}): Gold $${loggedPrice.gold}, Silver $${loggedPrice.silver}, Pt $${loggedPrice.platinum || 'N/A'}, Pd $${loggedPrice.palladium || 'N/A'}`);
       return {
         gold: loggedPrice.gold,
         silver: loggedPrice.silver,
+        platinum: loggedPrice.platinum || 0,
+        palladium: loggedPrice.palladium || 0,
         date: lastTradingDay
       };
     }
@@ -318,7 +316,7 @@ async function scrapeGoldSilverPrices() {
 
     if (goldPrice && silverPrice) {
       // Calculate change from yesterday's prices (if available)
-      let changeData = { gold: {}, silver: {}, source: 'unavailable' };
+      let changeData = { gold: {}, silver: {}, platinum: {}, palladium: {}, source: 'unavailable' };
       const yesterdayPrices = await getYesterdayPrices();
 
       if (yesterdayPrices) {
@@ -340,14 +338,37 @@ async function scrapeGoldSilverPrices() {
           },
           source: 'calculated',
         };
+
+        // Calculate Pt/Pd change if we have yesterday's prices
+        if (yesterdayPrices.platinum > 0 && platinumPrice > 0) {
+          const ptChange = platinumPrice - yesterdayPrices.platinum;
+          const ptChangePercent = (ptChange / yesterdayPrices.platinum) * 100;
+          changeData.platinum = {
+            amount: Math.round(ptChange * 100) / 100,
+            percent: Math.round(ptChangePercent * 100) / 100,
+            prevClose: yesterdayPrices.platinum,
+          };
+        }
+        if (yesterdayPrices.palladium > 0 && palladiumPrice > 0) {
+          const pdChange = palladiumPrice - yesterdayPrices.palladium;
+          const pdChangePercent = (pdChange / yesterdayPrices.palladium) * 100;
+          changeData.palladium = {
+            amount: Math.round(pdChange * 100) / 100,
+            percent: Math.round(pdChangePercent * 100) / 100,
+            prevClose: yesterdayPrices.palladium,
+          };
+        }
+
         console.log(`📈 Calculated change - Gold: ${goldChange >= 0 ? '+' : ''}$${changeData.gold.amount} (${changeData.gold.percent}%)`);
         console.log(`📈 Calculated change - Silver: ${silverChange >= 0 ? '+' : ''}$${changeData.silver.amount} (${changeData.silver.percent}%)`);
+        if (changeData.platinum?.amount !== undefined) console.log(`📈 Calculated change - Platinum: ${changeData.platinum.amount >= 0 ? '+' : ''}$${changeData.platinum.amount} (${changeData.platinum.percent}%)`);
+        if (changeData.palladium?.amount !== undefined) console.log(`📈 Calculated change - Palladium: ${changeData.palladium.amount >= 0 ? '+' : ''}$${changeData.palladium.amount} (${changeData.palladium.percent}%)`);
       } else {
         console.log('📊 No previous day prices available for change calculation');
       }
 
       // Save current prices for tomorrow's change calculation
-      savePreviousDayPrices(goldPrice, silverPrice);
+      savePreviousDayPrices(goldPrice, silverPrice, platinumPrice, palladiumPrice);
 
       const marketsClosed = areMarketsClosed();
       const result = {
@@ -433,7 +454,7 @@ async function scrapeGoldSilverPrices() {
       }
 
       // Save prices for MetalPriceAPI fallback calculation
-      savePreviousDayPrices(goldRes.data.price, silverRes.data.price);
+      savePreviousDayPrices(goldRes.data.price, silverRes.data.price, 0, 0);
 
       const marketsClosed = areMarketsClosed();
       const result = {

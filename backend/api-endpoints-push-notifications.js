@@ -296,7 +296,7 @@ app.post('/api/push-test', async (req, res) => {
 
     const result = await sendPushNotification(expo_push_token, {
       title: title || 'Test Notification',
-      body: body || 'This is a test push notification from Stack Tracker Pro',
+      body: body || 'This is a test push notification from Stack Tracker Gold',
       data: { test: true },
     });
 
