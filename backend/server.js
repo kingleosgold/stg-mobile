@@ -2885,10 +2885,16 @@ app.delete('/api/price-alerts/:id', async (req, res) => {
 app.patch('/api/price-alerts/:id', async (req, res) => {
   try {
     const alertId = req.params.id;
-    const { enabled } = req.body;
+    const { enabled, metal, targetPrice, direction } = req.body;
 
-    if (typeof enabled !== 'boolean') {
-      return res.status(400).json({ success: false, error: 'enabled (boolean) is required' });
+    const updates = { updated_at: new Date().toISOString() };
+    if (typeof enabled === 'boolean') updates.enabled = enabled;
+    if (metal) updates.metal = metal;
+    if (targetPrice !== undefined) updates.target_price = parseFloat(targetPrice);
+    if (direction) updates.direction = direction;
+
+    if (Object.keys(updates).length === 1) {
+      return res.status(400).json({ success: false, error: 'No valid fields to update' });
     }
 
     if (!isSupabaseAvailable()) {
@@ -2899,17 +2905,17 @@ app.patch('/api/price-alerts/:id', async (req, res) => {
 
     const { data, error } = await supabase
       .from('price_alerts')
-      .update({ enabled, updated_at: new Date().toISOString() })
+      .update(updates)
       .eq('id', alertId)
       .select()
       .single();
 
     if (error) {
-      console.error('Error toggling price alert:', error);
+      console.error('Error updating price alert:', error);
       return res.status(500).json({ success: false, error: error.message });
     }
 
-    console.log(`✅ Toggled price alert ${alertId}: enabled=${enabled}`);
+    console.log(`✅ Updated price alert ${alertId}:`, JSON.stringify(updates));
     res.json({ success: true, alert: data });
   } catch (error) {
     console.error('Error in PATCH /api/price-alerts/:id:', error);
