@@ -26,7 +26,7 @@ import * as XLSX from 'xlsx';
 import * as Notifications from 'expo-notifications';
 import * as StoreReview from 'expo-store-review';
 import { CloudStorage, CloudStorageScope } from 'react-native-cloud-storage';
-import { initializePurchases, loginRevenueCat, hasGoldEntitlement, getUserEntitlements, restorePurchases } from './src/utils/entitlements';
+import { initializePurchases, loginRevenueCat, hasGoldEntitlement, getUserEntitlements, restorePurchases, logoutRevenueCat } from './src/utils/entitlements';
 import { syncWidgetData, isWidgetKitAvailable } from './src/utils/widgetKit';
 import { registerBackgroundFetch, getBackgroundFetchStatus } from './src/utils/backgroundTasks';
 // LineChart removed — all charts now use ScrubChart
@@ -1382,6 +1382,7 @@ function AppContent() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [showBenefitsScreen, setShowBenefitsScreen] = useState(false);
+  const [settingsSubPage, setSettingsSubPage] = useState(null); // null, 'notifications', 'appearance', 'display', 'exportBackup'
 
   // Sort State
   const [sortBy, setSortBy] = useState('date-newest'); // date-newest, date-oldest, value-high, value-low, metal, name
@@ -6094,8 +6095,24 @@ function AppContent() {
 
   const navigateToSection = (tabKey, sectionKey) => {
     closeDrawer();
+    // Special case: Web App opens URL directly
+    if (sectionKey === 'webApp') {
+      Linking.openURL('https://app.stacktrackergold.com');
+      return;
+    }
+    // Settings sub-pages: open directly
+    if (tabKey === 'settings' && sectionKey === 'notifications') {
+      setTab('settings');
+      setSettingsSubPage('notifications');
+      setTimeout(() => { scrollRef.current?.scrollTo({ y: 0, animated: false }); }, 100);
+      return;
+    }
     if (tab !== tabKey) {
       setTab(tabKey);
+    }
+    // Reset settings sub-page when navigating to main settings sections
+    if (tabKey === 'settings') {
+      setSettingsSubPage(null);
     }
     setTimeout(() => {
       const y = sectionOffsets.current[sectionKey];
@@ -6530,15 +6547,21 @@ function AppContent() {
               {/* ===== SECTION 3.5: VAULT WATCH (Gold-only) ===== */}
               <View onLayout={(e) => { sectionOffsets.current['vaultWatch'] = e.nativeEvent.layout.y; }}>
               {(() => {
-                const vaultMetals = [
-                  { key: 'silver', label: 'Ag', color: colors.silver },
-                  { key: 'gold', label: 'Au', color: colors.gold },
-                  { key: 'platinum', label: 'Pt', color: colors.platinum },
-                  { key: 'palladium', label: 'Pd', color: colors.palladium },
+                const vaultMetalsAll = [
+                  { key: 'silver', label: 'Ag', color: '#C0C0C0' },
+                  { key: 'gold', label: 'Au', color: '#D4A843' },
+                  { key: 'platinum', label: 'Pt', color: '#A8D8EA' },
+                  { key: 'palladium', label: 'Pd', color: '#4CAF50' },
                 ];
+                // Only show tabs for metals that have data
+                const vaultMetals = vaultMetalsAll.filter(m => {
+                  const data = vaultData[m.key] || [];
+                  return data.length > 0;
+                });
 
                 const currentVaultData = vaultData[vaultMetal] || [];
                 const latestVault = currentVaultData.length > 0 ? currentVaultData[currentVaultData.length - 1] : null;
+                const currentVaultColor = (vaultMetalsAll.find(m => m.key === vaultMetal) || {}).color || '#D4A843';
 
                 // Format large oz numbers compactly: 101394888 → "101.4M"
                 const formatOzCompact = (val) => {
@@ -6728,7 +6751,7 @@ function AppContent() {
                                 <Text style={{ color: colors.muted, fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginLeft: 12 }}>Registered Inventory (30d)</Text>
                                 <ScrubChart
                                   data={currentVaultData.filter(d => d.registered_oz > 0).map(d => ({ date: d.date, value: d.registered_oz }))}
-                                  color="#D4A843"
+                                  color={currentVaultColor}
                                   width={SCREEN_WIDTH - 56}
                                   height={160}
                                   range="1M"
@@ -7893,6 +7916,8 @@ function AppContent() {
                         const goldPL = goldMeltValue - totalGoldCost;
                         const goldPLPercent = totalGoldCost > 0 ? (goldPL / totalGoldCost) * 100 : 0;
                         const avgGoldCostPerOz = totalGoldOzt > 0 ? totalGoldCost / totalGoldOzt : 0;
+                        const goldWithPremium = goldItems.filter(i => (i.premium || 0) > 0);
+                        const avgGoldPremium = goldWithPremium.length > 0 ? goldWithPremium.reduce((sum, i) => sum + i.premium * i.quantity, 0) / goldWithPremium.reduce((sum, i) => sum + i.quantity, 0) : null;
                         // Redact values for free users
                         const redact = !hasGoldAccess;
                         return (
@@ -7915,6 +7940,10 @@ function AppContent() {
                                 {redact ? '$••••• (•••%)' : `${goldPL >= 0 ? '+' : ''}$${formatCurrency(goldPL)} (${goldPLPercent >= 0 ? '+' : ''}${goldPLPercent.toFixed(1)}%)`}
                               </Text>
                             </View>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                              <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>Avg Premium Over Spot</Text>
+                              <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>{avgGoldPremium === null ? 'N/A' : (redact ? '$•••••' : `$${formatCurrency(avgGoldPremium)}/unit`)}</Text>
+                            </View>
                           </>
                         );
                       })()}
@@ -7931,6 +7960,8 @@ function AppContent() {
                         const silverPL = silverMeltValue - totalSilverCost;
                         const silverPLPercent = totalSilverCost > 0 ? (silverPL / totalSilverCost) * 100 : 0;
                         const avgSilverCostPerOz = totalSilverOzt > 0 ? totalSilverCost / totalSilverOzt : 0;
+                        const silverWithPremium = silverItems.filter(i => (i.premium || 0) > 0);
+                        const avgSilverPremium = silverWithPremium.length > 0 ? silverWithPremium.reduce((sum, i) => sum + i.premium * i.quantity, 0) / silverWithPremium.reduce((sum, i) => sum + i.quantity, 0) : null;
                         // Redact values for free users
                         const redact = !hasGoldAccess;
                         return (
@@ -7953,6 +7984,10 @@ function AppContent() {
                                 {redact ? '$••••• (•••%)' : `${silverPL >= 0 ? '+' : ''}$${formatCurrency(silverPL)} (${silverPLPercent >= 0 ? '+' : ''}${silverPLPercent.toFixed(1)}%)`}
                               </Text>
                             </View>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                              <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>Avg Premium Over Spot</Text>
+                              <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>{avgSilverPremium === null ? 'N/A' : (redact ? '$•••••' : `$${formatCurrency(avgSilverPremium)}/unit`)}</Text>
+                            </View>
                           </>
                         );
                       })()}
@@ -7969,6 +8004,8 @@ function AppContent() {
                         const ptPL = ptMeltValue - totalPtCost;
                         const ptPLPercent = totalPtCost > 0 ? (ptPL / totalPtCost) * 100 : 0;
                         const avgPtCostPerOz = totalPlatinumOzt > 0 ? totalPtCost / totalPlatinumOzt : 0;
+                        const ptWithPremium = platinumItems.filter(i => (i.premium || 0) > 0);
+                        const avgPtPremium = ptWithPremium.length > 0 ? ptWithPremium.reduce((sum, i) => sum + i.premium * i.quantity, 0) / ptWithPremium.reduce((sum, i) => sum + i.quantity, 0) : null;
                         const redact = !hasGoldAccess;
                         return (
                           <>
@@ -7990,6 +8027,10 @@ function AppContent() {
                                 {redact ? '$••••• (•••%)' : `${ptPL >= 0 ? '+' : ''}$${formatCurrency(ptPL)} (${ptPLPercent >= 0 ? '+' : ''}${ptPLPercent.toFixed(1)}%)`}
                               </Text>
                             </View>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                              <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>Avg Premium Over Spot</Text>
+                              <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>{avgPtPremium === null ? 'N/A' : (redact ? '$•••••' : `$${formatCurrency(avgPtPremium)}/unit`)}</Text>
+                            </View>
                           </>
                         );
                       })()}
@@ -8006,6 +8047,8 @@ function AppContent() {
                         const pdPL = pdMeltValue - totalPdCost;
                         const pdPLPercent = totalPdCost > 0 ? (pdPL / totalPdCost) * 100 : 0;
                         const avgPdCostPerOz = totalPalladiumOzt > 0 ? totalPdCost / totalPalladiumOzt : 0;
+                        const pdWithPremium = palladiumItems.filter(i => (i.premium || 0) > 0);
+                        const avgPdPremium = pdWithPremium.length > 0 ? pdWithPremium.reduce((sum, i) => sum + i.premium * i.quantity, 0) / pdWithPremium.reduce((sum, i) => sum + i.quantity, 0) : null;
                         const redact = !hasGoldAccess;
                         return (
                           <>
@@ -8026,6 +8069,10 @@ function AppContent() {
                               <Text style={{ color: redact ? colors.muted : (pdPL >= 0 ? colors.success : colors.error), fontSize: scaledFonts.normal }}>
                                 {redact ? '$••••• (•••%)' : `${pdPL >= 0 ? '+' : ''}$${formatCurrency(pdPL)} (${pdPLPercent >= 0 ? '+' : ''}${pdPLPercent.toFixed(1)}%)`}
                               </Text>
+                            </View>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                              <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>Avg Premium Over Spot</Text>
+                              <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>{avgPdPremium === null ? 'N/A' : (redact ? '$•••••' : `$${formatCurrency(avgPdPremium)}/unit`)}</Text>
                             </View>
                           </>
                         );
@@ -8143,14 +8190,6 @@ function AppContent() {
                   )}
                 </View>
 
-                {/* Premium Analysis */}
-                <TouchableOpacity style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); if (!hasGoldAccess) { setShowPaywallModal(true); return; } setShowPremiumAnalysisModal(true); }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>Premium Analysis</Text>
-                    {!hasGoldAccess && <Text style={{ color: colors.gold, fontSize: scaledFonts.tiny, fontWeight: '600' }}>GOLD</Text>}
-                  </View>
-                  <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>View premiums paid across your holdings</Text>
-                </TouchableOpacity>
               </>
 
             </View>
@@ -8230,14 +8269,135 @@ function AppContent() {
             }}>{text}</Text>
           );
 
-          return (
-            <View style={{ flex: 1, backgroundColor: settingsBg, marginHorizontal: -20, marginTop: -20, paddingHorizontal: 16, paddingTop: 8 }}>
-              {/* Web App */}
-              <View onLayout={(e) => { sectionOffsets.current['webApp'] = e.nativeEvent.layout.y; }}>
-              <SectionHeader title="Web App" />
-              <View style={{ borderRadius: 10, overflow: 'hidden' }}>
-                <TouchableOpacity
-                  style={{
+          // Sub-page header with back button
+          const SubPageHeader = ({ title }) => (
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 12, paddingBottom: 4 }}>
+              <TouchableOpacity
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSettingsSubPage(null); }}
+                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8 }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Text style={{ color: '#007AFF', fontSize: 18, marginRight: 4 }}>‹</Text>
+                <Text style={{ color: '#007AFF', fontSize: scaledFonts.normal }}>Settings</Text>
+              </TouchableOpacity>
+            </View>
+          );
+
+          const pageStyle = { flex: 1, backgroundColor: settingsBg, marginHorizontal: -20, marginTop: -20, paddingHorizontal: 16, paddingTop: 8 };
+
+          // ===== NOTIFICATIONS SUB-PAGE =====
+          if (settingsSubPage === 'notifications') {
+            return (
+              <View style={pageStyle}>
+                <SubPageHeader title="Notifications" />
+                <Text style={{ color: colors.text, fontSize: 28, fontWeight: '700', marginLeft: 16, marginBottom: 8 }}>Notifications</Text>
+                <View style={{ borderRadius: 10, overflow: 'hidden', marginTop: 8 }}>
+                  {[
+                    { key: 'daily_brief', label: 'Daily Brief', description: 'Daily market summary push' },
+                    { key: 'price_alerts', label: 'Price Alerts', description: 'Triggered when targets are hit' },
+                    { key: 'breaking_news', label: 'Breaking News & COMEX', description: 'Major market events and vault changes' },
+                  ].map((item, idx, arr) => (
+                    <React.Fragment key={item.key}>
+                      <View style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        backgroundColor: groupBg,
+                        paddingVertical: 12,
+                        paddingHorizontal: 16,
+                        minHeight: 44,
+                        ...(idx === 0 ? { borderTopLeftRadius: 10, borderTopRightRadius: 10 } : {}),
+                        ...(idx === arr.length - 1 ? { borderBottomLeftRadius: 10, borderBottomRightRadius: 10 } : {}),
+                      }}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>{item.label}</Text>
+                          <Text style={{ color: colors.muted, fontSize: scaledFonts.small, marginTop: 2 }}>{item.description}</Text>
+                        </View>
+                        <Switch
+                          value={notifPrefs[item.key]}
+                          onValueChange={(value) => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            saveNotifPref(item.key, value);
+                          }}
+                          trackColor={{ false: isDarkMode ? '#39393d' : '#e9e9eb', true: '#34c759' }}
+                          thumbColor="#fff"
+                          ios_backgroundColor={isDarkMode ? '#39393d' : '#e9e9eb'}
+                        />
+                      </View>
+                      {idx < arr.length - 1 && <RowSeparator />}
+                    </React.Fragment>
+                  ))}
+                </View>
+                <SectionFooter text="Control which push notifications you receive. Changes apply immediately." />
+                <View style={{ height: 50 }} />
+              </View>
+            );
+          }
+
+          // ===== APPEARANCE SUB-PAGE =====
+          if (settingsSubPage === 'appearance') {
+            return (
+              <View style={pageStyle}>
+                <SubPageHeader title="Appearance" />
+                <Text style={{ color: colors.text, fontSize: 28, fontWeight: '700', marginLeft: 16, marginBottom: 8 }}>Appearance</Text>
+                <View style={{ borderRadius: 10, overflow: 'hidden', marginTop: 8 }}>
+                  <View style={{
+                    backgroundColor: groupBg,
+                    paddingVertical: 12,
+                    paddingHorizontal: 16,
+                    borderRadius: 10,
+                  }}>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      {[
+                        { key: 'light', label: 'Light', icon: '☀️' },
+                        { key: 'dark', label: 'Dark', icon: '🌙' },
+                        { key: 'system', label: 'Auto', icon: '⚙️' },
+                      ].map((option) => (
+                        <TouchableOpacity
+                          key={option.key}
+                          style={{
+                            flex: 1,
+                            paddingVertical: 10,
+                            paddingHorizontal: 8,
+                            borderRadius: 8,
+                            backgroundColor: themePreference === option.key
+                              ? (isDarkMode ? '#48484a' : '#e5e5ea')
+                              : 'transparent',
+                            alignItems: 'center',
+                          }}
+                          onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            changeTheme(option.key);
+                          }}
+                        >
+                          <Text style={{ fontSize: 20, marginBottom: 4 }}>{option.icon}</Text>
+                          <Text style={{
+                            color: themePreference === option.key ? colors.text : colors.muted,
+                            fontWeight: themePreference === option.key ? '600' : '400',
+                            fontSize: scaledFonts.small,
+                          }}>
+                            {option.label}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                </View>
+                <SectionFooter text={themePreference === 'system' ? 'Following system appearance settings' : `${themePreference === 'dark' ? 'Dark' : 'Light'} mode enabled`} />
+                <View style={{ height: 50 }} />
+              </View>
+            );
+          }
+
+          // ===== DISPLAY SUB-PAGE =====
+          if (settingsSubPage === 'display') {
+            return (
+              <View style={pageStyle}>
+                <SubPageHeader title="Display" />
+                <Text style={{ color: colors.text, fontSize: 28, fontWeight: '700', marginLeft: 16, marginBottom: 8 }}>Display</Text>
+                <View style={{ borderRadius: 10, overflow: 'hidden', marginTop: 8 }}>
+                  {/* Large Text */}
+                  <View style={{
                     flexDirection: 'row',
                     alignItems: 'center',
                     justifyContent: 'space-between',
@@ -8245,129 +8405,27 @@ function AppContent() {
                     paddingVertical: 12,
                     paddingHorizontal: 16,
                     minHeight: 44,
-                    borderRadius: 10,
-                  }}
-                  onPress={() => Linking.openURL('https://app.stacktrackergold.com')}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                    <View style={{ width: 30, height: 30, borderRadius: 6, backgroundColor: '#5856D6', alignItems: 'center', justifyContent: 'center' }}>
-                      <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-                        <Path d="M3 5C3 3.89543 3.89543 3 5 3H19C20.1046 3 21 3.89543 21 5V15C21 16.1046 20.1046 17 19 17H5C3.89543 17 3 16.1046 3 15V5Z" stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                        <Path d="M8 21H16" stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" />
-                        <Path d="M12 17V21" stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" />
-                      </Svg>
-                    </View>
+                    borderTopLeftRadius: 10,
+                    borderTopRightRadius: 10,
+                  }}>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>Web App</Text>
-                      <Text style={{ color: colors.muted, fontSize: scaledFonts.small, marginTop: 2 }}>Access your portfolio on desktop</Text>
+                      <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>Large Text</Text>
+                      <Text style={{ color: colors.muted, fontSize: scaledFonts.small, marginTop: 2 }}>Increase font sizes throughout the app</Text>
                     </View>
+                    <Switch
+                      value={largeText}
+                      onValueChange={(value) => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        toggleLargeText(value);
+                      }}
+                      trackColor={{ false: isDarkMode ? '#39393d' : '#e9e9eb', true: '#34c759' }}
+                      thumbColor="#fff"
+                      ios_backgroundColor={isDarkMode ? '#39393d' : '#e9e9eb'}
+                    />
                   </View>
-                  <Text style={{ color: chevronColor, fontSize: 18, fontWeight: '600' }}>›</Text>
-                </TouchableOpacity>
-              </View>
-
-              </View>
-              {/* Account Section */}
-              <View onLayout={(e) => { sectionOffsets.current['account'] = e.nativeEvent.layout.y; }}>
-              <SectionHeader title="Account" />
-              <View style={{ borderRadius: 10, overflow: 'hidden' }}>
-                {supabaseUser ? (
-                  // Signed in - show manage account button
-                  <TouchableOpacity
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      backgroundColor: groupBg,
-                      paddingVertical: 12,
-                      paddingHorizontal: 16,
-                      minHeight: 44,
-                      borderRadius: 10,
-                    }}
-                    onPress={() => setShowAccountScreen(true)}
-                  >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                      <View style={{ width: 30, height: 30, borderRadius: 6, backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center' }}>
-                        <ProfileIcon size={18} color="#18181b" />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>Manage Account</Text>
-                        <Text style={{ color: colors.muted, fontSize: scaledFonts.small }} numberOfLines={1}>
-                          {supabaseUser.email}
-                        </Text>
-                      </View>
-                    </View>
-                    <Text style={{ color: chevronColor, fontSize: 18, fontWeight: '600' }}>›</Text>
-                  </TouchableOpacity>
-                ) : (
-                  // Not signed in - show sign in button
-                  <TouchableOpacity
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      backgroundColor: groupBg,
-                      paddingVertical: 12,
-                      paddingHorizontal: 16,
-                      minHeight: 44,
-                      borderRadius: 10,
-                    }}
-                    onPress={() => {
-                      // Navigate to auth screen
-                      disableGuestMode();
-                    }}
-                  >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                      <View style={{ width: 30, height: 30, borderRadius: 6, backgroundColor: '#007AFF', alignItems: 'center', justifyContent: 'center' }}>
-                        <ProfileIcon size={18} color="#fff" />
-                      </View>
-                      <View>
-                        <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>Sign In or Create Account</Text>
-                        <Text style={{ color: colors.muted, fontSize: scaledFonts.small }}>Sync your data across devices</Text>
-                      </View>
-                    </View>
-                    <Text style={{ color: chevronColor, fontSize: 18, fontWeight: '600' }}>›</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-              {!supabaseUser && (
-                <SectionFooter text="Your portfolio data is stored locally on this device. Sign in to enable cloud sync." />
-              )}
-
-              {/* Membership Section */}
-              <SectionHeader title="Membership" />
-              <View style={{ borderRadius: 10, overflow: 'hidden' }}>
-                <View style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  backgroundColor: groupBg,
-                  paddingVertical: 12,
-                  paddingHorizontal: 16,
-                  minHeight: 44,
-                  borderTopLeftRadius: 10,
-                  borderTopRightRadius: 10,
-                }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                    <View style={{ width: 30, height: 30, borderRadius: 6, backgroundColor: hasGoldAccess ? 'rgba(251, 191, 36, 0.2)' : 'rgba(113, 113, 122, 0.2)', alignItems: 'center', justifyContent: 'center' }}>
-                      <Text style={{ fontSize: 16 }}>{hasLifetimeAccess ? '💎' : hasGold ? '👑' : '🥈'}</Text>
-                    </View>
-                    <Text style={{ color: colors.text, fontSize: scaledFonts.normal, fontWeight: '600' }}>
-                      {hasLifetimeAccess ? 'Lifetime Member' : hasGold ? 'Gold Member' : 'Free'}
-                    </Text>
-                  </View>
-                  {!hasGoldAccess && (
-                    <TouchableOpacity onPress={() => setShowPaywallModal(true)}>
-                      <Text style={{ color: '#007AFF', fontSize: scaledFonts.normal }}>Upgrade</Text>
-                    </TouchableOpacity>
-                  )}
-                  {hasLifetimeAccess && (
-                    <Text style={{ color: colors.success, fontSize: scaledFonts.small }}>Thank you!</Text>
-                  )}
-                </View>
-                <RowSeparator />
-                <TouchableOpacity
-                  style={{
+                  <RowSeparator />
+                  {/* Widget Hide Values */}
+                  <View style={{
                     flexDirection: 'row',
                     alignItems: 'center',
                     justifyContent: 'space-between',
@@ -8377,113 +8435,127 @@ function AppContent() {
                     minHeight: 44,
                     borderBottomLeftRadius: 10,
                     borderBottomRightRadius: 10,
-                  }}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setShowBenefitsScreen(true);
-                  }}
-                >
-                  <Text style={{ color: '#007AFF', fontSize: scaledFonts.normal }}>See Benefits</Text>
-                  <Text style={{ color: chevronColor, fontSize: 18, fontWeight: '600' }}>›</Text>
-                </TouchableOpacity>
+                  }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>Hide Values on Widget</Text>
+                      <Text style={{ color: colors.muted, fontSize: scaledFonts.small, marginTop: 2 }}>Show dots instead of dollar amounts</Text>
+                    </View>
+                    <Switch
+                      value={hideWidgetValues}
+                      onValueChange={(value) => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setHideWidgetValues(value);
+                        AsyncStorage.setItem('stack_hide_widget_values', value ? 'true' : 'false');
+                      }}
+                      trackColor={{ false: isDarkMode ? '#39393d' : '#e9e9eb', true: '#34c759' }}
+                      thumbColor="#fff"
+                      ios_backgroundColor={isDarkMode ? '#39393d' : '#e9e9eb'}
+                    />
+                  </View>
+                </View>
+                <View style={{ height: 50 }} />
               </View>
+            );
+          }
 
-              {/* iCloud Sync toggle - iOS Gold users only */}
-              {Platform.OS === 'ios' && hasGoldAccess && (
-                <>
-                  <SectionHeader title="Sync" />
-                  <View style={{ borderRadius: 10, overflow: 'hidden' }}>
-                    <View style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      backgroundColor: groupBg,
-                      paddingVertical: 12,
-                      paddingHorizontal: 16,
-                      minHeight: 44,
-                      borderRadius: 10,
-                    }}>
+          // ===== EXPORT & BACKUP SUB-PAGE =====
+          if (settingsSubPage === 'exportBackup') {
+            return (
+              <View style={pageStyle}>
+                <SubPageHeader title="Export & Backup" />
+                <Text style={{ color: colors.text, fontSize: 28, fontWeight: '700', marginLeft: 16, marginBottom: 8 }}>Export & Backup</Text>
+                <View style={{ borderRadius: 10, overflow: 'hidden', marginTop: 8 }}>
+                  <SettingsRow
+                    label="Export to Backup"
+                    onPress={createBackup}
+                    isFirst={true}
+                    isLast={false}
+                  />
+                  <RowSeparator />
+                  <SettingsRow
+                    label="Restore from Backup"
+                    onPress={restoreBackup}
+                    isFirst={false}
+                    isLast={false}
+                  />
+                  <RowSeparator />
+                  <SettingsRow
+                    label="Export as CSV"
+                    onPress={exportCSV}
+                    isFirst={false}
+                    isLast={true}
+                  />
+                </View>
+                <SectionFooter text="Backups include all holdings and settings. Export to Files, iCloud Drive, or any storage." />
+                <View style={{ height: 50 }} />
+              </View>
+            );
+          }
+
+          // ===== MAIN SETTINGS PAGE =====
+          return (
+            <View style={pageStyle}>
+              {/* ACCOUNT (no section header, card at top) */}
+              <View onLayout={(e) => { sectionOffsets.current['account'] = e.nativeEvent.layout.y; }} style={{ marginTop: 16 }}>
+                <View style={{ borderRadius: 10, overflow: 'hidden' }}>
+                  {/* Profile row */}
+                  {supabaseUser ? (
+                    <TouchableOpacity
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        backgroundColor: groupBg,
+                        paddingVertical: 14,
+                        paddingHorizontal: 16,
+                        minHeight: 56,
+                        borderTopLeftRadius: 10,
+                        borderTopRightRadius: 10,
+                      }}
+                      onPress={() => setShowAccountScreen(true)}
+                    >
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                        <View style={{ width: 30, height: 30, borderRadius: 6, backgroundColor: '#007AFF', alignItems: 'center', justifyContent: 'center' }}>
-                          <View style={{ width: 12, height: 8, borderRadius: 4, backgroundColor: '#fff' }} />
+                        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center' }}>
+                          <ProfileIcon size={22} color="#18181b" />
                         </View>
-                        <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>iCloud Sync</Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: colors.text, fontSize: scaledFonts.normal, fontWeight: '500' }}>{supabaseUser.email}</Text>
+                          <Text style={{ color: colors.muted, fontSize: scaledFonts.small, marginTop: 1 }}>Manage Account</Text>
+                        </View>
                       </View>
-                      <Switch
-                        value={iCloudSyncEnabled}
-                        onValueChange={(value) => toggleiCloudSync(value)}
-                        disabled={!iCloudAvailable}
-                        trackColor={{ false: isDarkMode ? '#39393d' : '#e9e9eb', true: '#34c759' }}
-                        thumbColor="#fff"
-                        ios_backgroundColor={isDarkMode ? '#39393d' : '#e9e9eb'}
-                      />
-                    </View>
-                  </View>
-                  {iCloudSyncEnabled && (
-                    <SectionFooter text={lastSyncTime ? `Last synced ${new Date(lastSyncTime).toLocaleString()}` : 'Syncs automatically when you add or edit holdings'} />
+                      <Text style={{ color: chevronColor, fontSize: 18, fontWeight: '600' }}>›</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        backgroundColor: groupBg,
+                        paddingVertical: 14,
+                        paddingHorizontal: 16,
+                        minHeight: 56,
+                        borderTopLeftRadius: 10,
+                        borderTopRightRadius: 10,
+                      }}
+                      onPress={() => disableGuestMode()}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#007AFF', alignItems: 'center', justifyContent: 'center' }}>
+                          <ProfileIcon size={22} color="#fff" />
+                        </View>
+                        <View>
+                          <Text style={{ color: colors.text, fontSize: scaledFonts.normal, fontWeight: '500' }}>Sign In or Create Account</Text>
+                          <Text style={{ color: colors.muted, fontSize: scaledFonts.small, marginTop: 1 }}>Sync your data across devices</Text>
+                        </View>
+                      </View>
+                      <Text style={{ color: chevronColor, fontSize: 18, fontWeight: '600' }}>›</Text>
+                    </TouchableOpacity>
                   )}
-                </>
-              )}
-
-              </View>
-              {/* Appearance Section */}
-              <View onLayout={(e) => { sectionOffsets.current['notifications'] = e.nativeEvent.layout.y; }}>
-              <SectionHeader title="Appearance" />
-              <View style={{ borderRadius: 10, overflow: 'hidden' }}>
-                <View style={{
-                  backgroundColor: groupBg,
-                  paddingVertical: 12,
-                  paddingHorizontal: 16,
-                  borderRadius: 10,
-                }}>
-                  <View style={{ flexDirection: 'row', gap: 8 }}>
-                    {[
-                      { key: 'light', label: 'Light', icon: '☀️' },
-                      { key: 'dark', label: 'Dark', icon: '🌙' },
-                      { key: 'system', label: 'Auto', icon: '⚙️' },
-                    ].map((option) => (
-                      <TouchableOpacity
-                        key={option.key}
-                        style={{
-                          flex: 1,
-                          paddingVertical: 10,
-                          paddingHorizontal: 8,
-                          borderRadius: 8,
-                          backgroundColor: themePreference === option.key
-                            ? (isDarkMode ? '#48484a' : '#e5e5ea')
-                            : 'transparent',
-                          alignItems: 'center',
-                        }}
-                        onPress={() => {
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          changeTheme(option.key);
-                        }}
-                      >
-                        <Text style={{ fontSize: 20, marginBottom: 4 }}>{option.icon}</Text>
-                        <Text style={{
-                          color: themePreference === option.key ? colors.text : colors.muted,
-                          fontWeight: themePreference === option.key ? '600' : '400',
-                          fontSize: scaledFonts.small,
-                        }}>
-                          {option.label}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-              </View>
-              <SectionFooter text={themePreference === 'system' ? 'Following system appearance settings' : `${themePreference === 'dark' ? 'Dark' : 'Light'} mode enabled`} />
-
-              {/* Notifications Section */}
-              <SectionHeader title="Notifications" />
-              <View style={{ borderRadius: 10, overflow: 'hidden' }}>
-                {[
-                  { key: 'daily_brief', label: 'Daily Brief', description: 'Morning market summary push' },
-                  { key: 'price_alerts', label: 'Price Alerts', description: 'Triggered when targets are hit' },
-                  { key: 'breaking_news', label: 'Breaking News & COMEX', description: 'Major market events and vault changes' },
-                ].map((item, idx, arr) => (
-                  <React.Fragment key={item.key}>
-                    <View style={{
+                  <RowSeparator />
+                  {/* Membership row */}
+                  <TouchableOpacity
+                    style={{
                       flexDirection: 'row',
                       alignItems: 'center',
                       justifyContent: 'space-between',
@@ -8491,151 +8563,127 @@ function AppContent() {
                       paddingVertical: 12,
                       paddingHorizontal: 16,
                       minHeight: 44,
-                      ...(idx === 0 && arr.length === 1 ? { borderRadius: 10 } : {}),
-                      ...(idx === 0 && arr.length > 1 ? { borderTopLeftRadius: 10, borderTopRightRadius: 10 } : {}),
-                      ...(idx === arr.length - 1 && arr.length > 1 ? { borderBottomLeftRadius: 10, borderBottomRightRadius: 10 } : {}),
-                    }}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>{item.label}</Text>
-                        <Text style={{ color: colors.muted, fontSize: scaledFonts.small, marginTop: 2 }}>{item.description}</Text>
+                      borderBottomLeftRadius: 10,
+                      borderBottomRightRadius: 10,
+                    }}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      hasGoldAccess ? setShowBenefitsScreen(true) : setShowPaywallModal(true);
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                      <View style={{ width: 30, height: 30, borderRadius: 6, backgroundColor: hasGoldAccess ? 'rgba(251, 191, 36, 0.2)' : 'rgba(113, 113, 122, 0.2)', alignItems: 'center', justifyContent: 'center' }}>
+                        <Text style={{ fontSize: 16 }}>{hasLifetimeAccess ? '💎' : hasGold ? '👑' : '🥈'}</Text>
                       </View>
-                      <Switch
-                        value={notifPrefs[item.key]}
-                        onValueChange={(value) => {
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          saveNotifPref(item.key, value);
-                        }}
-                        trackColor={{ false: isDarkMode ? '#39393d' : '#e9e9eb', true: '#34c759' }}
-                        thumbColor="#fff"
-                        ios_backgroundColor={isDarkMode ? '#39393d' : '#e9e9eb'}
-                      />
+                      <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>
+                        {hasLifetimeAccess ? 'Lifetime Member' : hasGold ? 'Gold Member' : 'Free'}
+                      </Text>
                     </View>
-                    {idx < arr.length - 1 && <RowSeparator />}
-                  </React.Fragment>
-                ))}
-              </View>
-              <SectionFooter text="Control which push notifications you receive. Changes apply immediately." />
-
-              {/* Accessibility Section */}
-              <SectionHeader title="Accessibility" />
-              <View style={{ borderRadius: 10, overflow: 'hidden' }}>
-                <View style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  backgroundColor: groupBg,
-                  paddingVertical: 12,
-                  paddingHorizontal: 16,
-                  minHeight: 44,
-                  borderRadius: 10,
-                }}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>Large Text</Text>
-                    <Text style={{ color: colors.muted, fontSize: scaledFonts.small, marginTop: 2 }}>Increase font sizes throughout the app</Text>
-                  </View>
-                  <Switch
-                    value={largeText}
-                    onValueChange={(value) => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      toggleLargeText(value);
-                    }}
-                    trackColor={{ false: isDarkMode ? '#39393d' : '#e9e9eb', true: '#34c759' }}
-                    thumbColor="#fff"
-                    ios_backgroundColor={isDarkMode ? '#39393d' : '#e9e9eb'}
-                  />
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      {!hasGoldAccess && <Text style={{ color: '#007AFF', fontSize: scaledFonts.small }}>Upgrade</Text>}
+                      {hasLifetimeAccess && <Text style={{ color: colors.success, fontSize: scaledFonts.small }}>Thank you!</Text>}
+                      <Text style={{ color: chevronColor, fontSize: 18, fontWeight: '600' }}>›</Text>
+                    </View>
+                  </TouchableOpacity>
                 </View>
               </View>
 
-              {/* Widget Section */}
-              <SectionHeader title="Widget" />
-              <View style={{ borderRadius: 10, overflow: 'hidden' }}>
-                <View style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  backgroundColor: groupBg,
-                  paddingVertical: 12,
-                  paddingHorizontal: 16,
-                  minHeight: 44,
-                  borderRadius: 10,
-                }}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>Hide Values on Widget</Text>
-                    <Text style={{ color: colors.muted, fontSize: scaledFonts.small, marginTop: 2 }}>Show dots instead of dollar amounts</Text>
-                  </View>
-                  <Switch
-                    value={hideWidgetValues}
-                    onValueChange={(value) => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setHideWidgetValues(value);
-                      AsyncStorage.setItem('stack_hide_widget_values', value ? 'true' : 'false');
-                    }}
-                    trackColor={{ false: isDarkMode ? '#39393d' : '#e9e9eb', true: '#34c759' }}
-                    thumbColor="#fff"
-                    ios_backgroundColor={isDarkMode ? '#39393d' : '#e9e9eb'}
-                  />
-                </View>
-              </View>
-
-              {/* Data & Backup Section */}
-              <SectionHeader title="Data & Backup" />
-              <View style={{ borderRadius: 10, overflow: 'hidden' }}>
+              {/* PREFERENCES */}
+              <SectionHeader title="Preferences" />
+              <View onLayout={(e) => { sectionOffsets.current['notifications'] = e.nativeEvent.layout.y; }} style={{ borderRadius: 10, overflow: 'hidden' }}>
                 <SettingsRow
-                  label="Export to Backup"
-                  onPress={createBackup}
+                  label="Notifications"
+                  onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSettingsSubPage('notifications'); scrollRef.current?.scrollTo({ y: 0, animated: false }); }}
                   isFirst={true}
                   isLast={false}
                 />
                 <RowSeparator />
                 <SettingsRow
-                  label="Restore from Backup"
-                  onPress={restoreBackup}
+                  label="Appearance"
+                  onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSettingsSubPage('appearance'); scrollRef.current?.scrollTo({ y: 0, animated: false }); }}
                   isFirst={false}
                   isLast={false}
                 />
                 <RowSeparator />
                 <SettingsRow
-                  label="Export as CSV"
-                  onPress={exportCSV}
+                  label="Display"
+                  onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSettingsSubPage('display'); scrollRef.current?.scrollTo({ y: 0, animated: false }); }}
                   isFirst={false}
                   isLast={true}
                 />
               </View>
-              <SectionFooter text="Backups include all holdings and settings. Export to Files, iCloud Drive, or any storage." />
 
-              </View>
-              {/* Actions Section */}
-              <View onLayout={(e) => { sectionOffsets.current['whatsNew'] = e.nativeEvent.layout.y; }}>
-              <SectionHeader title="Help & Info" />
+              {/* DATA */}
+              <SectionHeader title="Data" />
               <View style={{ borderRadius: 10, overflow: 'hidden' }}>
                 <SettingsRow
-                  label="Refresh Spot Prices"
-                  onPress={fetchSpotPrices}
+                  label="Export & Backup"
+                  onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSettingsSubPage('exportBackup'); scrollRef.current?.scrollTo({ y: 0, animated: false }); }}
                   isFirst={true}
-                  isLast={false}
+                  isLast={true}
                 />
-                <RowSeparator />
+              </View>
+
+              {/* ABOUT */}
+              <View onLayout={(e) => { sectionOffsets.current['about'] = e.nativeEvent.layout.y; }}>
+              <SectionHeader title="About" />
+              <View onLayout={(e) => { sectionOffsets.current['whatsNew'] = e.nativeEvent.layout.y; }} style={{ borderRadius: 10, overflow: 'hidden' }}>
                 <SettingsRow
                   label="Help Guide"
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     setShowHelpModal(true);
                   }}
-                  isFirst={false}
+                  isFirst={true}
                   isLast={false}
                 />
                 <RowSeparator />
                 <SettingsRow
                   label="What's New in v2.0"
-                  subtitle="See the latest features"
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     AsyncStorage.removeItem('has_seen_v2_0_tutorial');
                     setShowV20Tutorial(true);
                   }}
                   isFirst={false}
-                  isLast={true}
+                  isLast={false}
                 />
+                <RowSeparator />
+                {/* Version - not tappable */}
+                <View style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  backgroundColor: groupBg,
+                  paddingVertical: 12,
+                  paddingHorizontal: 16,
+                  minHeight: 44,
+                }}>
+                  <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>Version</Text>
+                  <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>2.0.0</Text>
+                </View>
+                <RowSeparator />
+                {/* Privacy Policy · Terms of Use - single row */}
+                <View style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: groupBg,
+                  paddingVertical: 12,
+                  paddingHorizontal: 16,
+                  minHeight: 44,
+                  borderBottomLeftRadius: 10,
+                  borderBottomRightRadius: 10,
+                }}>
+                  <TouchableOpacity onPress={() => setShowPrivacyModal(true)}>
+                    <Text style={{ color: '#007AFF', fontSize: scaledFonts.normal }}>Privacy Policy</Text>
+                  </TouchableOpacity>
+                  <Text style={{ color: colors.muted, fontSize: scaledFonts.normal, marginHorizontal: 8 }}>{'\u00B7'}</Text>
+                  <TouchableOpacity onPress={() => Linking.openURL('https://stack-tracker-pro-production.up.railway.app/terms')}>
+                    <Text style={{ color: '#007AFF', fontSize: scaledFonts.normal }}>Terms of Use</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
               </View>
 
               {/* Scan Usage - only show for free users */}
@@ -8672,119 +8720,92 @@ function AppContent() {
                 </>
               )}
 
-              </View>
-              {/* About Section */}
-              <View onLayout={(e) => { sectionOffsets.current['about'] = e.nativeEvent.layout.y; }}>
-              <SectionHeader title="About" />
-              <View style={{ borderRadius: 10, overflow: 'hidden' }}>
-                <View style={{
-                  backgroundColor: groupBg,
-                  paddingVertical: 12,
-                  paddingHorizontal: 16,
-                  borderTopLeftRadius: 10,
-                  borderTopRightRadius: 10,
-                }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>Version</Text>
-                    <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>1.3.0</Text>
-                  </View>
-                </View>
-                <RowSeparator />
-                <SettingsRow
-                  label="Privacy Policy"
-                  onPress={() => setShowPrivacyModal(true)}
-                  isFirst={false}
-                  isLast={false}
-                />
-                <RowSeparator />
-                <SettingsRow
-                  label="Terms of Use"
-                  onPress={() => Linking.openURL('https://stack-tracker-pro-production.up.railway.app/terms')}
-                  isFirst={false}
-                  isLast={true}
-                />
-              </View>
-              <SectionFooter text="Stack Tracker Gold - Your data is stored securely and never shared or sold to third parties." />
-
-              {/* Advanced Section */}
-              <SectionHeader title="Advanced" />
-              <View style={{ borderRadius: 10, overflow: 'hidden' }}>
-                <View style={{
-                  backgroundColor: groupBg,
-                  paddingVertical: 12,
-                  paddingHorizontal: 16,
-                  borderRadius: 10,
-                }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>Support ID</Text>
-                      <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny, marginTop: 2, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }} numberOfLines={1}>
-                        {revenueCatUserId || 'Loading...'}
-                      </Text>
-                    </View>
-                    <TouchableOpacity
-                      onPress={() => {
-                        if (revenueCatUserId) {
-                          Clipboard.setString(revenueCatUserId);
-                          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                          Alert.alert('Copied', 'Support ID copied to clipboard');
-                        }
-                      }}
-                      disabled={!revenueCatUserId}
-                    >
-                      <Text style={{ color: '#007AFF', fontSize: scaledFonts.normal }}>{revenueCatUserId ? 'Copy' : ''}</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </View>
-              <SectionFooter text="Share this ID with support if you need help with your account." />
-              </View>
-
-              {/* Danger Zone Section */}
-              <SectionHeader title="Danger Zone" />
-              <View style={{ borderRadius: 10, overflow: 'hidden' }}>
-                <TouchableOpacity
-                  style={{
-                    backgroundColor: groupBg,
-                    paddingVertical: 12,
-                    paddingHorizontal: 16,
-                    minHeight: 44,
-                    borderRadius: 10,
-                    alignItems: 'center',
-                  }}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                    Alert.alert(
-                      'Clear All Data',
-                      'Are you sure? This will permanently delete all your holdings, settings, and preferences.',
-                      [
-                        { text: 'Cancel', style: 'cancel' },
-                        {
-                          text: 'Continue',
-                          style: 'destructive',
-                          onPress: () => {
-                            Alert.alert(
-                              'Final Warning',
-                              'This cannot be undone. Are you absolutely sure you want to erase all your data?',
-                              [
-                                { text: 'Cancel', style: 'cancel' },
-                                {
-                                  text: 'Yes, Clear Everything',
-                                  style: 'destructive',
-                                  onPress: clearAllData,
+              {/* Sign Out - only when signed in */}
+              {supabaseUser && (
+                <>
+                  <View style={{ marginTop: 32 }}>
+                    <View style={{ borderRadius: 10, overflow: 'hidden' }}>
+                      <TouchableOpacity
+                        style={{
+                          backgroundColor: groupBg,
+                          paddingVertical: 12,
+                          paddingHorizontal: 16,
+                          minHeight: 44,
+                          borderRadius: 10,
+                          alignItems: 'center',
+                        }}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                          Alert.alert(
+                            'Sign Out',
+                            'Are you sure you want to sign out?',
+                            [
+                              { text: 'Cancel', style: 'cancel' },
+                              {
+                                text: 'Sign Out',
+                                style: 'destructive',
+                                onPress: async () => {
+                                  try { await logoutRevenueCat(); } catch (e) { console.error('RevenueCat logout failed:', e); }
+                                  await supabaseSignOut();
+                                  setGuestMode(true);
                                 },
-                              ]
-                            );
+                              },
+                            ]
+                          );
+                        }}
+                      >
+                        <Text style={{ color: '#007AFF', fontSize: scaledFonts.normal }}>Sign Out</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </>
+              )}
+
+              {/* Clear All Data */}
+              <View style={{ marginTop: supabaseUser ? 16 : 32 }}>
+                <View style={{ borderRadius: 10, overflow: 'hidden' }}>
+                  <TouchableOpacity
+                    style={{
+                      backgroundColor: groupBg,
+                      paddingVertical: 12,
+                      paddingHorizontal: 16,
+                      minHeight: 44,
+                      borderRadius: 10,
+                      alignItems: 'center',
+                    }}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                      Alert.alert(
+                        'Clear All Data',
+                        'Are you sure? This will permanently delete all your holdings, settings, and preferences.',
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          {
+                            text: 'Continue',
+                            style: 'destructive',
+                            onPress: () => {
+                              Alert.alert(
+                                'Final Warning',
+                                'This cannot be undone. Are you absolutely sure you want to erase all your data?',
+                                [
+                                  { text: 'Cancel', style: 'cancel' },
+                                  {
+                                    text: 'Yes, Clear Everything',
+                                    style: 'destructive',
+                                    onPress: clearAllData,
+                                  },
+                                ]
+                              );
+                            },
                           },
-                        },
-                      ]
-                    );
-                  }}
-                >
-                  <Text style={{ color: '#FF3B30', fontSize: scaledFonts.normal }}>Clear All Data</Text>
-                </TouchableOpacity>
+                        ]
+                      );
+                    }}
+                  >
+                    <Text style={{ color: '#FF3B30', fontSize: scaledFonts.normal }}>Clear All Data</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-              <SectionFooter text="This will permanently delete all holdings, settings, and preferences. This action cannot be undone." />
 
               {/* Extra padding at bottom */}
               <View style={{ height: 50 }} />
@@ -8831,6 +8852,7 @@ function AppContent() {
           }}
           hasGold={hasGold}
           hasLifetime={hasLifetimeAccess}
+          supportId={revenueCatUserId}
           colors={colors}
         />
       </Modal>

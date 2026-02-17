@@ -7,7 +7,9 @@ import {
   ScrollView,
   Alert,
   Platform,
+  Clipboard,
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../contexts/AuthContext';
 import { ProfileIcon, GoogleLogo, AppleLogo } from '../components/icons';
@@ -18,6 +20,7 @@ interface AccountScreenProps {
   onSignOut: () => void;
   hasGold: boolean;
   hasLifetime: boolean;
+  supportId?: string | null;
   colors: {
     gold: string;
     text: string;
@@ -35,6 +38,7 @@ export default function AccountScreen({
   onSignOut,
   hasGold,
   hasLifetime,
+  supportId,
   colors,
 }: AccountScreenProps) {
   const { user, linkedProviders, linkWithGoogle, linkWithApple, signOut } = useAuth();
@@ -229,6 +233,25 @@ export default function AccountScreen({
         <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteAccount}>
           <Text style={[styles.deleteText, { color: colors.muted }]}>Delete Account</Text>
         </TouchableOpacity>
+
+        {/* Support ID */}
+        {supportId && (
+          <View style={{ marginTop: 24, alignItems: 'center' }}>
+            <Text style={{ color: colors.muted, fontSize: 12, marginBottom: 4 }}>Support ID</Text>
+            <TouchableOpacity
+              onPress={() => {
+                Clipboard.setString(supportId);
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                Alert.alert('Copied', 'Support ID copied to clipboard');
+              }}
+            >
+              <Text style={{ color: colors.muted, fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }} numberOfLines={1}>
+                {supportId}
+              </Text>
+              <Text style={{ color: '#007AFF', fontSize: 12, textAlign: 'center', marginTop: 4 }}>Tap to copy</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Footer */}
         <View style={styles.footer}>
