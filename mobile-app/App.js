@@ -1360,6 +1360,11 @@ function AppContent() {
   const [showTutorial, setShowTutorial] = useState(false);
   const [showV20Tutorial, setShowV20Tutorial] = useState(false);
 
+  // Screenshot Mode (dev only — for App Store screenshots)
+  const [screenshotMode, setScreenshotMode] = useState(false);
+  const [versionTapCount, setVersionTapCount] = useState(0);
+  const versionTapTimer = useRef(null);
+
   // AI Stack Advisor state
   const [advisorMessages, setAdvisorMessages] = useState([]);
   const [advisorInput, setAdvisorInput] = useState('');
@@ -1548,6 +1553,82 @@ function AppContent() {
   // Junk Silver Calculator State
   const [junkType, setJunkType] = useState('90');
   const [junkFaceValue, setJunkFaceValue] = useState('');
+
+  // Screenshot mode triple-tap handler
+  const handleVersionTap = () => {
+    if (!__DEV__) return;
+    const newCount = versionTapCount + 1;
+    setVersionTapCount(newCount);
+    clearTimeout(versionTapTimer.current);
+    if (newCount >= 3) {
+      setScreenshotMode(prev => !prev);
+      setVersionTapCount(0);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      console.log('[Screenshot Mode]', !screenshotMode ? 'ACTIVATED' : 'DEACTIVATED');
+    } else {
+      versionTapTimer.current = setTimeout(() => setVersionTapCount(0), 600);
+    }
+  };
+
+  // Generate natural-looking sparkline data for screenshot mode
+  const generateDemoSparkline = (basePrice, count, uptrendPct) => {
+    const points = [];
+    for (let i = 0; i < count; i++) {
+      const value = basePrice * (1 + (i / count) * uptrendPct + 0.003 * Math.sin(i * 0.5) + 0.002 * Math.sin(i * 1.3));
+      points.push(value);
+    }
+    return points;
+  };
+
+  // Demo data for screenshot mode
+  const demoData = screenshotMode ? {
+    goldSpot: 5012,
+    silverSpot: 78.40,
+    platinumSpot: 2065,
+    palladiumSpot: 1742,
+    spotChange: {
+      gold: { amount: 62, percent: 1.25 },
+      silver: { amount: 1.85, percent: 2.42 },
+      platinum: { amount: 28, percent: 1.37 },
+      palladium: { amount: 18, percent: 1.04 },
+    },
+    totalMeltValue: 502847,
+    dailyChange: 8241,
+    dailyChangePct: 1.67,
+    sparklineData: {
+      gold: generateDemoSparkline(4950, 24, 0.012),
+      silver: generateDemoSparkline(76.5, 24, 0.024),
+      platinum: generateDemoSparkline(2037, 24, 0.014),
+      palladium: generateDemoSparkline(1724, 24, 0.010),
+      timestamps: Array.from({ length: 24 }, (_, i) => {
+        const d = new Date();
+        d.setHours(6 + Math.floor(i * 0.5), (i % 2) * 30, 0);
+        return d.toISOString();
+      }),
+    },
+    portfolioIntel: {
+      text: 'Your portfolio is well-diversified across 4 metals with a strong gold core (68% allocation). Gold\'s sustained breakout above $5,000 positions your stack favorably. Consider your silver allocation — at 22%, it provides solid upside exposure to industrial demand catalysts. Your cost basis of $387,204 reflects disciplined accumulation, with an unrealized gain of $115,643 (+29.9%). The gold-to-silver ratio at 63.9 suggests silver remains relatively undervalued historically.',
+      costBasis: 'Total cost basis: $387,204. Gold: $263,298 (68.0%), Silver: $85,185 (22.0%), Platinum: $28,933 (7.5%), Palladium: $9,788 (2.5%). Overall gain: +$115,643 (+29.9%).',
+      purchaseStats: 'You\'ve made 47 purchases over 18 months. Average purchase: $8,238. Most active month: October 2025 (8 purchases). Preferred dealers: APMEX, JM Bullion, SD Bullion.',
+      date: new Date().toDateString(),
+      is_current: true,
+    },
+    analyticsSnapshots: (() => {
+      const snaps = [];
+      const baseValue = 380000;
+      const days = 365;
+      for (let i = 0; i < days; i++) {
+        const d = new Date();
+        d.setDate(d.getDate() - (days - i));
+        const trend = baseValue * (1 + (i / days) * 0.32 + 0.015 * Math.sin(i * 0.05) + 0.008 * Math.sin(i * 0.13));
+        snaps.push({
+          date: d.toISOString().split('T')[0],
+          total_value: Math.round(trend),
+        });
+      }
+      return snaps;
+    })(),
+  } : null;
 
   // Colors - dynamic based on theme
   const colors = isDarkMode ? {
@@ -6219,17 +6300,38 @@ function AppContent() {
           const todayDate = new Date();
           const dateStr = todayDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
+          // Screenshot mode overrides
+          const effGoldSpot = demoData ? demoData.goldSpot : goldSpot;
+          const effSilverSpot = demoData ? demoData.silverSpot : silverSpot;
+          const effPlatinumSpot = demoData ? demoData.platinumSpot : platinumSpot;
+          const effPalladiumSpot = demoData ? demoData.palladiumSpot : palladiumSpot;
+          const effSpotChange = demoData ? demoData.spotChange : spotChange;
+          const effSparklineData = demoData ? demoData.sparklineData : sparklineData;
+          const effTotalMeltValue = demoData ? demoData.totalMeltValue : totalMeltValue;
+          const effMarketsClosed = demoData ? false : marketsClosed;
+          const effHasGoldAccess = demoData ? true : hasGoldAccess;
+
           // Metal movers data (fixed grid: Ag top-left, Au top-right, Pt bottom-left, Pd bottom-right)
           const metalMovers = [
-            { symbol: 'Ag', label: 'Silver', spot: silverSpot, change: spotChange?.silver?.amount || 0, pct: spotChange?.silver?.percent || 0, color: '#9ca3af' },
-            { symbol: 'Au', label: 'Gold', spot: goldSpot, change: spotChange?.gold?.amount || 0, pct: spotChange?.gold?.percent || 0, color: '#D4A843' },
-            { symbol: 'Pt', label: 'Platinum', spot: platinumSpot, change: spotChange?.platinum?.amount || 0, pct: spotChange?.platinum?.percent || 0, color: '#7BB3D4' },
-            { symbol: 'Pd', label: 'Palladium', spot: palladiumSpot, change: spotChange?.palladium?.amount || 0, pct: spotChange?.palladium?.percent || 0, color: '#6BBF8A' },
+            { symbol: 'Ag', label: 'Silver', spot: effSilverSpot, change: effSpotChange?.silver?.amount || 0, pct: effSpotChange?.silver?.percent || 0, color: '#9ca3af' },
+            { symbol: 'Au', label: 'Gold', spot: effGoldSpot, change: effSpotChange?.gold?.amount || 0, pct: effSpotChange?.gold?.percent || 0, color: '#D4A843' },
+            { symbol: 'Pt', label: 'Platinum', spot: effPlatinumSpot, change: effSpotChange?.platinum?.amount || 0, pct: effSpotChange?.platinum?.percent || 0, color: '#7BB3D4' },
+            { symbol: 'Pd', label: 'Palladium', spot: effPalladiumSpot, change: effSpotChange?.palladium?.amount || 0, pct: effSpotChange?.palladium?.percent || 0, color: '#6BBF8A' },
           ];
           const biggestMoverSymbol = metalMovers.reduce((best, m) => Math.abs(m.pct) > Math.abs(best.pct) ? m : best, metalMovers[0]).symbol;
 
           // Portfolio impact per metal (only metals held)
-          const holdingsImpact = [
+          const holdingsImpact = demoData ? [
+            { label: 'Gold', ozt: 68.2, spot: effGoldSpot, pct: effSpotChange?.gold?.percent || 0, color: '#D4A843' },
+            { label: 'Silver', ozt: 1420, spot: effSilverSpot, pct: effSpotChange?.silver?.percent || 0, color: '#9ca3af' },
+            { label: 'Platinum', ozt: 7.5, spot: effPlatinumSpot, pct: effSpotChange?.platinum?.percent || 0, color: '#7BB3D4' },
+            { label: 'Palladium', ozt: 3.0, spot: effPalladiumSpot, pct: effSpotChange?.palladium?.percent || 0, color: '#6BBF8A' },
+          ].map(m => {
+            const currentValue = m.ozt * m.spot;
+            const prevValue = m.pct !== 0 ? currentValue / (1 + m.pct / 100) : currentValue;
+            const dollarChange = currentValue - prevValue;
+            return { ...m, currentValue, dollarChange };
+          }).sort((a, b) => Math.abs(b.dollarChange) - Math.abs(a.dollarChange)) : [
             { label: 'Gold', ozt: totalGoldOzt, spot: goldSpot, pct: spotChange?.gold?.percent || 0, color: '#D4A843' },
             { label: 'Silver', ozt: totalSilverOzt, spot: silverSpot, pct: spotChange?.silver?.percent || 0, color: '#9ca3af' },
             { label: 'Platinum', ozt: totalPlatinumOzt, spot: platinumSpot, pct: spotChange?.platinum?.percent || 0, color: '#7BB3D4' },
@@ -6243,19 +6345,20 @@ function AppContent() {
 
           // AI summary generation (client-side)
           const biggestMover = metalMovers.reduce((best, m) => Math.abs(m.pct) > Math.abs(best.pct) ? m : best, metalMovers[0]);
-          const gainedLost = dailyChange >= 0 ? 'gained' : 'lost';
+          const effDailyChange = demoData ? demoData.dailyChange : dailyChange;
+          const gainedLost = effDailyChange >= 0 ? 'gained' : 'lost';
           const rallyDecline = biggestMover?.pct >= 0 ? 'rally' : 'decline';
-          const aiSummary = marketsClosed
+          const aiSummary = effMarketsClosed
             ? 'Markets are closed. Prices reflect Friday\u2019s close.'
-            : totalMeltValue > 0 && dailyChange !== 0
-            ? `Your stack ${gainedLost} $${formatCurrency(Math.abs(dailyChange), 0)} today, driven by ${biggestMover?.label}'s ${Math.abs(biggestMover?.pct || 0).toFixed(1)}% ${rallyDecline}.`
-            : totalMeltValue > 0
+            : effTotalMeltValue > 0 && effDailyChange !== 0
+            ? `Your stack ${gainedLost} $${formatCurrency(Math.abs(effDailyChange), 0)} today, driven by ${biggestMover?.label}'s ${Math.abs(biggestMover?.pct || 0).toFixed(1)}% ${rallyDecline}.`
+            : effTotalMeltValue > 0
             ? 'Markets are steady today. Your stack value is unchanged.'
             : 'Add holdings to see your daily portfolio changes.';
 
-          // Display values (zeroed when markets closed)
-          const displayDailyChange = marketsClosed ? 0 : dailyChange;
-          const displayDailyChangePct = marketsClosed ? 0 : dailyChangePct;
+          // Display values (zeroed when markets closed, or demo values in screenshot mode)
+          const displayDailyChange = demoData ? demoData.dailyChange : (marketsClosed ? 0 : dailyChange);
+          const displayDailyChangePct = demoData ? demoData.dailyChangePct : (marketsClosed ? 0 : dailyChangePct);
 
           const categoryColors = {
             market_brief: '#D4A843',
@@ -6281,7 +6384,7 @@ function AppContent() {
 
               {/* ===== YOUR DAILY BRIEF ===== */}
               <View onLayout={(e) => { sectionOffsets.current['morningBrief'] = e.nativeEvent.layout.y; }}>
-              {hasGoldAccess ? (
+              {effHasGoldAccess ? (
                 <View style={{
                   backgroundColor: todayCardBg,
                   borderRadius: 16,
@@ -6297,7 +6400,14 @@ function AppContent() {
                       ? new Date(dailyBrief.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
                       : new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
                   </Text>
-                  {dailyBriefLoading ? (
+                  {demoData ? (
+                    <>
+                      <Text style={{ color: colors.text, fontSize: 14, lineHeight: 20 }} numberOfLines={briefExpanded ? undefined : 2}>Gold surged past $5,000 today, lifting your portfolio to a new all-time high of $502,847. Silver led the rally with a 2.4% gain, continuing its strong momentum this week. All four metals are trading in the green, with platinum and palladium both posting solid gains above 1%. Your stack gained $8,241 today — a great day for precious metals holders.</Text>
+                      <TouchableOpacity onPress={() => setBriefExpanded(!briefExpanded)} style={{ marginTop: 4, paddingVertical: 12 }}>
+                        <Text style={{ color: '#D4A843', fontSize: 15, fontWeight: '700' }}>{briefExpanded ? 'See less' : 'See more'}</Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : dailyBriefLoading ? (
                     <ActivityIndicator size="small" color="#D4A843" style={{ paddingVertical: 8 }} />
                   ) : dailyBrief && dailyBrief.brief_text ? (
                     <>
@@ -6359,18 +6469,22 @@ function AppContent() {
 
                 <Text style={{ color: colors.muted, fontSize: 13, fontWeight: '500', marginBottom: 4, marginTop: 4 }}>Today, {dateStr}</Text>
 
-                <Text style={{ color: colors.text, fontSize: 36, fontWeight: '700', marginBottom: 2 }}>${formatCurrency(totalMeltValue, 0)}</Text>
+                <Text style={{ color: colors.text, fontSize: 36, fontWeight: '700', marginBottom: 2 }}>${formatCurrency(effTotalMeltValue, 0)}</Text>
 
-                {sparklineData && sparklineData.gold.length >= 2 && totalMeltValue > 0 && (() => {
-                  const goldPts = sparklineData.gold;
-                  const silverPts = sparklineData.silver;
-                  const portfolioPoints = goldPts.map((g, i) => (totalGoldOzt * g) + (totalSilverOzt * (silverPts[i] || 0)) + (totalPlatinumOzt * (sparklineData.platinum[i] || 0)) + (totalPalladiumOzt * (sparklineData.palladium[i] || 0)));
+                {effSparklineData && effSparklineData.gold.length >= 2 && effTotalMeltValue > 0 && (() => {
+                  const goldPts = effSparklineData.gold;
+                  const silverPts = effSparklineData.silver;
+                  const effGoldOzt = demoData ? 68.2 : totalGoldOzt;
+                  const effSilverOzt = demoData ? 1420 : totalSilverOzt;
+                  const effPlatinumOzt = demoData ? 7.5 : totalPlatinumOzt;
+                  const effPalladiumOzt = demoData ? 3.0 : totalPalladiumOzt;
+                  const portfolioPoints = goldPts.map((g, i) => (effGoldOzt * g) + (effSilverOzt * (silverPts[i] || 0)) + (effPlatinumOzt * (effSparklineData.platinum[i] || 0)) + (effPalladiumOzt * (effSparklineData.palladium[i] || 0)));
                   const isUp = displayDailyChangePct >= 0;
                   const sparkColor = isUp ? '#4CAF50' : '#F44336';
                   return (
                     <ScrubSparkline
                       dataPoints={portfolioPoints}
-                      timestamps={sparklineData.timestamps}
+                      timestamps={effSparklineData.timestamps}
                       svgW={300}
                       svgH={60}
                       strokeColor={sparkColor}
@@ -6400,10 +6514,10 @@ function AppContent() {
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
                   {metalMovers.map((m, idx) => {
                     const metalKey = m.label.toLowerCase();
-                    const points = sparklineData?.[metalKey] || [];
+                    const points = effSparklineData?.[metalKey] || [];
                     const isUp = m.pct >= 0;
                     const sparkColor = isUp ? '#4CAF50' : '#F44336';
-                    const isBiggestMover = m.symbol === biggestMoverSymbol && !marketsClosed && Math.abs(m.pct) > 0.1;
+                    const isBiggestMover = m.symbol === biggestMoverSymbol && !effMarketsClosed && Math.abs(m.pct) > 0.1;
                     const glowColor = isBiggestMover ? (m.pct >= 0 ? '#4CAF50' : '#F44336') : 'transparent';
                     return (
                       <View key={m.symbol} style={{
@@ -6432,7 +6546,7 @@ function AppContent() {
                         {points.length >= 2 && (
                           <ScrubSparkline
                             dataPoints={points}
-                            timestamps={sparklineData?.timestamps}
+                            timestamps={effSparklineData?.timestamps}
                             svgW={120}
                             svgH={32}
                             strokeColor={sparkColor}
@@ -6448,7 +6562,7 @@ function AppContent() {
                         </Text>
 
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                          {marketsClosed ? (
+                          {effMarketsClosed ? (
                             <Text style={{ color: '#71717a', fontSize: 12, fontWeight: '600' }}>+0.0%</Text>
                           ) : (
                             <>
@@ -6486,7 +6600,7 @@ function AppContent() {
                             borderBottomWidth: i < holdingsImpact.length - 1 ? 1 : 0,
                             borderBottomColor: todayCardBorder,
                           }}>
-                            {hasGoldAccess || i === 0 ? (
+                            {effHasGoldAccess || i === 0 ? (
                               <>
                                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                                   <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: m.color }} />
@@ -6528,7 +6642,7 @@ function AppContent() {
                       <Text style={{ color: colors.muted, fontSize: 14 }}>Add holdings to see daily impact</Text>
                     </View>
                   )}
-                {!hasGoldAccess && holdingsImpact.length > 1 && (
+                {!effHasGoldAccess && holdingsImpact.length > 1 && (
                   <>
                     <TouchableOpacity
                       onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowPaywallModal(true); }}
@@ -6680,7 +6794,7 @@ function AppContent() {
                               </View>
                             </View>
 
-                            {hasGoldAccess ? (
+                            {effHasGoldAccess ? (
                               <>
                                 {/* Eligible */}
                                 <View style={{ marginBottom: 14 }}>
@@ -6753,7 +6867,7 @@ function AppContent() {
 
                           {/* Mini trend chart */}
                           {chartDataPoints.length >= 2 ? (
-                            hasGoldAccess ? (
+                            effHasGoldAccess ? (
                               <View style={{ paddingVertical: 12, paddingHorizontal: 4 }}>
                                 <Text style={{ color: colors.muted, fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginLeft: 12 }}>Registered Inventory (30d)</Text>
                                 <ScrubChart
@@ -6807,7 +6921,7 @@ function AppContent() {
                         </View>
                       )}
 
-                    {!hasGoldAccess && (
+                    {!effHasGoldAccess && (
                       <>
                         <TouchableOpacity
                           onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowPaywallModal(true); }}
@@ -6854,7 +6968,7 @@ function AppContent() {
                     </View>
                   ) : intelligenceBriefs.length > 0 ? (
                     <View style={{ gap: 10 }}>
-                      {(hasGoldAccess ? intelligenceBriefs : intelligenceBriefs.slice(0, 1)).map((brief, i) => (
+                      {(effHasGoldAccess ? intelligenceBriefs : intelligenceBriefs.slice(0, 1)).map((brief, i) => (
                         <TouchableOpacity
                           key={brief.id || i}
                           style={{
@@ -6897,7 +7011,7 @@ function AppContent() {
                       ))}
 
                       {/* Gated count card for free users */}
-                      {!hasGoldAccess && intelligenceBriefs.length > 1 && (
+                      {!effHasGoldAccess && intelligenceBriefs.length > 1 && (
                         <TouchableOpacity
                           onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowPaywallModal(true); }}
                           style={{
@@ -7117,9 +7231,17 @@ function AppContent() {
                 numberOfLines={1}
                 adjustsFontSizeToFit={true}
               >
-                ${formatSmartCurrency(totalMeltValue)}
+                ${formatSmartCurrency(demoData ? demoData.totalMeltValue : totalMeltValue)}
               </Text>
-              {showDailyChange ? (
+              {demoData ? (
+                <Text
+                  style={{ color: colors.success, fontSize: scaledFonts.medium }}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit={true}
+                >
+                  ▲ +${formatSmartCurrency(demoData.dailyChange)} (+{demoData.dailyChangePct.toFixed(2)}%)
+                </Text>
+              ) : showDailyChange ? (
                 <Text
                   style={{ color: isDailyChangePositive ? colors.success : colors.error, fontSize: scaledFonts.medium }}
                   numberOfLines={1}
@@ -7627,10 +7749,21 @@ function AppContent() {
         )}
 
         {/* ANALYTICS TAB */}
-        {tab === 'analytics' && (
+        {tab === 'analytics' && (() => {
+          const effPortfolioIntel = demoData ? demoData.portfolioIntel : portfolioIntel;
+          const effAnalyticsSnapshots = demoData ? demoData.analyticsSnapshots : analyticsSnapshots;
+          const effHasGoldAccess = demoData ? true : hasGoldAccess;
+          const effAnalyticsLoading = demoData ? false : analyticsLoading;
+          const effPortfolioIntelLoading = demoData ? false : portfolioIntelLoading;
+          const effGoldSpotA = demoData ? demoData.goldSpot : goldSpot;
+          const effSilverSpotA = demoData ? demoData.silverSpot : silverSpot;
+          const effPlatinumSpotA = demoData ? demoData.platinumSpot : platinumSpot;
+          const effPalladiumSpotA = demoData ? demoData.palladiumSpot : palladiumSpot;
+          const effTotalMeltValueA = demoData ? demoData.totalMeltValue : totalMeltValue;
+          return (
           <>
             {/* Inline upgrade bar for non-Gold */}
-            {!hasGoldAccess && (
+            {!effHasGoldAccess && (
               <>
                 <TouchableOpacity
                   onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowPaywallModal(true); }}
@@ -7646,7 +7779,7 @@ function AppContent() {
             )}
 
             {/* Portfolio Intelligence */}
-            {hasGoldAccess ? (
+            {effHasGoldAccess ? (
               <View style={{
                 backgroundColor: colors.cardBg,
                 borderRadius: 16,
@@ -7661,11 +7794,11 @@ function AppContent() {
                 <Text style={{ color: colors.muted, fontSize: 12, fontWeight: '600', marginBottom: 8 }}>
                   {'\u2726'} Portfolio Intelligence
                 </Text>
-                {portfolioIntelLoading ? (
+                {effPortfolioIntelLoading ? (
                   <ActivityIndicator size="small" color="#D4A843" style={{ paddingVertical: 8 }} />
-                ) : portfolioIntel && portfolioIntel.text ? (
+                ) : effPortfolioIntel && effPortfolioIntel.text ? (
                   <>
-                    <Text style={{ color: colors.text, fontSize: 14, lineHeight: 20 }} numberOfLines={portfolioIntelExpanded ? undefined : 2}>{portfolioIntel.text}</Text>
+                    <Text style={{ color: colors.text, fontSize: 14, lineHeight: 20 }} numberOfLines={portfolioIntelExpanded ? undefined : 2}>{effPortfolioIntel.text}</Text>
                     <TouchableOpacity onPress={() => setPortfolioIntelExpanded(!portfolioIntelExpanded)} style={{ marginTop: 4, paddingVertical: 12 }}>
                       <Text style={{ color: '#D4A843', fontSize: 15, fontWeight: '700' }}>{portfolioIntelExpanded ? 'See less' : 'See more'}</Text>
                     </TouchableOpacity>
@@ -7711,9 +7844,9 @@ function AppContent() {
                 <View onLayout={(e) => { sectionOffsets.current['portfolioValueChart'] = e.nativeEvent.layout.y; }} style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                     <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>Portfolio Value</Text>
-                    {analyticsSnapshots.length > 1 && (() => {
-                      const first = analyticsSnapshots[0].total_value || 0;
-                      const last = analyticsSnapshots[analyticsSnapshots.length - 1].total_value || 0;
+                    {effAnalyticsSnapshots.length > 1 && (() => {
+                      const first = effAnalyticsSnapshots[0].total_value || 0;
+                      const last = effAnalyticsSnapshots[effAnalyticsSnapshots.length - 1].total_value || 0;
                       const pct = first > 0 ? ((last - first) / first * 100) : 0;
                       return (
                         <Text style={{ color: pct >= 0 ? '#4CAF50' : '#F44336', fontSize: scaledFonts.small, fontWeight: '600' }}>
@@ -7750,14 +7883,14 @@ function AppContent() {
                     ))}
                   </View>
 
-                  {analyticsLoading ? (
+                  {effAnalyticsLoading ? (
                     <View style={{ alignItems: 'center', paddingVertical: 30 }}>
                       <ActivityIndicator size="small" color={colors.gold} />
                     </View>
-                  ) : analyticsSnapshots.length > 1 ? (
+                  ) : effAnalyticsSnapshots.length > 1 ? (
                     <View style={{ marginTop: 4 }}>
                       <ScrubChart
-                        data={analyticsSnapshots.map(s => ({ date: s.date, value: s.total_value || 0 }))}
+                        data={effAnalyticsSnapshots.map(s => ({ date: s.date, value: s.total_value || 0 }))}
                         color="#D4A843"
                         fillColor="rgba(212, 168, 67, 0.15)"
                         width={SCREEN_WIDTH - 80}
@@ -7783,10 +7916,10 @@ function AppContent() {
                   <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '600', letterSpacing: 1.2, textTransform: 'uppercase' }}>Historical Spot Prices</Text>
                 </View>
                 {[
-                  { key: 'gold', label: 'Gold', spot: goldSpot, color: '#D4A843', fillColor: 'rgba(212, 168, 67, 0.15)' },
-                  { key: 'silver', label: 'Silver', spot: silverSpot, color: '#C0C0C0', fillColor: 'rgba(192, 192, 192, 0.15)' },
-                  { key: 'platinum', label: 'Platinum', spot: platinumSpot, color: '#4A90D9', fillColor: 'rgba(74, 144, 217, 0.15)' },
-                  { key: 'palladium', label: 'Palladium', spot: palladiumSpot, color: '#6BBF8A', fillColor: 'rgba(107, 191, 138, 0.15)' },
+                  { key: 'gold', label: 'Gold', spot: effGoldSpotA, color: '#D4A843', fillColor: 'rgba(212, 168, 67, 0.15)' },
+                  { key: 'silver', label: 'Silver', spot: effSilverSpotA, color: '#C0C0C0', fillColor: 'rgba(192, 192, 192, 0.15)' },
+                  { key: 'platinum', label: 'Platinum', spot: effPlatinumSpotA, color: '#4A90D9', fillColor: 'rgba(74, 144, 217, 0.15)' },
+                  { key: 'palladium', label: 'Palladium', spot: effPalladiumSpotA, color: '#6BBF8A', fillColor: 'rgba(107, 191, 138, 0.15)' },
                 ].map(metal => {
                   const mState = spotHistoryMetal[metal.key];
                   const mData = mState.data;
@@ -7864,15 +7997,20 @@ function AppContent() {
                 {/* Holdings Breakdown */}
                 <View onLayout={(e) => { sectionOffsets.current['holdingsBreakdown'] = e.nativeEvent.layout.y; }} style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
                   <Text style={[styles.cardTitle, { color: colors.text, marginBottom: 12, fontSize: scaledFonts.medium }]}>Holdings Breakdown</Text>
-                  {totalMeltValue > 0 ? (
-                    hasGoldAccess ? (
+                  {effTotalMeltValueA > 0 ? (
+                    effHasGoldAccess ? (
                       <PieChart
-                        data={[
+                        data={(demoData ? [
+                          { label: 'Gold', value: 68.2 * demoData.goldSpot, color: colors.gold },
+                          { label: 'Silver', value: 1420 * demoData.silverSpot, color: colors.silver },
+                          { label: 'Platinum', value: 7.5 * demoData.platinumSpot, color: colors.platinum },
+                          { label: 'Palladium', value: 3.0 * demoData.palladiumSpot, color: colors.palladium },
+                        ] : [
                           { label: 'Gold', value: goldMeltValue, color: colors.gold },
                           { label: 'Silver', value: silverMeltValue, color: colors.silver },
                           { label: 'Platinum', value: platinumMeltValue, color: colors.platinum },
                           { label: 'Palladium', value: palladiumMeltValue, color: colors.palladium },
-                        ].filter(d => d.value > 0)}
+                        ]).filter(d => d.value > 0)}
                         size={160}
                         cardBgColor={colors.cardBg}
                         textColor={colors.text}
@@ -7896,9 +8034,9 @@ function AppContent() {
                 </View>
 
                 {/* Cost Basis Intelligence */}
-                {hasGoldAccess && portfolioIntel && portfolioIntel.costBasis ? (
+                {effHasGoldAccess && effPortfolioIntel && effPortfolioIntel.costBasis ? (
                   <View style={{ backgroundColor: colors.cardBg, borderRadius: 12, borderWidth: 1, borderColor: colors.border, borderLeftWidth: 3, borderLeftColor: '#D4A843', padding: 14, marginHorizontal: 16, marginBottom: 12 }}>
-                    <Text style={{ color: colors.text, fontSize: 13, lineHeight: 19 }} numberOfLines={costBasisIntelExpanded ? undefined : 2}>{portfolioIntel.costBasis}</Text>
+                    <Text style={{ color: colors.text, fontSize: 13, lineHeight: 19 }} numberOfLines={costBasisIntelExpanded ? undefined : 2}>{effPortfolioIntel.costBasis}</Text>
                     <TouchableOpacity onPress={() => setCostBasisIntelExpanded(!costBasisIntelExpanded)} style={{ marginTop: 4, paddingVertical: 8 }}>
                       <Text style={{ color: '#D4A843', fontSize: 13, fontWeight: '700' }}>{costBasisIntelExpanded ? 'See less' : 'See more'}</Text>
                     </TouchableOpacity>
@@ -7910,7 +8048,7 @@ function AppContent() {
                 <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                     <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>Cost Basis Analysis</Text>
-                    {!hasGoldAccess && (
+                    {!effHasGoldAccess && (
                       <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(251, 191, 36, 0.2)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 }}>
                         <Text style={{ color: colors.gold, fontSize: scaledFonts.tiny, fontWeight: '600' }}>GOLD</Text>
                       </View>
@@ -7930,7 +8068,7 @@ function AppContent() {
                         const goldWithPremium = goldItems.filter(i => (i.premium || 0) > 0);
                         const avgGoldPremium = goldWithPremium.length > 0 ? goldWithPremium.reduce((sum, i) => sum + i.premium * i.quantity, 0) / goldWithPremium.reduce((sum, i) => sum + i.quantity, 0) : null;
                         // Redact values for free users
-                        const redact = !hasGoldAccess;
+                        const redact = !effHasGoldAccess;
                         return (
                           <>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -7974,7 +8112,7 @@ function AppContent() {
                         const silverWithPremium = silverItems.filter(i => (i.premium || 0) > 0);
                         const avgSilverPremium = silverWithPremium.length > 0 ? silverWithPremium.reduce((sum, i) => sum + i.premium * i.quantity, 0) / silverWithPremium.reduce((sum, i) => sum + i.quantity, 0) : null;
                         // Redact values for free users
-                        const redact = !hasGoldAccess;
+                        const redact = !effHasGoldAccess;
                         return (
                           <>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -8017,7 +8155,7 @@ function AppContent() {
                         const avgPtCostPerOz = totalPlatinumOzt > 0 ? totalPtCost / totalPlatinumOzt : 0;
                         const ptWithPremium = platinumItems.filter(i => (i.premium || 0) > 0);
                         const avgPtPremium = ptWithPremium.length > 0 ? ptWithPremium.reduce((sum, i) => sum + i.premium * i.quantity, 0) / ptWithPremium.reduce((sum, i) => sum + i.quantity, 0) : null;
-                        const redact = !hasGoldAccess;
+                        const redact = !effHasGoldAccess;
                         return (
                           <>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -8060,7 +8198,7 @@ function AppContent() {
                         const avgPdCostPerOz = totalPalladiumOzt > 0 ? totalPdCost / totalPalladiumOzt : 0;
                         const pdWithPremium = palladiumItems.filter(i => (i.premium || 0) > 0);
                         const avgPdPremium = pdWithPremium.length > 0 ? pdWithPremium.reduce((sum, i) => sum + i.premium * i.quantity, 0) / pdWithPremium.reduce((sum, i) => sum + i.quantity, 0) : null;
-                        const redact = !hasGoldAccess;
+                        const redact = !effHasGoldAccess;
                         return (
                           <>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -8099,9 +8237,9 @@ function AppContent() {
                 </View>
 
                 {/* Purchase Stats Intelligence */}
-                {hasGoldAccess && portfolioIntel && portfolioIntel.purchaseStats ? (
+                {effHasGoldAccess && effPortfolioIntel && effPortfolioIntel.purchaseStats ? (
                   <View style={{ backgroundColor: colors.cardBg, borderRadius: 12, borderWidth: 1, borderColor: colors.border, borderLeftWidth: 3, borderLeftColor: '#D4A843', padding: 14, marginHorizontal: 16, marginBottom: 12 }}>
-                    <Text style={{ color: colors.text, fontSize: 13, lineHeight: 19 }} numberOfLines={purchaseStatsIntelExpanded ? undefined : 2}>{portfolioIntel.purchaseStats}</Text>
+                    <Text style={{ color: colors.text, fontSize: 13, lineHeight: 19 }} numberOfLines={purchaseStatsIntelExpanded ? undefined : 2}>{effPortfolioIntel.purchaseStats}</Text>
                     <TouchableOpacity onPress={() => setPurchaseStatsIntelExpanded(!purchaseStatsIntelExpanded)} style={{ marginTop: 4, paddingVertical: 8 }}>
                       <Text style={{ color: '#D4A843', fontSize: 13, fontWeight: '700' }}>{purchaseStatsIntelExpanded ? 'See less' : 'See more'}</Text>
                     </TouchableOpacity>
@@ -8177,26 +8315,26 @@ function AppContent() {
                   <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>Break-Even Analysis</Text>
                   {totalSilverOzt > 0 && (
                     <View style={{ backgroundColor: `${colors.silver}22`, padding: 12, borderRadius: 8, marginBottom: 8 }}>
-                      <Text style={{ color: colors.silver, fontSize: scaledFonts.normal }}>Silver: {hasGoldAccess ? `$${formatCurrency(silverBreakeven)}` : '$•••••'}/oz needed</Text>
-                      <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny }}>{silverSpot >= silverBreakeven ? 'Profitable!' : (hasGoldAccess ? `Need +$${formatCurrency(silverBreakeven - silverSpot)}` : 'Not yet')}</Text>
+                      <Text style={{ color: colors.silver, fontSize: scaledFonts.normal }}>Silver: {effHasGoldAccess ? `$${formatCurrency(silverBreakeven)}` : '$•••••'}/oz needed</Text>
+                      <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny }}>{silverSpot >= silverBreakeven ? 'Profitable!' : (effHasGoldAccess ? `Need +$${formatCurrency(silverBreakeven - silverSpot)}` : 'Not yet')}</Text>
                     </View>
                   )}
                   {totalGoldOzt > 0 && (
                     <View style={{ backgroundColor: `${colors.gold}22`, padding: 12, borderRadius: 8, marginBottom: 8 }}>
-                      <Text style={{ color: colors.gold, fontSize: scaledFonts.normal }}>Gold: {hasGoldAccess ? `$${formatCurrency(goldBreakeven)}` : '$•••••'}/oz needed</Text>
-                      <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny }}>{goldSpot >= goldBreakeven ? 'Profitable!' : (hasGoldAccess ? `Need +$${formatCurrency(goldBreakeven - goldSpot)}` : 'Not yet')}</Text>
+                      <Text style={{ color: colors.gold, fontSize: scaledFonts.normal }}>Gold: {effHasGoldAccess ? `$${formatCurrency(goldBreakeven)}` : '$•••••'}/oz needed</Text>
+                      <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny }}>{goldSpot >= goldBreakeven ? 'Profitable!' : (effHasGoldAccess ? `Need +$${formatCurrency(goldBreakeven - goldSpot)}` : 'Not yet')}</Text>
                     </View>
                   )}
                   {totalPlatinumOzt > 0 && (
                     <View style={{ backgroundColor: `${colors.platinum}22`, padding: 12, borderRadius: 8, marginBottom: 8 }}>
-                      <Text style={{ color: colors.platinum, fontSize: scaledFonts.normal }}>Platinum: {hasGoldAccess ? `$${formatCurrency(platinumBreakeven)}` : '$•••••'}/oz needed</Text>
-                      <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny }}>{platinumSpot >= platinumBreakeven ? 'Profitable!' : (hasGoldAccess ? `Need +$${formatCurrency(platinumBreakeven - platinumSpot)}` : 'Not yet')}</Text>
+                      <Text style={{ color: colors.platinum, fontSize: scaledFonts.normal }}>Platinum: {effHasGoldAccess ? `$${formatCurrency(platinumBreakeven)}` : '$•••••'}/oz needed</Text>
+                      <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny }}>{platinumSpot >= platinumBreakeven ? 'Profitable!' : (effHasGoldAccess ? `Need +$${formatCurrency(platinumBreakeven - platinumSpot)}` : 'Not yet')}</Text>
                     </View>
                   )}
                   {totalPalladiumOzt > 0 && (
                     <View style={{ backgroundColor: `${colors.palladium}22`, padding: 12, borderRadius: 8 }}>
-                      <Text style={{ color: colors.palladium, fontSize: scaledFonts.normal }}>Palladium: {hasGoldAccess ? `$${formatCurrency(palladiumBreakeven)}` : '$•••••'}/oz needed</Text>
-                      <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny }}>{palladiumSpot >= palladiumBreakeven ? 'Profitable!' : (hasGoldAccess ? `Need +$${formatCurrency(palladiumBreakeven - palladiumSpot)}` : 'Not yet')}</Text>
+                      <Text style={{ color: colors.palladium, fontSize: scaledFonts.normal }}>Palladium: {effHasGoldAccess ? `$${formatCurrency(palladiumBreakeven)}` : '$•••••'}/oz needed</Text>
+                      <Text style={{ color: colors.muted, fontSize: scaledFonts.tiny }}>{palladiumSpot >= palladiumBreakeven ? 'Profitable!' : (effHasGoldAccess ? `Need +$${formatCurrency(palladiumBreakeven - palladiumSpot)}` : 'Not yet')}</Text>
                     </View>
                   )}
                 </View>
@@ -8205,7 +8343,8 @@ function AppContent() {
 
             </View>
           </>
-        )}
+          );
+        })()}
 
         {/* SETTINGS TAB */}
         {tab === 'settings' && (() => {
@@ -8717,19 +8856,24 @@ function AppContent() {
                   isLast={false}
                 />
                 <RowSeparator />
-                {/* Version - not tappable */}
-                <View style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  backgroundColor: groupBg,
-                  paddingVertical: 12,
-                  paddingHorizontal: 16,
-                  minHeight: 44,
-                }}>
+                {/* Version - triple-tap in __DEV__ to toggle screenshot mode */}
+                <TouchableOpacity
+                  onPress={__DEV__ ? handleVersionTap : undefined}
+                  activeOpacity={__DEV__ ? 0.7 : 1}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    backgroundColor: groupBg,
+                    paddingVertical: 12,
+                    paddingHorizontal: 16,
+                    minHeight: 44,
+                  }}>
                   <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>Version</Text>
-                  <Text style={{ color: colors.muted, fontSize: scaledFonts.normal }}>2.0.0</Text>
-                </View>
+                  <Text style={{ color: screenshotMode ? '#D4A843' : colors.muted, fontSize: scaledFonts.normal }}>
+                    2.0.0{screenshotMode ? ' 📸' : ''}
+                  </Text>
+                </TouchableOpacity>
                 <RowSeparator />
                 {/* Privacy Policy · Terms of Use - single row */}
                 <View style={{
