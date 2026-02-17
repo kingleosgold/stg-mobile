@@ -38,7 +38,8 @@
         ],
         "UIBackgroundModes": [
           "fetch",
-          "processing"
+          "processing",
+          "remote-notification"
         ],
         "BGTaskSchedulerPermittedIdentifiers": [
           "background-fetch-prices"

@@ -4457,17 +4457,27 @@ Analyze: 1) Portfolio allocation and diversification assessment, 2) Cost basis p
 
   if (!intelligenceText) throw new Error('Gemini returned empty response');
 
-  // Upsert into daily_briefs.portfolio_intelligence column
-  const { error: upsertError } = await supabaseClient
+  // Update existing daily_briefs row for today (or most recent)
+  // Try today's row first
+  const { data: updated, error: updateError } = await supabaseClient
     .from('daily_briefs')
-    .upsert({
-      user_id: userId,
-      date: today,
-      portfolio_intelligence: intelligenceText,
-      generated_at: new Date().toISOString(),
-    }, { onConflict: 'user_id,date' });
+    .update({ portfolio_intelligence: intelligenceText })
+    .eq('user_id', userId)
+    .eq('date', today)
+    .select('date');
 
-  if (upsertError) throw new Error(`Failed to save portfolio intelligence: ${upsertError.message}`);
+  if (updateError) throw new Error(`Failed to save portfolio intelligence: ${updateError.message}`);
+
+  if (!updated || updated.length === 0) {
+    // No row for today — generate daily brief first to create the row, then update it
+    await generateDailyBrief(userId);
+    const { error: retryError } = await supabaseClient
+      .from('daily_briefs')
+      .update({ portfolio_intelligence: intelligenceText })
+      .eq('user_id', userId)
+      .eq('date', today);
+    if (retryError) throw new Error(`Failed to save portfolio intelligence after brief generation: ${retryError.message}`);
+  }
 
   console.log(`🧠 [Portfolio Intelligence] Generated for user ${userId}: ${intelligenceText.length} chars`);
   return { success: true, text: intelligenceText, date: today };
