@@ -3848,7 +3848,8 @@ function AppContent() {
       const result = await response.json();
 
       if (result.success && result.data && result.data.length > 0) {
-        const metalData = result.data.map(pt => ({ date: pt.date, value: pt[metal] || 0 })).filter(pt => pt.value > 0);
+        const minDate = (range === 'ALL' && (metal === 'platinum' || metal === 'palladium')) ? '2010-01-01' : null;
+        const metalData = result.data.map(pt => ({ date: pt.date, value: pt[metal] || 0 })).filter(pt => pt.value > 0 && (!minDate || pt.date >= minDate));
         if (metalData.length > 1) {
           spotHistoryCacheRef.current[cacheKey] = { data: metalData, fetchedAt: Date.now() };
           setSpotHistoryMetal(prev => ({ ...prev, [metal]: { ...prev[metal], data: metalData, loading: false, error: null } }));
