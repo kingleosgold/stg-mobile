@@ -1459,9 +1459,11 @@ function AppContent() {
   const [briefExpanded, setBriefExpanded] = useState(false);
 
   // Analytics Tab - Portfolio Intelligence
-  const [portfolioIntel, setPortfolioIntel] = useState(null); // { text, date, is_current }
+  const [portfolioIntel, setPortfolioIntel] = useState(null); // { text, costBasis, purchaseStats, date, is_current }
   const [portfolioIntelLoading, setPortfolioIntelLoading] = useState(false);
   const [portfolioIntelExpanded, setPortfolioIntelExpanded] = useState(false);
+  const [costBasisIntelExpanded, setCostBasisIntelExpanded] = useState(false);
+  const [purchaseStatsIntelExpanded, setPurchaseStatsIntelExpanded] = useState(false);
 
   // Side Drawer
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -6251,6 +6253,7 @@ function AppContent() {
                       <TouchableOpacity onPress={() => setBriefExpanded(!briefExpanded)} style={{ marginTop: 4, paddingVertical: 12 }}>
                         <Text style={{ color: '#D4A843', fontSize: 15, fontWeight: '700' }}>{briefExpanded ? 'See less' : 'See more'}</Text>
                       </TouchableOpacity>
+                      {briefExpanded && <Text style={{ color: '#666', fontSize: 11, fontStyle: 'italic' }}>AI-generated analysis. Not financial advice.</Text>}
                     </>
                   ) : (
                     <Text style={{ color: colors.muted, fontSize: 13, fontStyle: 'italic' }}>
@@ -7616,6 +7619,7 @@ function AppContent() {
                     <TouchableOpacity onPress={() => setPortfolioIntelExpanded(!portfolioIntelExpanded)} style={{ marginTop: 4, paddingVertical: 12 }}>
                       <Text style={{ color: '#D4A843', fontSize: 15, fontWeight: '700' }}>{portfolioIntelExpanded ? 'See less' : 'See more'}</Text>
                     </TouchableOpacity>
+                    {portfolioIntelExpanded && <Text style={{ color: '#666', fontSize: 11, fontStyle: 'italic' }}>AI-generated analysis. Not financial advice.</Text>}
                   </>
                 ) : (
                   <Text style={{ color: colors.muted, fontSize: 13, fontStyle: 'italic' }}>
@@ -7841,6 +7845,17 @@ function AppContent() {
                   )}
                 </View>
 
+                {/* Cost Basis Intelligence */}
+                {hasGoldAccess && portfolioIntel && portfolioIntel.costBasis ? (
+                  <View style={{ backgroundColor: colors.cardBg, borderRadius: 12, borderWidth: 1, borderColor: colors.border, borderLeftWidth: 3, borderLeftColor: '#D4A843', padding: 14, marginHorizontal: 16, marginBottom: 12 }}>
+                    <Text style={{ color: colors.text, fontSize: 13, lineHeight: 19 }} numberOfLines={costBasisIntelExpanded ? undefined : 2}>{portfolioIntel.costBasis}</Text>
+                    <TouchableOpacity onPress={() => setCostBasisIntelExpanded(!costBasisIntelExpanded)} style={{ marginTop: 4, paddingVertical: 8 }}>
+                      <Text style={{ color: '#D4A843', fontSize: 13, fontWeight: '700' }}>{costBasisIntelExpanded ? 'See less' : 'See more'}</Text>
+                    </TouchableOpacity>
+                    {costBasisIntelExpanded && <Text style={{ color: '#666', fontSize: 11, fontStyle: 'italic' }}>AI-generated analysis. Not financial advice.</Text>}
+                  </View>
+                ) : null}
+
                 {/* Cost Basis Analysis */}
                 <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -8009,6 +8024,17 @@ function AppContent() {
                   )}
                 </View>
 
+                {/* Purchase Stats Intelligence */}
+                {hasGoldAccess && portfolioIntel && portfolioIntel.purchaseStats ? (
+                  <View style={{ backgroundColor: colors.cardBg, borderRadius: 12, borderWidth: 1, borderColor: colors.border, borderLeftWidth: 3, borderLeftColor: '#D4A843', padding: 14, marginHorizontal: 16, marginBottom: 12 }}>
+                    <Text style={{ color: colors.text, fontSize: 13, lineHeight: 19 }} numberOfLines={purchaseStatsIntelExpanded ? undefined : 2}>{portfolioIntel.purchaseStats}</Text>
+                    <TouchableOpacity onPress={() => setPurchaseStatsIntelExpanded(!purchaseStatsIntelExpanded)} style={{ marginTop: 4, paddingVertical: 8 }}>
+                      <Text style={{ color: '#D4A843', fontSize: 13, fontWeight: '700' }}>{purchaseStatsIntelExpanded ? 'See less' : 'See more'}</Text>
+                    </TouchableOpacity>
+                    {purchaseStatsIntelExpanded && <Text style={{ color: '#666', fontSize: 11, fontStyle: 'italic' }}>AI-generated analysis. Not financial advice.</Text>}
+                  </View>
+                ) : null}
+
                 {/* Purchase Stats */}
                 <View onLayout={(e) => { sectionOffsets.current['purchaseStatistics'] = e.nativeEvent.layout.y; }} style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
                   <Text style={[styles.cardTitle, { color: colors.text, marginBottom: 12, fontSize: scaledFonts.medium }]}>Purchase Statistics</Text>
@@ -8070,17 +8096,6 @@ function AppContent() {
                       </>
                     );
                   })()}
-                </View>
-
-                {/* Data Points Info */}
-                <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-                  <Text style={[styles.cardTitle, { color: colors.text, marginBottom: 8, fontSize: scaledFonts.medium }]}>Chart Data</Text>
-                  <Text style={{ color: colors.muted, marginBottom: 8, fontSize: scaledFonts.normal }}>
-                    {analyticsSnapshots.length} data point{analyticsSnapshots.length !== 1 ? 's' : ''} in selected range
-                  </Text>
-                  <Text style={{ color: colors.muted, fontSize: scaledFonts.small }}>
-                    Historical values are calculated from your holdings and past spot prices. Daily snapshots are saved automatically.
-                  </Text>
                 </View>
 
                 {/* Break-Even Analysis */}

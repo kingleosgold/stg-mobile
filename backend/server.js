@@ -4423,7 +4423,13 @@ async function generatePortfolioIntelligence(userId) {
 
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 
-  const systemPrompt = `You are a senior precious metals portfolio strategist. Write a concise portfolio intelligence analysis. Focus on STRATEGY and PORTFOLIO ANALYSIS — allocation, diversification, concentration risk, cost basis trends, and performance insights. Do NOT cover daily market moves or news. Do NOT start with any greeting. Jump straight into the analysis. Write 3-4 short paragraphs. Use plain text, no markdown headers or bullet points. Address the reader as "you".`;
+  const systemPrompt = `You are a senior precious metals portfolio strategist. Return a JSON object with exactly three keys: "portfolio", "costBasis", and "purchaseStats". Each value is a plain-text paragraph (2-3 sentences). Do NOT use markdown, headers, or bullet points. Do NOT start with any greeting. Address the reader as "you".
+
+- "portfolio": Allocation and diversification analysis — concentration risk, metal mix assessment, strategic positioning.
+- "costBasis": Cost basis insights — unrealized gains/losses by metal, which positions are performing best/worst, average cost vs current spot.
+- "purchaseStats": Buying patterns — purchase frequency observations, dollar-cost averaging assessment, timing insights.
+
+Return ONLY valid JSON, no other text.`;
 
   const userPrompt = `Analyze this precious metals portfolio (${today}).
 
@@ -4436,32 +4442,47 @@ ${allocation}
 
 SPOT PRICES:
 Gold: $${prices.gold}, Silver: $${prices.silver}, Platinum: $${prices.platinum}, Palladium: $${prices.palladium}
-Gold/Silver Ratio: ${prices.silver > 0 ? (prices.gold / prices.silver).toFixed(1) : 'N/A'}
-
-Analyze: 1) Portfolio allocation and diversification assessment, 2) Cost basis performance by metal, 3) Concentration risk or opportunities, 4) One strategic consideration. Keep it under 200 words.`;
+Gold/Silver Ratio: ${prices.silver > 0 ? (prices.gold / prices.silver).toFixed(1) : 'N/A'}`;
 
   const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
   const geminiResp = await axios.post(geminiUrl, {
     contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
     system_instruction: { parts: [{ text: systemPrompt }] },
-    generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
+    generationConfig: { temperature: 0.7, maxOutputTokens: 1024, responseMimeType: 'application/json' },
   }, {
     headers: { 'Content-Type': 'application/json' },
     timeout: 30000,
   });
 
-  const intelligenceText = geminiResp.data?.candidates?.[0]?.content?.parts
+  const rawText = geminiResp.data?.candidates?.[0]?.content?.parts
     ?.filter(p => p.text)
     ?.map(p => p.text)
     ?.join('') || '';
 
-  if (!intelligenceText) throw new Error('Gemini returned empty response');
+  if (!rawText) throw new Error('Gemini returned empty response');
 
-  // Update existing daily_briefs row for today (or most recent)
-  // Try today's row first
+  let sections;
+  try {
+    sections = JSON.parse(rawText);
+  } catch (e) {
+    // Fallback: use raw text as portfolio intelligence only
+    sections = { portfolio: rawText, costBasis: '', purchaseStats: '' };
+  }
+
+  const portfolioText = sections.portfolio || '';
+  const costBasisText = sections.costBasis || '';
+  const purchaseStatsText = sections.purchaseStats || '';
+
+  // Update existing daily_briefs row for today
+  const updatePayload = {
+    portfolio_intelligence: portfolioText,
+    cost_basis_intelligence: costBasisText,
+    purchase_stats_intelligence: purchaseStatsText,
+  };
+
   const { data: updated, error: updateError } = await supabaseClient
     .from('daily_briefs')
-    .update({ portfolio_intelligence: intelligenceText })
+    .update(updatePayload)
     .eq('user_id', userId)
     .eq('date', today)
     .select('date');
@@ -4473,14 +4494,14 @@ Analyze: 1) Portfolio allocation and diversification assessment, 2) Cost basis p
     await generateDailyBrief(userId);
     const { error: retryError } = await supabaseClient
       .from('daily_briefs')
-      .update({ portfolio_intelligence: intelligenceText })
+      .update(updatePayload)
       .eq('user_id', userId)
       .eq('date', today);
     if (retryError) throw new Error(`Failed to save portfolio intelligence after brief generation: ${retryError.message}`);
   }
 
-  console.log(`🧠 [Portfolio Intelligence] Generated for user ${userId}: ${intelligenceText.length} chars`);
-  return { success: true, text: intelligenceText, date: today };
+  console.log(`🧠 [Portfolio Intelligence] Generated for user ${userId}: portfolio=${portfolioText.length}, costBasis=${costBasisText.length}, purchaseStats=${purchaseStatsText.length}`);
+  return { success: true, portfolio: portfolioText, costBasis: costBasisText, purchaseStats: purchaseStatsText, date: today };
 }
 
 // GET /api/portfolio-intelligence — Fetch portfolio intelligence for a user
@@ -4512,7 +4533,7 @@ app.get('/api/portfolio-intelligence', async (req, res) => {
     // Get latest entry with portfolio_intelligence
     const { data, error } = await supabaseClient
       .from('daily_briefs')
-      .select('portfolio_intelligence, date, generated_at')
+      .select('portfolio_intelligence, cost_basis_intelligence, purchase_stats_intelligence, date, generated_at')
       .eq('user_id', userId)
       .not('portfolio_intelligence', 'is', null)
       .order('date', { ascending: false })
@@ -4524,7 +4545,13 @@ app.get('/api/portfolio-intelligence', async (req, res) => {
     }
 
     const todayEST = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
-    return res.json({ success: true, intelligence: { text: data.portfolio_intelligence, date: data.date, is_current: data.date === todayEST } });
+    return res.json({ success: true, intelligence: {
+      text: data.portfolio_intelligence,
+      costBasis: data.cost_basis_intelligence || null,
+      purchaseStats: data.purchase_stats_intelligence || null,
+      date: data.date,
+      is_current: data.date === todayEST,
+    } });
 
   } catch (error) {
     console.error('❌ [Portfolio Intelligence] Fetch error:', error.message);
@@ -4647,7 +4674,7 @@ app.post('/api/portfolio-intelligence/generate', async (req, res) => {
       return res.json({ success: true, intelligence: null, message: 'No holdings found' });
     }
 
-    return res.json({ success: true, intelligence: { text: result.text, date: result.date } });
+    return res.json({ success: true, intelligence: { text: result.portfolio, costBasis: result.costBasis, purchaseStats: result.purchaseStats, date: result.date } });
 
   } catch (error) {
     console.error('❌ [Portfolio Intelligence] Generate error:', error.message);
