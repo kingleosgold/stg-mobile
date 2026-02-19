@@ -4659,7 +4659,12 @@ function AppContent() {
       const response = await fetch(`${API_BASE_URL}/api/intelligence?date=${today}`);
       const data = await response.json();
       if (data.success && data.briefs) {
-        setIntelligenceBriefs(data.briefs);
+        // Filter out test/placeholder briefs
+        const filtered = data.briefs.filter(b =>
+          !b.title?.toLowerCase().includes('test alert') &&
+          !b.summary?.toLowerCase().includes('this is a test')
+        );
+        setIntelligenceBriefs(filtered);
       }
       setIntelligenceLastFetched(new Date());
     } catch (error) {
@@ -6809,8 +6814,8 @@ function AppContent() {
                                 <View style={{ marginBottom: 14 }}>
                                   <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>Eligible</Text>
                                   <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10 }}>
-                                    <Text style={{ color: colors.text, fontSize: 20, fontWeight: '600' }}>{formatOzCompact(latestVault.eligible_oz)} oz</Text>
-                                    {latestVault.eligible_change_oz !== 0 && (
+                                    <Text style={{ color: latestVault.eligible_oz ? colors.text : colors.muted, fontSize: 20, fontWeight: '600' }}>{latestVault.eligible_oz ? `${formatOzCompact(latestVault.eligible_oz)} oz` : 'N/A'}</Text>
+                                    {latestVault.eligible_oz > 0 && latestVault.eligible_change_oz !== 0 && (
                                       <Text style={{ color: getChangeColor(latestVault.eligible_change_oz), fontSize: 12, fontWeight: '600' }}>
                                         {getChangeArrow(latestVault.eligible_change_oz)} {formatChangeOz(latestVault.eligible_change_oz)}
                                       </Text>
@@ -6825,9 +6830,9 @@ function AppContent() {
                                 </View>
 
                                 {/* Oversubscribed Ratio */}
-                                {ratio > 0 && (
-                                  <View style={{ marginBottom: 4 }}>
-                                    <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>Oversubscribed Ratio</Text>
+                                <View style={{ marginBottom: 4 }}>
+                                  <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>Oversubscribed Ratio</Text>
+                                  {ratio > 0 ? (
                                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                                       <Text style={{ color: ratio > 2 ? '#FBBF24' : colors.text, fontSize: 24, fontWeight: '700' }}>{ratio.toFixed(1)}x</Text>
                                       {ratioWarning && (
@@ -6845,8 +6850,10 @@ function AppContent() {
                                         </View>
                                       )}
                                     </View>
-                                  </View>
-                                )}
+                                  ) : (
+                                    <Text style={{ color: colors.muted, fontSize: 24, fontWeight: '700' }}>N/A</Text>
+                                  )}
+                                </View>
                               </>
                             ) : (
                               <>
