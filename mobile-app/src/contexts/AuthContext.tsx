@@ -215,7 +215,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       return { error: null };
     } catch (error: any) {
-      console.error('Google sign in error:', error);
+      if (__DEV__) console.error('Google sign in error:', error);
       return { error: error as Error };
     } finally {
       setLoading(false);
@@ -281,7 +281,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (error.code === 'ERR_REQUEST_CANCELED') {
         return { error: new Error('Sign in cancelled') };
       }
-      console.error('Apple sign in error:', error);
+      if (__DEV__) console.error('Apple sign in error:', error);
       return { error: error as Error };
     } finally {
       setLoading(false);
@@ -326,7 +326,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         // Refresh the session to get updated user with new identity
         const { error: refreshError } = await supabase.auth.refreshSession();
         if (refreshError) {
-          console.error('Failed to refresh session after linking:', refreshError);
+          if (__DEV__) console.error('Failed to refresh session after linking:', refreshError);
         }
         Alert.alert('Success', 'Google account linked successfully!');
       } else if (result.type === 'cancel') {
@@ -335,7 +335,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       return { error: null };
     } catch (error: any) {
-      console.error('Google link error:', error);
+      if (__DEV__) console.error('Google link error:', error);
       // Check for already linked error
       if (error.message?.includes('already linked') || error.message?.includes('identity_already_exists')) {
         Alert.alert('Already Linked', 'This Google account is already linked to another user.');
@@ -416,7 +416,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (error.code === 'ERR_REQUEST_CANCELED') {
         return { error: new Error('Linking cancelled') };
       }
-      console.error('Apple link error:', error);
+      if (__DEV__) console.error('Apple link error:', error);
       // Check for already linked error
       if (error.message?.includes('already linked') || error.message?.includes('identity_already_exists')) {
         Alert.alert('Already Linked', 'This Apple account is already linked to another user.');
@@ -433,7 +433,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       const { error } = await supabase.auth.signOut();
       if (error) {
-        console.error('Sign out error:', error);
+        if (__DEV__) console.error('Sign out error:', error);
         Alert.alert('Error', 'Failed to sign out. Please try again.');
       }
     } finally {

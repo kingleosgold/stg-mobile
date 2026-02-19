@@ -3169,7 +3169,7 @@ function AppContent() {
     { emoji: '🏦', title: 'COMEX Vault Watch', description: 'Track real-time COMEX warehouse inventory for gold, silver, platinum, and palladium. See when supply gets tight.' },
     { emoji: '💬', title: 'AI Stack Advisor', description: "Ask questions about your portfolio and get personalized answers. 'Should I buy more silver?' 'What's my break-even?' The AI knows your stack." },
     { emoji: '🔴🟡⚪🟢', title: 'Platinum & Palladium', description: 'Now track all four precious metals. Your portfolio just got more powerful.' },
-    { emoji: '🖥️', title: 'New Web App', description: 'Access your full portfolio at app.stacktrackergold.com — same account, same data, bigger screen. Your Bloomberg terminal for precious metals.', button: { label: 'Visit Web App', url: 'https://app.stacktrackergold.com' } },
+    ...(Platform.OS !== 'ios' ? [{ emoji: '🖥️', title: 'New Web App', description: 'Access your full portfolio at app.stacktrackergold.com — same account, same data, bigger screen. Your Bloomberg terminal for precious metals.', button: { label: 'Visit Web App', url: 'https://app.stacktrackergold.com' } }] : []),
     { emoji: '🧭', title: 'New Look, Same Power', description: "We've streamlined your navigation. Portfolio combines your dashboard and holdings in one place. Settings now lives in the tab bar. Everything you need, fewer taps." },
     { emoji: '✅', title: "You're All Set!", description: 'Enjoy Stack Tracker Gold v2.0. Built for stackers, by stackers.', highlight: 'Stack on! 🪙' },
   ];
@@ -6160,7 +6160,7 @@ function AppContent() {
       { key: 'shareMyStack', label: 'Share My Stack' },
     ]},
     { key: 'settings', label: 'Settings', items: [
-      { key: 'webApp', label: 'Web App' },
+      ...(Platform.OS !== 'ios' ? [{ key: 'webApp', label: 'Web App' }] : []),
       { key: 'account', label: 'Account' },
       { key: 'notifications', label: 'Notifications' },
       { key: 'whatsNew', label: "What's New in v2.0" },

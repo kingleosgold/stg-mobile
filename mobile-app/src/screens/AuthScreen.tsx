@@ -172,18 +172,18 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
 
     setResetLoading(true);
     try {
-      console.log('🔑 [ForgotPassword] Calling resetPassword for:', trimmed);
+      if (__DEV__) console.log('🔑 [ForgotPassword] Calling resetPassword for:', trimmed);
       const result = await resetPassword(trimmed);
-      console.log('🔑 [ForgotPassword] Result:', JSON.stringify(result));
+      if (__DEV__) console.log('🔑 [ForgotPassword] Result:', JSON.stringify(result));
       if (result?.error) {
-        console.log('🔑 [ForgotPassword] Error:', result.error.message);
+        if (__DEV__) console.log('🔑 [ForgotPassword] Error:', result.error.message);
         setResetError(result.error.message);
       } else {
-        console.log('🔑 [ForgotPassword] Success - setting resetSuccess=true');
+        if (__DEV__) console.log('🔑 [ForgotPassword] Success - setting resetSuccess=true');
         setResetSuccess(true);
       }
     } catch (err: any) {
-      console.log('🔑 [ForgotPassword] Caught exception:', err);
+      if (__DEV__) console.log('🔑 [ForgotPassword] Caught exception:', err);
       setResetError(err.message || 'An unexpected error occurred');
     } finally {
       setResetLoading(false);
