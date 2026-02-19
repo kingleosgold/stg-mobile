@@ -14,7 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export const BACKGROUND_FETCH_TASK = 'background-fetch-prices';
 
 // API base URL
-const API_BASE_URL = 'https://stack-tracker-pro-production.up.railway.app';
+const API_BASE_URL = 'https://api.stacktrackergold.com';
 
 // Get the WidgetKit native module
 const { WidgetKitModule } = NativeModules;

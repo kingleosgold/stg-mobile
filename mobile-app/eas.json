@@ -31,7 +31,7 @@
         "gradleCommand": ":app:assembleRelease"
       },
       "env": {
-        "API_URL": "https://stack-tracker-pro-production.up.railway.app"
+        "API_URL": "https://api.stacktrackergold.com"
       }
     },
     "production": {
@@ -46,7 +46,7 @@
         "gradleCommand": ":app:bundleRelease"
       },
       "env": {
-        "API_URL": "https://stack-tracker-pro-production.up.railway.app"
+        "API_URL": "https://api.stacktrackergold.com"
       }
     }
   },

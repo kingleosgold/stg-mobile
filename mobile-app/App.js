@@ -72,7 +72,7 @@ const generateUUID = () => {
 const ICLOUD_HOLDINGS_KEY = 'stack_tracker_holdings.json';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const API_BASE_URL = Constants.expoConfig?.extra?.apiUrl || 'https://stack-tracker-pro-production.up.railway.app';
+const API_BASE_URL = Constants.expoConfig?.extra?.apiUrl || 'https://api.stacktrackergold.com';
 
 // ============================================
 // DEALER CSV TEMPLATES
@@ -8891,7 +8891,7 @@ function AppContent() {
                     <Text style={{ color: '#007AFF', fontSize: scaledFonts.normal }}>Privacy Policy</Text>
                   </TouchableOpacity>
                   <Text style={{ color: colors.muted, fontSize: scaledFonts.normal, marginHorizontal: 8 }}>{'\u00B7'}</Text>
-                  <TouchableOpacity onPress={() => Linking.openURL('https://stack-tracker-pro-production.up.railway.app/terms')}>
+                  <TouchableOpacity onPress={() => Linking.openURL('https://api.stacktrackergold.com/terms')}>
                     <Text style={{ color: '#007AFF', fontSize: scaledFonts.normal }}>Terms of Use</Text>
                   </TouchableOpacity>
                 </View>
@@ -9603,7 +9603,7 @@ function AppContent() {
         </View>
         <TouchableOpacity
           style={{ alignItems: 'center', paddingVertical: 16 }}
-          onPress={() => Linking.openURL('https://stack-tracker-pro-production.up.railway.app/privacy')}
+          onPress={() => Linking.openURL('https://api.stacktrackergold.com/privacy')}
         >
           <Text style={{ color: '#007AFF', fontSize: scaledFonts.normal }}>View Complete Privacy Policy</Text>
         </TouchableOpacity>

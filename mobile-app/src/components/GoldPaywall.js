@@ -22,8 +22,8 @@ import Purchases from 'react-native-purchases';
 import * as Haptics from 'expo-haptics';
 import { restorePurchases } from '../utils/entitlements';
 
-const PRIVACY_URL = 'https://stack-tracker-pro-production.up.railway.app/privacy';
-const TERMS_URL = 'https://stack-tracker-pro-production.up.railway.app/terms';
+const PRIVACY_URL = 'https://api.stacktrackergold.com/privacy';
+const TERMS_URL = 'https://api.stacktrackergold.com/terms';
 
 const GoldPaywall = ({ visible, onClose, onPurchaseSuccess }) => {
   const [offerings, setOfferings] = useState(null);
