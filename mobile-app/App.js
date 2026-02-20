@@ -34,6 +34,7 @@ import Svg, { Path, Circle, Line, Defs, LinearGradient as SvgLinearGradient, Sto
 import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
 import GoldPaywall from './src/components/GoldPaywall';
 import Tutorial from './src/components/Tutorial';
+import TroyCoinIcon from './src/components/TroyCoinIcon';
 import ViewShot from 'react-native-view-shot';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import AuthScreen from './src/screens/AuthScreen';
@@ -1501,6 +1502,9 @@ function AppContent() {
   const [advisorQuestionsToday, setAdvisorQuestionsToday] = useState(0);
   const advisorScrollRef = useRef(null);
   const [showTroyChat, setShowTroyChat] = useState(false);
+  const fabScale = useRef(new Animated.Value(1)).current;
+  const fabGlow = useRef(new Animated.Value(0.4)).current;
+  const fabTapped = useRef(false);
   const [showImportPreview, setShowImportPreview] = useState(false);
   const [importData, setImportData] = useState([]);
   const [showDealerSelector, setShowDealerSelector] = useState(false);
@@ -3298,7 +3302,7 @@ function AppContent() {
   const v20TutorialSlides = [
     { emoji: '☀️', title: 'Meet Your New Today Tab', description: 'Get AI-powered market intelligence every morning at 6:30 AM. See what moved, what changed, and what it means for your stack.' },
     { emoji: '🏦', title: 'COMEX Vault Watch', description: 'Track real-time COMEX warehouse inventory for gold, silver, platinum, and palladium. See when supply gets tight.' },
-    { emoji: '💬', title: 'Meet Troy', description: "Your personal stack analyst. Ask Troy anything about your portfolio — 'Should I buy more silver?' 'What's my break-even?' Tap the gold button on any screen." },
+    { emoji: '', emojiComponent: <View style={{ marginBottom: 20 }}><TroyCoinIcon size={72} /></View>, title: 'Meet Troy', description: "Your personal stack analyst. Ask Troy anything about your portfolio — 'Should I buy more silver?' 'What's my break-even?' Tap the gold button on any screen." },
     { emoji: '🔴🟡⚪🟢', title: 'Platinum & Palladium', description: 'Now track all four precious metals. Your portfolio just got more powerful.' },
     ...(Platform.OS !== 'ios' ? [{ emoji: '🖥️', title: 'New Web App', description: 'Access your full portfolio at app.stacktrackergold.com — same account, same data, bigger screen. Your Bloomberg terminal for precious metals.', button: { label: 'Visit Web App', url: 'https://app.stacktrackergold.com' } }] : []),
     { emoji: '🧭', title: 'New Look, Same Power', description: "We've streamlined your navigation. Portfolio combines your dashboard and holdings in one place. Settings now lives in the tab bar. Everything you need, fewer taps." },
@@ -4459,6 +4463,19 @@ function AppContent() {
   useEffect(() => {
     if (tab === 'today') fetchSparklineData();
   }, [tab]);
+
+  // Troy FAB pulse animation — subtle glow pulse every 5s until first tap
+  useEffect(() => {
+    if (fabTapped.current) return;
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(fabGlow, { toValue: 0.6, duration: 1500, useNativeDriver: true }),
+        Animated.timing(fabGlow, { toValue: 0.4, duration: 1500, useNativeDriver: true }),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, []);
 
   // ============================================
   // CLOUD BACKUP
@@ -6696,11 +6713,14 @@ function AppContent() {
                   padding: 16,
                   marginBottom: 16,
                 }}>
-                  <Text style={{ color: colors.muted, fontSize: 12, fontWeight: '600', marginBottom: 8 }}>
-                    {'💬'} Troy's Take · {dailyBrief && dailyBrief.date && !dailyBrief.is_current
-                      ? new Date(dailyBrief.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-                      : new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                    <TroyCoinIcon size={20} />
+                    <Text style={{ color: colors.muted, fontSize: 12, fontWeight: '600' }}>
+                      Troy's Take · {dailyBrief && dailyBrief.date && !dailyBrief.is_current
+                        ? new Date(dailyBrief.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+                        : new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                    </Text>
+                  </View>
                   {demoData ? (
                     <>
                       <Text style={{ color: colors.text, fontSize: 14, lineHeight: 20 }} numberOfLines={briefExpanded ? undefined : 2}>Gold surged past $5,000 today, lifting your portfolio to a new all-time high of $502,847. Silver led the rally with a 2.4% gain, continuing its strong momentum this week. All four metals are trading in the green, with platinum and palladium both posting solid gains above 1%. Your stack gained $8,241 today — a great day for precious metals holders.</Text>
@@ -6743,9 +6763,10 @@ function AppContent() {
                   }}
                   onPress={() => setShowPaywallModal(true)}
                 >
-                  <Text style={{ color: colors.muted, fontSize: 12, fontWeight: '600', marginBottom: 4 }}>
-                    {'💬'} Troy's Take
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                    <TroyCoinIcon size={20} />
+                    <Text style={{ color: colors.muted, fontSize: 12, fontWeight: '600' }}>Troy's Take</Text>
+                  </View>
                   <Text style={{ color: colors.muted, fontSize: 13 }}>
                     Get Troy's daily market analysis with Gold
                   </Text>
@@ -7950,9 +7971,10 @@ function AppContent() {
                 marginHorizontal: 16,
                 marginBottom: 12,
               }}>
-                <Text style={{ color: colors.muted, fontSize: 12, fontWeight: '600', marginBottom: 8 }}>
-                  {'💬'} Troy's Analysis
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                  <TroyCoinIcon size={20} />
+                  <Text style={{ color: colors.muted, fontSize: 12, fontWeight: '600' }}>Troy's Analysis</Text>
+                </View>
                 {effPortfolioIntelLoading ? (
                   <ActivityIndicator size="small" color="#D4A843" style={{ paddingVertical: 8 }} />
                 ) : effPortfolioIntel && effPortfolioIntel.text ? (
@@ -7984,9 +8006,10 @@ function AppContent() {
                 }}
                 onPress={() => setShowPaywallModal(true)}
               >
-                <Text style={{ color: colors.muted, fontSize: 12, fontWeight: '600', marginBottom: 4 }}>
-                  {'💬'} Troy's Analysis
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                  <TroyCoinIcon size={20} />
+                  <Text style={{ color: colors.muted, fontSize: 12, fontWeight: '600' }}>Troy's Analysis</Text>
+                </View>
                 <Text style={{ color: colors.muted, fontSize: 13 }}>
                   Get Troy's portfolio analysis with Gold
                 </Text>
@@ -9163,46 +9186,57 @@ function AppContent() {
 
       </ScrollView>
 
-      {/* Troy FAB — floating gold button, every tab */}
-      <TouchableOpacity
-        style={{
-          position: 'absolute',
-          right: 20,
-          bottom: 80 + Math.max(insets.bottom, 10),
-          width: 56,
-          height: 56,
-          borderRadius: 28,
-          backgroundColor: '#D4A843',
-          alignItems: 'center',
-          justifyContent: 'center',
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.3,
-          shadowRadius: 6,
-          elevation: 8,
-          zIndex: 100,
-        }}
-        onPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          if (!hasGoldAccess) {
-            setShowPaywallModal(true);
-          } else {
-            setShowTroyChat(true);
-          }
-        }}
-        activeOpacity={0.8}
-      >
-        <Text style={{ color: '#000', fontSize: 22, fontWeight: '800' }}>T</Text>
-      </TouchableOpacity>
+      {/* Troy FAB — realistic gold coin, every tab */}
+      <Animated.View style={{
+        position: 'absolute',
+        right: 20,
+        bottom: 80 + Math.max(insets.bottom, 10),
+        zIndex: 100,
+        transform: [{ scale: fabScale }],
+      }}>
+        <TouchableOpacity
+          onPressIn={() => {
+            Animated.spring(fabScale, { toValue: 0.95, useNativeDriver: true, speed: 50, bounciness: 4 }).start();
+          }}
+          onPressOut={() => {
+            Animated.spring(fabScale, { toValue: 1, useNativeDriver: true, speed: 50, bounciness: 4 }).start();
+          }}
+          onPress={() => {
+            fabTapped.current = true;
+            fabGlow.stopAnimation();
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            if (!hasGoldAccess) {
+              setShowPaywallModal(true);
+            } else {
+              setShowTroyChat(true);
+            }
+          }}
+          activeOpacity={1}
+        >
+          <Animated.View style={{
+            shadowColor: '#D4A843',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: fabGlow,
+            shadowRadius: 8,
+            elevation: 8,
+            borderRadius: 28,
+          }}>
+            <TroyCoinIcon size={56} />
+          </Animated.View>
+        </TouchableOpacity>
+      </Animated.View>
 
       {/* Troy Chat Modal */}
       <Modal visible={showTroyChat} animationType="slide" presentationStyle="pageSheet">
         <SafeAreaView style={{ flex: 1, backgroundColor: isDarkMode ? '#000000' : '#f2f2f7' }}>
           {/* Header */}
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: isDarkMode ? '#38383a' : '#c6c6c8' }}>
-            <View>
-              <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>Troy</Text>
-              <Text style={{ color: colors.muted, fontSize: 12 }}>Your Stack Analyst</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <TroyCoinIcon size={32} />
+              <View>
+                <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>Troy</Text>
+                <Text style={{ color: colors.muted, fontSize: 12 }}>Your Stack Analyst</Text>
+              </View>
             </View>
             <TouchableOpacity onPress={() => setShowTroyChat(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <Text style={{ color: colors.gold, fontSize: 17, fontWeight: '600' }}>Done</Text>
@@ -9219,8 +9253,8 @@ function AppContent() {
             {advisorMessages.length === 0 ? (
               <View style={{ gap: 12, paddingVertical: 20 }}>
                 <View style={{ alignItems: 'center', marginBottom: 12 }}>
-                  <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#D4A843', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
-                    <Text style={{ color: '#000', fontSize: 24, fontWeight: '800' }}>T</Text>
+                  <View style={{ marginBottom: 12 }}>
+                    <TroyCoinIcon size={56} />
                   </View>
                   <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>Ask Troy anything</Text>
                   <Text style={{ color: colors.muted, fontSize: 13, marginTop: 4, textAlign: 'center' }}>Your personal stack analyst. I know your portfolio{'\n'}and can help you make smarter decisions.</Text>
@@ -9440,8 +9474,8 @@ function AppContent() {
               {[
                 { icon: '🧠', label: 'Market Intelligence' },
                 { icon: '🏦', label: 'COMEX Vault Watch' },
-                { icon: '📰', label: "Troy's Take — Daily Brief" },
-                { icon: '💬', label: 'Troy — AI Stack Analyst' },
+                { icon: 'troy', label: "Troy's Take — Daily Brief" },
+                { icon: 'troy', label: 'Troy — AI Stack Analyst' },
                 { icon: '📈', label: 'Spot Price History charts' },
                 { icon: '📊', label: 'Advanced Analytics' },
                 { icon: '📸', label: 'Unlimited receipt scans' },
@@ -9450,7 +9484,7 @@ function AppContent() {
               ].map((item, i, arr) => (
                 <View key={i}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 16 }}>
-                    <Text style={{ fontSize: 18 }}>{item.icon}</Text>
+                    {item.icon === 'troy' ? <TroyCoinIcon size={20} /> : <Text style={{ fontSize: 18 }}>{item.icon}</Text>}
                     <Text style={{ color: colors.text, fontSize: scaledFonts.normal, flex: 1 }}>{item.label}</Text>
                     {hasGoldAccess ? (
                       <Text style={{ color: colors.success, fontSize: 16 }}>✓</Text>

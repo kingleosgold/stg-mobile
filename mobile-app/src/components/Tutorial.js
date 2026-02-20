@@ -101,7 +101,7 @@ const Tutorial = ({ visible, onComplete, slides: customSlides }) => {
           >
             {slides.map((slide, index) => (
               <View key={index} style={[styles.slideContent, { width: SCREEN_WIDTH * 0.9 }]}>
-                <Text style={styles.emoji}>{slide.emoji}</Text>
+                {slide.emojiComponent ? slide.emojiComponent : <Text style={styles.emoji}>{slide.emoji}</Text>}
                 <Text style={styles.title}>{slide.title}</Text>
                 <Text style={styles.description}>{slide.description}</Text>
                 {slide.highlight && (

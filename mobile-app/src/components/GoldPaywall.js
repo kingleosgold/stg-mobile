@@ -21,6 +21,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Purchases from 'react-native-purchases';
 import * as Haptics from 'expo-haptics';
 import { restorePurchases } from '../utils/entitlements';
+import TroyCoinIcon from './TroyCoinIcon';
 
 const PRIVACY_URL = 'https://api.stacktrackergold.com/privacy';
 const TERMS_URL = 'https://api.stacktrackergold.com/terms';
@@ -195,8 +196,8 @@ const GoldPaywall = ({ visible, onClose, onPurchaseSuccess }) => {
           <View style={styles.featuresSection}>
             <Feature icon="🧠" text="AI Intelligence Feed" />
             <Feature icon="🏦" text="COMEX Vault Watch" />
-            <Feature icon="💬" text="Troy — AI Stack Analyst" />
-            <Feature icon="📰" text="Troy's Take — Daily Brief" />
+            <Feature icon="troy" text="Troy — AI Stack Analyst" />
+            <Feature icon="troy" text="Troy's Take — Daily Brief" />
             <Feature icon="🔍" text="AI Deal Finder (coming soon)" />
             <Feature icon="📈" text="Spot Price History" />
             <Feature icon="📊" text="Advanced Analytics" />
@@ -282,7 +283,7 @@ const GoldPaywall = ({ visible, onClose, onPurchaseSuccess }) => {
 
 const Feature = ({ icon, text }) => (
   <View style={styles.feature}>
-    <Text style={styles.featureIcon}>{icon}</Text>
+    {icon === 'troy' ? <View style={styles.featureIcon}><TroyCoinIcon size={20} /></View> : <Text style={styles.featureIcon}>{icon}</Text>}
     <Text style={styles.featureText}>{text}</Text>
   </View>
 );
