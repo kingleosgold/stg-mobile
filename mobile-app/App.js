@@ -8038,7 +8038,7 @@ function AppContent() {
 
                       {/* Time Range Pills */}
                       <View style={{ flexDirection: 'row', gap: 6, marginBottom: 12 }}>
-                        {['1M', '3M', '6M', '1Y', '5Y'].map(r => (
+                        {['1M', '3M', '6M', '1Y', '5Y', 'ALL'].map(r => (
                           <TouchableOpacity
                             key={r}
                             style={{
@@ -8051,7 +8051,7 @@ function AppContent() {
                             }}
                           >
                             <Text style={{ color: mRange === r ? '#000' : colors.text, fontWeight: mRange === r ? '600' : '400', fontSize: 12 }}>
-                              {r}
+                              {r === 'ALL' ? 'All' : r}
                             </Text>
                           </TouchableOpacity>
                         ))}
