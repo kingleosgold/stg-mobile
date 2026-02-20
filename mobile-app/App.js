@@ -3900,7 +3900,7 @@ function AppContent() {
         const histResults = await Promise.all(
           metals.map(async (metal) => {
             try {
-              const res = await fetch(`${API_BASE_URL}/v1/prices/history?range=ALL&metal=${metal}&maxPoints=200`);
+              const res = await fetch(`${API_BASE_URL}/v1/prices/history?range=ALL&metal=${metal}&maxPoints=500`);
               if (!res.ok) return [];
               const data = await res.json();
               return (data.prices || []).map(p => ({
@@ -4089,7 +4089,7 @@ function AppContent() {
 
     try {
       const response = await fetch(
-        `${API_BASE_URL}/v1/prices/history?range=${range}&metal=${metal}&maxPoints=200`
+        `${API_BASE_URL}/v1/prices/history?range=${range}&metal=${metal}&maxPoints=500`
       );
       const result = await response.json();
 
