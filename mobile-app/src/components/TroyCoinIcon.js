@@ -6,7 +6,7 @@
  *   1. Main circle with radial gradient (#F5D780 → #A07C28)
  *   2. Outer rim stroke (#8B6914)
  *   3. Reeded edge dashed circle (#9A7B2D)
- *   4. Highlight arc top-left for 3D depth (#FFE8A0, 0.4 opacity)
+ *   4. Inner bevel circle — subtle step between ridges and coin face (#FFE8A0, 0.15 opacity)
  *   5. Embossed T with shadow
  *
  * Color spec is unified across mobile (react-native-svg) and web (inline SVG).
@@ -14,7 +14,7 @@
 
 import React from 'react';
 import { View, Text, Platform } from 'react-native';
-import Svg, { Circle, Path, Defs, RadialGradient, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
 
 const TroyCoinIcon = ({ size = 20 }) => {
   const half = size / 2;
@@ -24,16 +24,15 @@ const TroyCoinIcon = ({ size = 20 }) => {
   const bodyR = half - rimWidth;         // gradient fill
   const rimR = half - rimWidth / 2;      // outer rim stroke
   const reedR = half - rimWidth * 1.5;   // reeded edge just inside rim
+  const bevelR = half - rimWidth * 2.5;  // inner bevel — step between ridges and coin face
 
-  // Highlight arc: ~120° arc across top-left for 3D depth
-  const hlR = half * 0.78;
-  const hlStartAngle = -140 * (Math.PI / 180);
-  const hlEndAngle = -20 * (Math.PI / 180);
-  const hlX1 = half + hlR * Math.cos(hlStartAngle);
-  const hlY1 = half + hlR * Math.sin(hlStartAngle);
-  const hlX2 = half + hlR * Math.cos(hlEndAngle);
-  const hlY2 = half + hlR * Math.sin(hlEndAngle);
-  const hlPath = `M${hlX1.toFixed(2)},${hlY1.toFixed(2)} A${hlR.toFixed(2)},${hlR.toFixed(2)} 0 0,1 ${hlX2.toFixed(2)},${hlY2.toFixed(2)}`;
+  // Compute dasharray so ridges tile perfectly around 360° with no gap at seam
+  const reedCircumference = 2 * Math.PI * reedR;
+  const dashUnit = 1.5;
+  // Round to nearest even multiple so pattern completes cleanly
+  const reedSegments = Math.round(reedCircumference / (dashUnit * 2)) * 2;
+  const reedDash = reedCircumference / reedSegments;
+  const reedDasharray = `${reedDash.toFixed(3)} ${reedDash.toFixed(3)}`;
 
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
@@ -48,10 +47,10 @@ const TroyCoinIcon = ({ size = 20 }) => {
         <Circle cx={half} cy={half} r={bodyR} fill={`url(#troyCoinGrad_${size})`} />
         {/* 2. Outer rim stroke */}
         <Circle cx={half} cy={half} r={rimR} fill="none" stroke="#8B6914" strokeWidth={rimWidth} />
-        {/* 3. Reeded edge — dashed circle simulating vertical ridges */}
-        <Circle cx={half} cy={half} r={reedR} fill="none" stroke="#9A7B2D" strokeWidth={rimWidth} strokeDasharray="1.5 1.5" />
-        {/* 4. Highlight arc — 3D depth across top-left */}
-        <Path d={hlPath} fill="none" stroke="#FFE8A0" strokeWidth={rimWidth} strokeLinecap="round" opacity={0.4} />
+        {/* 3. Reeded edge — dashed circle, dasharray tuned to tile seamlessly around 360° */}
+        <Circle cx={half} cy={half} r={reedR} fill="none" stroke="#9A7B2D" strokeWidth={rimWidth} strokeDasharray={reedDasharray} />
+        {/* 4. Inner bevel — thin subtle circle separating ridges from coin face */}
+        <Circle cx={half} cy={half} r={bevelR} fill="none" stroke="#FFE8A0" strokeWidth={0.5} opacity={0.15} />
       </Svg>
       {/* 5. Embossed T with shadow */}
       <Text style={{
