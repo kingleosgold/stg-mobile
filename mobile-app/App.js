@@ -2713,7 +2713,7 @@ function AppContent() {
           await AsyncStorage.setItem('device_id', deviceId);
         }
 
-        const response = await fetch(`${API_BASE_URL}/v1/push-token/register`, {
+        const response = await fetch(`${API_BASE_URL}/v1/push/register`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -2763,7 +2763,7 @@ function AppContent() {
   const fetchNotifPrefs = async () => {
     if (!supabaseUser?.id) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/v1/notification-preferences?userId=${supabaseUser.id}`);
+      const response = await fetch(`${API_BASE_URL}/v1/push/notification-preferences?userId=${supabaseUser.id}`);
       if (response.ok) {
         const data = await response.json();
         setNotifPrefs({
@@ -2788,7 +2788,7 @@ function AppContent() {
     setNotifPrefs(updated);
     if (!supabaseUser?.id) return;
     try {
-      await fetch(`${API_BASE_URL}/v1/notification-preferences`, {
+      await fetch(`${API_BASE_URL}/v1/push/notification-preferences`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: supabaseUser.id, ...updated }),
@@ -3387,7 +3387,7 @@ function AppContent() {
       const deviceId = await getDeviceId();
       const userId = supabaseUser?.id || null;
       const params = userId ? `user_id=${userId}&device_id=${deviceId}` : `device_id=${deviceId}`;
-      const response = await fetch(`${API_BASE_URL}/v1/price-alerts?${params}`);
+      const response = await fetch(`${API_BASE_URL}/v1/push/price-alerts?${params}`);
       const result = await response.json();
 
       if (result.success && result.alerts) {
@@ -3411,7 +3411,7 @@ function AppContent() {
 
         for (const alert of localOnly) {
           try {
-            const res = await fetch(`${API_BASE_URL}/v1/price-alerts`, {
+            const res = await fetch(`${API_BASE_URL}/v1/push/price-alerts`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -3455,7 +3455,7 @@ function AppContent() {
 
     // Save to backend first
     try {
-      const response = await fetch(`${API_BASE_URL}/v1/price-alerts`, {
+      const response = await fetch(`${API_BASE_URL}/v1/push/price-alerts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3504,7 +3504,7 @@ function AppContent() {
     setPriceAlerts(updated);
     await savePriceAlerts(updated);
     try {
-      await fetch(`${API_BASE_URL}/v1/price-alerts/${alertId}`, {
+      await fetch(`${API_BASE_URL}/v1/push/price-alerts/${alertId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enabled }),
@@ -3531,7 +3531,7 @@ function AppContent() {
 
             // Delete from backend
             try {
-              const response = await fetch(`${API_BASE_URL}/v1/price-alerts/${alertId}`, {
+              const response = await fetch(`${API_BASE_URL}/v1/push/price-alerts/${alertId}`, {
                 method: 'DELETE',
               });
               const result = await response.json();
@@ -3554,7 +3554,7 @@ function AppContent() {
     setPriceAlerts(updated);
     await savePriceAlerts(updated);
     try {
-      await fetch(`${API_BASE_URL}/v1/price-alerts/${alertId}`, { method: 'DELETE' });
+      await fetch(`${API_BASE_URL}/v1/push/price-alerts/${alertId}`, { method: 'DELETE' });
     } catch (e) { /* silent */ }
   };
 
@@ -3573,7 +3573,7 @@ function AppContent() {
             const params = new URLSearchParams();
             if (supabaseUser?.id) params.append('user_id', supabaseUser.id);
             if (deviceId) params.append('device_id', deviceId);
-            await fetch(`${API_BASE_URL}/v1/price-alerts?${params.toString()}`, { method: 'DELETE' });
+            await fetch(`${API_BASE_URL}/v1/push/price-alerts?${params.toString()}`, { method: 'DELETE' });
           } catch (e) { /* silent */ }
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         },
@@ -4085,8 +4085,8 @@ function AppContent() {
         })
       );
 
-      // Take last 48 points from each (roughly 12-24 hours at 15-min intervals)
-      const SPARKLINE_POINTS = 48;
+      // Take last 24 points from each (~24 hours of hourly data)
+      const SPARKLINE_POINTS = 24;
       const sparklines = {};
       const timestamps = [];
       let hasData = false;
@@ -4721,26 +4721,40 @@ function AppContent() {
         return null;
       };
 
-      // v1 may return intelligence in various shapes — extract plain text robustly
+      // v1 returns intelligence.text as a JSON string like {"portfolio":"actual text..."}
+      // The JSON may be truncated/malformed. Extract the text content robustly.
       let text = null;
       const intel = data.intelligence || data;
 
+      // Helper: strip JSON wrapper from a string like {"key":"value..."} → value...
+      const stripJsonWrapper = (str) => {
+        if (!str || typeof str !== 'string') return str;
+        // If it starts with { it's likely a JSON wrapper — extract the first string value
+        if (str.trimStart().startsWith('{')) {
+          const match = str.match(/:\s*"([\s\S]+)/);
+          if (match) {
+            // Remove trailing ", } and whitespace
+            return match[1].replace(/"\s*\}?\s*$/, '').replace(/\\n/g, '\n').replace(/\\"/g, '"');
+          }
+        }
+        return str;
+      };
+
       if (typeof intel === 'string' && intel.length > 20) {
-        text = intel;
+        text = stripJsonWrapper(intel);
       } else if (intel && typeof intel === 'object') {
-        // Check common keys first
         if (typeof intel.text === 'string' && intel.text.length > 20) {
-          // text might itself be a JSON string wrapping the real content
+          // Try JSON.parse first for well-formed JSON
           try {
             const parsed = JSON.parse(intel.text);
-            text = extractString(parsed) || intel.text;
+            text = extractString(parsed);
           } catch {
-            text = intel.text;
+            // JSON is malformed/truncated — strip the wrapper with regex
           }
+          if (!text) text = stripJsonWrapper(intel.text);
         } else if (typeof intel.text === 'object' && intel.text) {
           text = extractString(intel.text);
         }
-        // Fallback: try extracting any long string value from the object
         if (!text) text = extractString(intel);
       }
 
@@ -4802,29 +4816,63 @@ function AppContent() {
     try {
       setVaultLoading(true);
       const metals = ['gold', 'silver', 'platinum', 'palladium'];
-      const results = await Promise.all(
-        metals.map(async (metal) => {
-          const res = await fetch(`${API_BASE_URL}/v1/vault-watch?metal=${metal}`);
-          if (!res.ok) return null;
-          return res.json();
-        })
-      );
+      // Fetch both latest snapshot and 30-day history for each metal
+      const [latestResults, historyResults] = await Promise.all([
+        Promise.all(metals.map(async (metal) => {
+          try {
+            const res = await fetch(`${API_BASE_URL}/v1/vault-watch?metal=${metal}`);
+            if (!res.ok) return null;
+            return res.json();
+          } catch { return null; }
+        })),
+        Promise.all(metals.map(async (metal) => {
+          try {
+            const res = await fetch(`${API_BASE_URL}/v1/vault-watch?metal=${metal}&days=30`);
+            if (!res.ok) return null;
+            return res.json();
+          } catch { return null; }
+        })),
+      ]);
       const data = {};
       for (let i = 0; i < metals.length; i++) {
-        const raw = results[i];
-        if (raw) {
-          data[metals[i]] = [{
-            date: raw.date || new Date().toISOString().split('T')[0],
-            registered_oz: raw.registered_oz || 0,
-            eligible_oz: raw.eligible_oz || 0,
-            combined_oz: raw.combined_oz || 0,
-            registered_change_oz: raw.registered_change_oz || 0,
-            eligible_change_oz: raw.eligible_change_oz || 0,
-            oversubscribed_ratio: raw.oversubscribed_ratio || 0,
-          }];
-        } else {
-          data[metals[i]] = [];
+        const latest = latestResults[i];
+        const histRaw = historyResults[i];
+        const historyArr = (histRaw?.history || []).map(h => ({
+          date: h.date,
+          registered_oz: h.registered_oz || 0,
+          eligible_oz: h.eligible_oz || 0,
+          combined_oz: h.combined_oz || 0,
+          registered_change_oz: h.registered_change_oz || 0,
+          eligible_change_oz: h.eligible_change_oz || 0,
+          oversubscribed_ratio: h.oversubscribed_ratio || 0,
+        }));
+        // Append latest if not already in history
+        if (latest) {
+          const latestDate = latest.date || new Date().toISOString().split('T')[0];
+          const latestEntry = {
+            date: latestDate,
+            registered_oz: latest.registered_oz || 0,
+            eligible_oz: latest.eligible_oz || 0,
+            combined_oz: latest.combined_oz || 0,
+            registered_change_oz: latest.registered_change_oz || 0,
+            eligible_change_oz: latest.eligible_change_oz || 0,
+            oversubscribed_ratio: latest.oversubscribed_ratio || 0,
+          };
+          if (!historyArr.some(h => h.date === latestDate)) {
+            historyArr.push(latestEntry);
+          }
         }
+        // Sort by date ascending
+        historyArr.sort((a, b) => a.date.localeCompare(b.date));
+        data[metals[i]] = historyArr.length > 0 ? historyArr : (latest ? [{
+          date: latest.date || new Date().toISOString().split('T')[0],
+          registered_oz: latest.registered_oz || 0,
+          eligible_oz: latest.eligible_oz || 0,
+          combined_oz: latest.combined_oz || 0,
+          registered_change_oz: latest.registered_change_oz || 0,
+          eligible_change_oz: latest.eligible_change_oz || 0,
+          oversubscribed_ratio: latest.oversubscribed_ratio || 0,
+        }] : []);
       }
       setVaultData(data);
       setVaultLastFetched(new Date());
