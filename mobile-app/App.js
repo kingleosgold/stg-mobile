@@ -2691,7 +2691,7 @@ function AppContent() {
           await AsyncStorage.setItem('device_id', deviceId);
         }
 
-        const response = await fetch(`${API_BASE_URL}/api/push-token/register`, {
+        const response = await fetch(`${API_BASE_URL}/v1/push-token/register`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -2741,7 +2741,7 @@ function AppContent() {
   const fetchNotifPrefs = async () => {
     if (!supabaseUser?.id) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/api/notification-preferences?userId=${supabaseUser.id}`);
+      const response = await fetch(`${API_BASE_URL}/v1/notification-preferences?userId=${supabaseUser.id}`);
       if (response.ok) {
         const data = await response.json();
         setNotifPrefs({
@@ -2766,7 +2766,7 @@ function AppContent() {
     setNotifPrefs(updated);
     if (!supabaseUser?.id) return;
     try {
-      await fetch(`${API_BASE_URL}/api/notification-preferences`, {
+      await fetch(`${API_BASE_URL}/v1/notification-preferences`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: supabaseUser.id, ...updated }),
@@ -3196,7 +3196,7 @@ function AppContent() {
 
     try {
       const history = advisorMessages.map(m => ({ role: m.role, content: m.text }));
-      const response = await fetch(`${API_BASE_URL}/api/advisor/chat`, {
+      const response = await fetch(`${API_BASE_URL}/v1/advisor/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3235,7 +3235,7 @@ function AppContent() {
 
     try {
       if (__DEV__) console.log(`📊 Fetching scan status for user: ${revenueCatUserId.substring(0, 8)}...`);
-      const response = await fetch(`${API_BASE_URL}/api/scan-status?rcUserId=${encodeURIComponent(revenueCatUserId)}`);
+      const response = await fetch(`${API_BASE_URL}/v1/scan-status?rcUserId=${encodeURIComponent(revenueCatUserId)}`);
       const data = await response.json();
 
       if (data.success) {
@@ -3265,7 +3265,7 @@ function AppContent() {
 
     try {
       if (__DEV__) console.log(`📊 Incrementing scan count for user: ${revenueCatUserId.substring(0, 8)}...`);
-      const response = await fetch(`${API_BASE_URL}/api/increment-scan`, {
+      const response = await fetch(`${API_BASE_URL}/v1/increment-scan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rcUserId: revenueCatUserId })
@@ -3365,7 +3365,7 @@ function AppContent() {
       const deviceId = await getDeviceId();
       const userId = supabaseUser?.id || null;
       const params = userId ? `user_id=${userId}&device_id=${deviceId}` : `device_id=${deviceId}`;
-      const response = await fetch(`${API_BASE_URL}/api/price-alerts?${params}`);
+      const response = await fetch(`${API_BASE_URL}/v1/price-alerts?${params}`);
       const result = await response.json();
 
       if (result.success && result.alerts) {
@@ -3389,7 +3389,7 @@ function AppContent() {
 
         for (const alert of localOnly) {
           try {
-            const res = await fetch(`${API_BASE_URL}/api/price-alerts`, {
+            const res = await fetch(`${API_BASE_URL}/v1/price-alerts`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -3433,7 +3433,7 @@ function AppContent() {
 
     // Save to backend first
     try {
-      const response = await fetch(`${API_BASE_URL}/api/price-alerts`, {
+      const response = await fetch(`${API_BASE_URL}/v1/price-alerts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3482,7 +3482,7 @@ function AppContent() {
     setPriceAlerts(updated);
     await savePriceAlerts(updated);
     try {
-      await fetch(`${API_BASE_URL}/api/price-alerts/${alertId}`, {
+      await fetch(`${API_BASE_URL}/v1/price-alerts/${alertId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enabled }),
@@ -3509,7 +3509,7 @@ function AppContent() {
 
             // Delete from backend
             try {
-              const response = await fetch(`${API_BASE_URL}/api/price-alerts/${alertId}`, {
+              const response = await fetch(`${API_BASE_URL}/v1/price-alerts/${alertId}`, {
                 method: 'DELETE',
               });
               const result = await response.json();
@@ -3532,7 +3532,7 @@ function AppContent() {
     setPriceAlerts(updated);
     await savePriceAlerts(updated);
     try {
-      await fetch(`${API_BASE_URL}/api/price-alerts/${alertId}`, { method: 'DELETE' });
+      await fetch(`${API_BASE_URL}/v1/price-alerts/${alertId}`, { method: 'DELETE' });
     } catch (e) { /* silent */ }
   };
 
@@ -3551,7 +3551,7 @@ function AppContent() {
             const params = new URLSearchParams();
             if (supabaseUser?.id) params.append('user_id', supabaseUser.id);
             if (deviceId) params.append('device_id', deviceId);
-            await fetch(`${API_BASE_URL}/api/price-alerts?${params.toString()}`, { method: 'DELETE' });
+            await fetch(`${API_BASE_URL}/v1/price-alerts?${params.toString()}`, { method: 'DELETE' });
           } catch (e) { /* silent */ }
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         },
@@ -3694,7 +3694,7 @@ function AppContent() {
       const palladiumValue = totalPalladiumOzt * palladiumSpot;
       const totalValue = goldValue + silverValue + platinumValue + palladiumValue;
 
-      const response = await fetch(`${API_BASE_URL}/api/snapshots`, {
+      const response = await fetch(`${API_BASE_URL}/v1/snapshots`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3829,7 +3829,7 @@ function AppContent() {
     if (uncachedDates.length > 0) {
       try {
         if (__DEV__) console.log(`   🚀 Batch fetching ${uncachedDates.length} dates...`);
-        const response = await fetch(`${API_BASE_URL}/api/historical-spot-batch`, {
+        const response = await fetch(`${API_BASE_URL}/v1/historical-spot-batch`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ dates: uncachedDates }),
@@ -3990,13 +3990,13 @@ function AppContent() {
 
     try {
       const response = await fetch(
-        `${API_BASE_URL}/api/spot-price-history?range=${range}&maxPoints=60`
+        `${API_BASE_URL}/v1/prices/history?range=${range}&metal=${metal}`
       );
       const result = await response.json();
 
-      if (result.success && result.data && result.data.length > 0) {
+      if (result.prices && result.prices.length > 0) {
         const minDate = (range === 'ALL' && (metal === 'platinum' || metal === 'palladium')) ? '2010-01-01' : null;
-        const metalData = result.data.map(pt => ({ date: pt.date, value: pt[metal] || 0 })).filter(pt => pt.value > 0 && (!minDate || pt.date >= minDate));
+        const metalData = result.prices.map(pt => ({ date: pt.date, value: pt.price || 0 })).filter(pt => pt.value > 0 && (!minDate || pt.date >= minDate));
         if (metalData.length > 1) {
           spotHistoryCacheRef.current[cacheKey] = { data: metalData, fetchedAt: Date.now() };
           setSpotHistoryMetal(prev => ({ ...prev, [metal]: { ...prev[metal], data: metalData, loading: false, error: null } }));
@@ -4021,9 +4021,9 @@ function AppContent() {
   const fetchSparklineData = async () => {
     if (sparklineFetchedRef.current) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/api/sparkline-24h`);
+      const response = await fetch(`${API_BASE_URL}/v1/sparkline-24h`);
       const result = await response.json();
-      if (result.success && result.sparklines) {
+      if (result.sparklines) {
         const s = result.sparklines;
         if (s.gold && s.gold.length >= 2) {
           setSparklineData({
@@ -4123,7 +4123,7 @@ function AppContent() {
 
           // Always fetch ALL data - we filter client-side
           const response = await fetch(
-            `${API_BASE_URL}/api/snapshots/${encodeURIComponent(revenueCatUserId)}?range=ALL`,
+            `${API_BASE_URL}/v1/snapshots/${encodeURIComponent(revenueCatUserId)}?range=ALL`,
             { signal: controller.signal }
           );
           clearTimeout(timeoutId);
@@ -4482,91 +4482,83 @@ function AppContent() {
   const fetchSpotPrices = async (silent = false) => {
     if (!silent) setPriceSource('loading...');
     try {
-      if (__DEV__) console.log('📡 Fetching spot prices from:', `${API_BASE_URL}/api/spot-prices`);
+      if (__DEV__) console.log('📡 Fetching spot prices from:', `${API_BASE_URL}/v1/prices`);
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-      const response = await fetch(`${API_BASE_URL}/api/spot-prices`, {
+      const response = await fetch(`${API_BASE_URL}/v1/prices`, {
         signal: controller.signal
       });
       clearTimeout(timeoutId);
 
       if (__DEV__) console.log('✅ API Response Status:', response.status, response.statusText);
 
-      const data = await response.json();
-      if (__DEV__) console.log('📊 API Response Data:', JSON.stringify(data).substring(0, 300));
+      const raw = await response.json();
+      if (__DEV__) console.log('📊 API Response Data:', JSON.stringify(raw).substring(0, 300));
 
-      if (data.success) {
-        if (data.silver && data.silver > 10) {
-          setSilverSpot(data.silver);
-          await AsyncStorage.setItem('stack_silver_spot', data.silver.toString());
-        }
-        if (data.gold && data.gold > 1000) {
-          setGoldSpot(data.gold);
-          await AsyncStorage.setItem('stack_gold_spot', data.gold.toString());
-        }
-        if (data.platinum && data.platinum > 100) {
-          setPlatinumSpot(data.platinum);
-          await AsyncStorage.setItem('stack_platinum_spot', data.platinum.toString());
-        }
-        if (data.palladium && data.palladium > 100) {
-          setPalladiumSpot(data.palladium);
-          await AsyncStorage.setItem('stack_palladium_spot', data.palladium.toString());
-        }
-        setPriceSource(data.source || 'live');
-        setPriceTimestamp(data.timestamp || new Date().toISOString());
-        setSpotPricesLive(true); // Mark that we have live prices from API
-        await AsyncStorage.setItem('stack_price_timestamp', data.timestamp || new Date().toISOString());
+      if (raw.prices) {
+        // Transform v1 nested response: { prices: { gold: { price, change_pct }, ... } }
+        const goldPrice = raw.prices.gold?.price;
+        const silverPrice = raw.prices.silver?.price;
+        const platinumPrice = raw.prices.platinum?.price;
+        const palladiumPrice = raw.prices.palladium?.price;
 
-        // Capture daily change data if available
-        if (data.change) {
-          setSpotChange({
-            gold: {
-              amount: data.change.gold?.amount ?? null,
-              percent: data.change.gold?.percent ?? null,
-              prevClose: data.change.gold?.prevClose ?? null,
-            },
-            silver: {
-              amount: data.change.silver?.amount ?? null,
-              percent: data.change.silver?.percent ?? null,
-              prevClose: data.change.silver?.prevClose ?? null,
-            },
-            platinum: {
-              amount: data.change.platinum?.amount ?? null,
-              percent: data.change.platinum?.percent ?? null,
-              prevClose: data.change.platinum?.prevClose ?? null,
-            },
-            palladium: {
-              amount: data.change.palladium?.amount ?? null,
-              percent: data.change.palladium?.percent ?? null,
-              prevClose: data.change.palladium?.prevClose ?? null,
-            },
-          });
-          if (__DEV__) console.log('📈 Change data:', data.change);
+        if (silverPrice && silverPrice > 10) {
+          setSilverSpot(silverPrice);
+          await AsyncStorage.setItem('stack_silver_spot', silverPrice.toString());
         }
+        if (goldPrice && goldPrice > 1000) {
+          setGoldSpot(goldPrice);
+          await AsyncStorage.setItem('stack_gold_spot', goldPrice.toString());
+        }
+        if (platinumPrice && platinumPrice > 100) {
+          setPlatinumSpot(platinumPrice);
+          await AsyncStorage.setItem('stack_platinum_spot', platinumPrice.toString());
+        }
+        if (palladiumPrice && palladiumPrice > 100) {
+          setPalladiumSpot(palladiumPrice);
+          await AsyncStorage.setItem('stack_palladium_spot', palladiumPrice.toString());
+        }
+        setPriceSource(raw.source || 'live');
+        setPriceTimestamp(raw.timestamp || new Date().toISOString());
+        setSpotPricesLive(true);
+        await AsyncStorage.setItem('stack_price_timestamp', raw.timestamp || new Date().toISOString());
 
-        // Capture markets closed status (combine backend + client-side fallback)
+        // Compute daily change data from change_pct
+        const computeChange = (metalData) => {
+          if (!metalData) return { amount: null, percent: null, prevClose: null };
+          const pct = metalData.change_pct || 0;
+          const price = metalData.price || 0;
+          const prevClose = pct !== 0 ? price / (1 + pct / 100) : price;
+          return { amount: price - prevClose, percent: pct, prevClose };
+        };
+
+        setSpotChange({
+          gold: computeChange(raw.prices.gold),
+          silver: computeChange(raw.prices.silver),
+          platinum: computeChange(raw.prices.platinum),
+          palladium: computeChange(raw.prices.palladium),
+        });
+        if (__DEV__) console.log('📈 Change data computed from change_pct');
+
+        // Capture markets closed status (client-side fallback since v1 doesn't send marketsClosed)
         const clientClosed = isMarketClosedClientSide();
-        const serverClosed = data.marketsClosed === true;
-        const effectivelyClosed = serverClosed || clientClosed;
-        setMarketsClosed(effectivelyClosed);
-        if (effectivelyClosed) {
-          if (__DEV__) console.log(`🔒 Markets closed — server: ${serverClosed}, client: ${clientClosed}`);
+        setMarketsClosed(clientClosed);
+        if (clientClosed) {
+          if (__DEV__) console.log(`🔒 Markets closed — client: ${clientClosed}`);
         }
 
-        if (__DEV__) console.log(`💰 Prices updated: Gold $${data.gold}, Silver $${data.silver} (Source: ${data.source})`);
+        if (__DEV__) console.log(`💰 Prices updated: Gold $${goldPrice}, Silver $${silverPrice} (Source: ${raw.source})`);
       } else {
-        if (__DEV__) console.log('⚠️  API returned success=false');
+        if (__DEV__) console.log('⚠️  API returned no prices data');
         setPriceSource('cached');
       }
     } catch (error) {
-      // Silently ignore AbortError (happens on timeout or component unmount)
       if (error.name === 'AbortError') {
         if (__DEV__) console.log('⏱️ Spot prices fetch aborted (timeout or unmount)');
         return;
       }
-      // Log actual network errors
       if (__DEV__) console.error('❌ Error fetching spot prices:', error.message);
       if (__DEV__) console.error('   Error details:', error);
       setPriceSource('cached');
@@ -4615,16 +4607,16 @@ function AppContent() {
       setDailyBriefLoading(true);
       // Use EST date to match backend
       const todayEST = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
-      const url = `${API_BASE_URL}/api/daily-brief?userId=${supabaseUser.id}&date=${todayEST}`;
+      const url = `${API_BASE_URL}/v1/daily-brief?userId=${supabaseUser.id}&date=${todayEST}`;
       if (__DEV__) console.log(`📰 [Brief] Fetching: ${url}`);
       const response = await fetch(url);
       if (__DEV__) console.log(`📰 [Brief] HTTP ${response.status}`);
       const data = await response.json();
       if (__DEV__) console.log(`📰 [Brief] Response:`, JSON.stringify(data).slice(0, 200));
-      if (data.success && data.brief) {
+      if (data.brief) {
         setDailyBrief(data.brief);
       } else {
-        if (__DEV__) console.log(`📰 [Brief] No brief returned (success=${data.success}, brief=${!!data.brief}, error=${data.error})`);
+        if (__DEV__) console.log(`📰 [Brief] No brief returned (brief=${!!data.brief}, error=${data.error})`);
         setDailyBrief(null);
       }
     } catch (error) {
@@ -4638,9 +4630,9 @@ function AppContent() {
     if (!supabaseUser || !hasGoldAccess) return;
     try {
       setPortfolioIntelLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/portfolio-intelligence?userId=${supabaseUser.id}`);
+      const response = await fetch(`${API_BASE_URL}/v1/portfolio-intelligence?userId=${supabaseUser.id}`);
       const data = await response.json();
-      if (data.success && data.intelligence) {
+      if (data.intelligence) {
         setPortfolioIntel(data.intelligence);
       } else {
         setPortfolioIntel(null);
@@ -4655,12 +4647,25 @@ function AppContent() {
   const fetchIntelligenceBriefs = async () => {
     try {
       setIntelligenceLoading(true);
-      const today = new Date().toISOString().split('T')[0];
-      const response = await fetch(`${API_BASE_URL}/api/intelligence?date=${today}`);
-      const data = await response.json();
-      if (data.success && data.briefs) {
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+      const response = await fetch(`${API_BASE_URL}/v1/market-intel?date=${today}`);
+      const raw = await response.json();
+      // Transform v1 articles → briefs format
+      const severityToScore = { high: 9, medium: 5, info: 2, low: 1 };
+      if (raw.articles && raw.articles.length > 0) {
+        const briefs = raw.articles.map(a => ({
+          id: a.id,
+          date: a.published_at?.split('T')[0] || today,
+          category: a.metal || 'general',
+          title: a.title,
+          summary: a.summary,
+          source: a.source || '',
+          source_url: a.source_url || '',
+          relevance_score: severityToScore[a.severity] || 5,
+          created_at: a.published_at || '',
+        }));
         // Filter out test/placeholder briefs
-        const filtered = data.briefs.filter(b =>
+        const filtered = briefs.filter(b =>
           !b.title?.toLowerCase().includes('test alert') &&
           !b.summary?.toLowerCase().includes('this is a test')
         );
@@ -4674,15 +4679,36 @@ function AppContent() {
     }
   };
 
-  // Fetch vault data (COMEX warehouse inventory)
+  // Fetch vault data (COMEX warehouse inventory) — v1 returns per-metal snapshots
   const fetchVaultData = async () => {
     try {
       setVaultLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/vault-data?source=comex&days=30`);
-      const data = await response.json();
-      if (data.success && data.data) {
-        setVaultData(data.data);
+      const metals = ['gold', 'silver', 'platinum', 'palladium'];
+      const results = await Promise.all(
+        metals.map(async (metal) => {
+          const res = await fetch(`${API_BASE_URL}/v1/vault-watch?metal=${metal}`);
+          if (!res.ok) return null;
+          return res.json();
+        })
+      );
+      const data = {};
+      for (let i = 0; i < metals.length; i++) {
+        const raw = results[i];
+        if (raw) {
+          data[metals[i]] = [{
+            date: raw.date || new Date().toISOString().split('T')[0],
+            registered_oz: raw.registered_oz || 0,
+            eligible_oz: raw.eligible_oz || 0,
+            combined_oz: raw.combined_oz || 0,
+            registered_change_oz: raw.daily_change?.registered || 0,
+            eligible_change_oz: raw.daily_change?.eligible || 0,
+            oversubscribed_ratio: raw.oversubscribed_ratio || 0,
+          }];
+        } else {
+          data[metals[i]] = [];
+        }
       }
+      setVaultData(data);
       setVaultLastFetched(new Date());
     } catch (error) {
       if (__DEV__) console.error('Vault data fetch error:', error);
@@ -4734,7 +4760,7 @@ function AppContent() {
   const fetchHistoricalSpot = async (date, metal, time = null) => {
     if (!date || date.length < 10) return { price: null, source: null };
     try {
-      let url = `${API_BASE_URL}/api/historical-spot?date=${date}`;
+      let url = `${API_BASE_URL}/v1/historical-spot?date=${date}`;
       if (metal) url += `&metal=${metal}`;
       if (time) url += `&time=${time}`;
 
@@ -4890,7 +4916,7 @@ function AppContent() {
 
     const mimeType = asset.mimeType || asset.type || 'image/jpeg';
 
-    const response = await fetch(`${API_BASE_URL}/api/scan-receipt`, {
+    const response = await fetch(`${API_BASE_URL}/v1/scan-receipt`, {
       method: 'POST',
       body: JSON.stringify({
         image: fullBase64,
@@ -6380,6 +6406,11 @@ function AppContent() {
             policy: '#60A5FA',
             supply_demand: '#6BBF8A',
             analysis: '#C084FC',
+            gold: '#D4A843',
+            silver: '#A8B5C8',
+            platinum: '#7BB3D4',
+            palladium: '#6BBF8A',
+            general: '#A1A1AA',
           };
 
           const categoryLabels = {
@@ -6388,6 +6419,11 @@ function AppContent() {
             policy: 'Policy',
             supply_demand: 'Supply & Demand',
             analysis: 'Analysis',
+            gold: 'Gold',
+            silver: 'Silver',
+            platinum: 'Platinum',
+            palladium: 'Palladium',
+            general: 'Market',
           };
 
           const todayCardBg = isDarkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)';

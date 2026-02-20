@@ -29,7 +29,7 @@ struct StackTrackerWidget: Widget {
 /// Fetches fresh prices from backend cache and creates multiple timeline entries
 struct Provider: TimelineProvider {
     private let appGroupId = "group.com.stacktrackerpro.shared"
-    private let backendCacheUrl = "https://api.stacktrackergold.com/api/widget-data"
+    private let backendCacheUrl = "https://api.stacktrackergold.com/v1/widget-data"
 
     func placeholder(in context: Context) -> WidgetEntry {
         WidgetEntry(

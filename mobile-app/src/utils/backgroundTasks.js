@@ -29,41 +29,55 @@ const fetchSpotPricesBackground = async () => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout for background
 
-    const response = await fetch(`${API_BASE_URL}/api/spot-prices`, {
+    const response = await fetch(`${API_BASE_URL}/v1/prices`, {
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
 
-    const data = await response.json();
+    const raw = await response.json();
 
-    if (data.success) {
-      if (__DEV__) console.log(`[BackgroundFetch] Prices received: Gold $${data.gold}, Silver $${data.silver}`);
+    if (raw.prices) {
+      const goldPrice = raw.prices.gold?.price;
+      const silverPrice = raw.prices.silver?.price;
+
+      if (__DEV__) console.log(`[BackgroundFetch] Prices received: Gold $${goldPrice}, Silver $${silverPrice}`);
 
       // Save to AsyncStorage for app to use on next open
-      if (data.silver && data.silver > 10) {
-        await AsyncStorage.setItem('stack_silver_spot', data.silver.toString());
+      if (silverPrice && silverPrice > 10) {
+        await AsyncStorage.setItem('stack_silver_spot', silverPrice.toString());
       }
-      if (data.gold && data.gold > 1000) {
-        await AsyncStorage.setItem('stack_gold_spot', data.gold.toString());
+      if (goldPrice && goldPrice > 1000) {
+        await AsyncStorage.setItem('stack_gold_spot', goldPrice.toString());
       }
-      if (data.timestamp) {
-        await AsyncStorage.setItem('stack_price_timestamp', data.timestamp);
+      if (raw.timestamp) {
+        await AsyncStorage.setItem('stack_price_timestamp', raw.timestamp);
       }
 
-      // Save change data
-      if (data.change) {
-        await AsyncStorage.setItem('stack_spot_change', JSON.stringify(data.change));
-      }
+      // Compute and save change data from change_pct
+      const computeChange = (metalData) => {
+        if (!metalData) return { amount: 0, percent: 0, prevClose: 0 };
+        const pct = metalData.change_pct || 0;
+        const price = metalData.price || 0;
+        const prevClose = pct !== 0 ? price / (1 + pct / 100) : price;
+        return { amount: price - prevClose, percent: pct, prevClose };
+      };
+      const change = {
+        gold: computeChange(raw.prices.gold),
+        silver: computeChange(raw.prices.silver),
+        platinum: computeChange(raw.prices.platinum),
+        palladium: computeChange(raw.prices.palladium),
+      };
+      await AsyncStorage.setItem('stack_spot_change', JSON.stringify(change));
 
       return {
-        gold: data.gold,
-        silver: data.silver,
-        change: data.change,
-        timestamp: data.timestamp,
+        gold: goldPrice,
+        silver: silverPrice,
+        change,
+        timestamp: raw.timestamp,
       };
     }
 
-    if (__DEV__) console.log('[BackgroundFetch] API returned success=false');
+    if (__DEV__) console.log('[BackgroundFetch] API returned no prices data');
     return null;
   } catch (error) {
     if (__DEV__) console.error('[BackgroundFetch] Failed to fetch prices:', error.message);
