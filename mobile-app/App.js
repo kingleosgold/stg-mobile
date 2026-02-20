@@ -1429,12 +1429,13 @@ function AppContent() {
   const [versionTapCount, setVersionTapCount] = useState(0);
   const versionTapTimer = useRef(null);
 
-  // AI Stack Advisor state
+  // Troy state
   const [advisorMessages, setAdvisorMessages] = useState([]);
   const [advisorInput, setAdvisorInput] = useState('');
   const [advisorLoading, setAdvisorLoading] = useState(false);
   const [advisorQuestionsToday, setAdvisorQuestionsToday] = useState(0);
   const advisorScrollRef = useRef(null);
+  const [showTroyChat, setShowTroyChat] = useState(false);
   const [showImportPreview, setShowImportPreview] = useState(false);
   const [importData, setImportData] = useState([]);
   const [showDealerSelector, setShowDealerSelector] = useState(false);
@@ -1564,6 +1565,7 @@ function AppContent() {
   const [intelligenceBriefs, setIntelligenceBriefs] = useState([]);
   const [intelligenceLoading, setIntelligenceLoading] = useState(false);
   const [intelligenceLastFetched, setIntelligenceLastFetched] = useState(null);
+  const [intelligenceExpanded, setIntelligenceExpanded] = useState(false);
 
   // Today Tab - Vault Watch (COMEX Warehouse Inventory)
   const [vaultData, setVaultData] = useState({ gold: [], silver: [], platinum: [], palladium: [] });
@@ -3231,14 +3233,14 @@ function AppContent() {
   const v20TutorialSlides = [
     { emoji: '☀️', title: 'Meet Your New Today Tab', description: 'Get AI-powered market intelligence every morning at 6:30 AM. See what moved, what changed, and what it means for your stack.' },
     { emoji: '🏦', title: 'COMEX Vault Watch', description: 'Track real-time COMEX warehouse inventory for gold, silver, platinum, and palladium. See when supply gets tight.' },
-    { emoji: '💬', title: 'AI Stack Advisor', description: "Ask questions about your portfolio and get personalized answers. 'Should I buy more silver?' 'What's my break-even?' The AI knows your stack." },
+    { emoji: '💬', title: 'Meet Troy', description: "Your personal stack analyst. Ask Troy anything about your portfolio — 'Should I buy more silver?' 'What's my break-even?' Tap the gold button on any screen." },
     { emoji: '🔴🟡⚪🟢', title: 'Platinum & Palladium', description: 'Now track all four precious metals. Your portfolio just got more powerful.' },
     ...(Platform.OS !== 'ios' ? [{ emoji: '🖥️', title: 'New Web App', description: 'Access your full portfolio at app.stacktrackergold.com — same account, same data, bigger screen. Your Bloomberg terminal for precious metals.', button: { label: 'Visit Web App', url: 'https://app.stacktrackergold.com' } }] : []),
     { emoji: '🧭', title: 'New Look, Same Power', description: "We've streamlined your navigation. Portfolio combines your dashboard and holdings in one place. Settings now lives in the tab bar. Everything you need, fewer taps." },
     { emoji: '✅', title: "You're All Set!", description: 'Enjoy Stack Tracker Gold v2.0. Built for stackers, by stackers.', highlight: 'Stack on! 🪙' },
   ];
 
-  // AI Stack Advisor — send message
+  // Troy — send message
   const sendAdvisorMessage = async (messageText) => {
     const text = (messageText || advisorInput).trim();
     if (!text || advisorLoading) return;
@@ -3267,6 +3269,7 @@ function AppContent() {
           userId: supabaseUser?.id || null,
           message: text,
           conversationHistory: history,
+          context: `User is on the ${tab} screen`,
         }),
       });
       const data = await response.json();
@@ -6343,13 +6346,12 @@ function AppContent() {
 
   const drawerSections = [
     { key: 'today', label: 'Today', items: [
-      { key: 'morningBrief', label: 'Daily Brief' },
+      { key: 'morningBrief', label: "Troy's Take" },
       { key: 'portfolioPulse', label: 'Portfolio Pulse' },
       { key: 'metalMovers', label: 'Metal Movers' },
       { key: 'whatChanged', label: 'What Changed Today' },
       { key: 'vaultWatch', label: 'Vault Watch' },
       { key: 'intelligenceFeed', label: 'Intelligence Feed' },
-      { key: 'aiStackAdvisor', label: 'AI Stack Advisor' },
     ]},
     { key: 'portfolio', label: 'Portfolio', items: [
       { key: 'portfolioSummary', label: 'Summary' },
@@ -6616,7 +6618,7 @@ function AppContent() {
           return (
             <View style={{ backgroundColor: isDarkMode ? '#0d0d0d' : colors.bg, marginHorizontal: -20, paddingHorizontal: 16, paddingTop: 4, minHeight: Dimensions.get('window').height - 200 }}>
 
-              {/* ===== YOUR DAILY BRIEF ===== */}
+              {/* ===== TROY'S TAKE ===== */}
               <View onLayout={(e) => { sectionOffsets.current['morningBrief'] = e.nativeEvent.layout.y; }}>
               {effHasGoldAccess ? (
                 <View style={{
@@ -6630,7 +6632,7 @@ function AppContent() {
                   marginBottom: 16,
                 }}>
                   <Text style={{ color: colors.muted, fontSize: 12, fontWeight: '600', marginBottom: 8 }}>
-                    {'☀\uFE0F'} Your Daily Brief · {dailyBrief && dailyBrief.date && !dailyBrief.is_current
+                    {'💬'} Troy's Take · {dailyBrief && dailyBrief.date && !dailyBrief.is_current
                       ? new Date(dailyBrief.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
                       : new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
                   </Text>
@@ -6647,7 +6649,7 @@ function AppContent() {
                     <>
                       {!dailyBrief.is_current && (
                         <Text style={{ color: colors.gold, fontSize: 11, fontStyle: 'italic', marginBottom: 6 }}>
-                          Today's brief will be available after 6:30 AM EST. Showing your most recent brief.
+                          Today's take will be available after 6:30 AM EST. Showing Troy's most recent.
                         </Text>
                       )}
                       <Text style={{ color: colors.text, fontSize: 14, lineHeight: 20 }} numberOfLines={briefExpanded ? undefined : 2}>{dailyBrief.brief_text}</Text>
@@ -6658,7 +6660,7 @@ function AppContent() {
                     </>
                   ) : (
                     <Text style={{ color: colors.muted, fontSize: 13, fontStyle: 'italic' }}>
-                      Your first brief will be available after 6:30 AM EST.
+                      Troy's first take will be available after 6:30 AM EST.
                     </Text>
                   )}
                 </View>
@@ -6677,10 +6679,10 @@ function AppContent() {
                   onPress={() => setShowPaywallModal(true)}
                 >
                   <Text style={{ color: colors.muted, fontSize: 12, fontWeight: '600', marginBottom: 4 }}>
-                    {'☀\uFE0F'} Your Daily Brief
+                    {'💬'} Troy's Take
                   </Text>
                   <Text style={{ color: colors.muted, fontSize: 13 }}>
-                    Get your personalized daily brief with Gold
+                    Get Troy's daily market analysis with Gold
                   </Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, backgroundColor: 'rgba(251,191,36,0.15)', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 }}>
                     <Text style={{ color: colors.gold, fontSize: 11, fontWeight: '600' }}>UPGRADE</Text>
@@ -7105,22 +7107,9 @@ function AppContent() {
                           {chartDataPoints.length >= 2 ? (
                             effHasGoldAccess ? (
                               <View style={{ paddingVertical: 12, paddingHorizontal: 4 }}>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8, marginLeft: 12 }}>
-                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                    <View style={{ width: 12, height: 2, backgroundColor: currentVaultColor }} />
-                                    <Text style={{ color: colors.muted, fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8 }}>Registered</Text>
-                                  </View>
-                                  {currentVaultData.some(d => d.eligible_oz > 0) && (
-                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                      <View style={{ width: 12, height: 2, backgroundColor: 'rgba(255,255,255,0.4)', borderStyle: 'dashed' }} />
-                                      <Text style={{ color: colors.muted, fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8 }}>Eligible</Text>
-                                    </View>
-                                  )}
-                                </View>
+                                <Text style={{ color: colors.muted, fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginLeft: 12 }}>Registered Inventory (30d)</Text>
                                 <ScrubChart
                                   data={currentVaultData.filter(d => d.registered_oz > 0).map(d => ({ date: d.date, value: d.registered_oz }))}
-                                  secondaryData={currentVaultData.some(d => d.eligible_oz > 0) ? currentVaultData.filter(d => d.eligible_oz > 0).map(d => ({ date: d.date, value: d.eligible_oz })) : undefined}
-                                  secondaryColor="rgba(255,255,255,0.35)"
                                   color={currentVaultColor}
                                   width={SCREEN_WIDTH - 56}
                                   height={160}
@@ -7217,7 +7206,11 @@ function AppContent() {
                     </View>
                   ) : intelligenceBriefs.length > 0 ? (
                     <View style={{ gap: 10 }}>
-                      {(effHasGoldAccess ? intelligenceBriefs : intelligenceBriefs.slice(0, 1)).map((brief, i) => (
+                      {(() => {
+                        const visibleBriefs = effHasGoldAccess
+                          ? (intelligenceExpanded ? intelligenceBriefs : intelligenceBriefs.slice(0, 3))
+                          : intelligenceBriefs.slice(0, 1);
+                        return visibleBriefs.map((brief, i) => (
                         <TouchableOpacity
                           key={brief.id || i}
                           style={{
@@ -7257,7 +7250,20 @@ function AppContent() {
                           {/* Summary */}
                           <Text style={{ color: colors.muted, fontSize: 13, lineHeight: 18 }} numberOfLines={3}>{brief.summary}</Text>
                         </TouchableOpacity>
-                      ))}
+                        ));
+                      })()}
+
+                      {/* "See all" link for Gold users with more than 3 briefs */}
+                      {effHasGoldAccess && intelligenceBriefs.length > 3 && !intelligenceExpanded && (
+                        <TouchableOpacity
+                          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setIntelligenceExpanded(true); }}
+                          style={{ paddingVertical: 8, alignItems: 'center' }}
+                        >
+                          <Text style={{ color: '#D4A843', fontSize: 14, fontWeight: '600' }}>
+                            See all {intelligenceBriefs.length} briefs {'\u2192'}
+                          </Text>
+                        </TouchableOpacity>
+                      )}
 
                       {/* Gated count card for free users */}
                       {!effHasGoldAccess && intelligenceBriefs.length > 1 && (
@@ -7296,168 +7302,7 @@ function AppContent() {
                   )}
               </View>
 
-              {/* ===== SECTION 4.5: AI STACK ADVISOR ===== */}
-              <View onLayout={(e) => { sectionOffsets.current['aiStackAdvisor'] = e.nativeEvent.layout.y; }} style={{ marginBottom: 16 }}>
-                  {/* Section header with gold divider */}
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6, gap: 10 }}>
-                    <Text style={{ color: colors.muted, fontSize: 11, fontWeight: '600', letterSpacing: 1.2, textTransform: 'uppercase', marginLeft: 4 }}>
-                      {'\u2728'} AI Stack Advisor
-                    </Text>
-                    <View style={{ flex: 1, height: 1, backgroundColor: 'rgba(212,168,67,0.2)' }} />
-                  </View>
-                  <Text style={{ color: colors.muted, fontSize: 11, marginBottom: 12, marginLeft: 4 }}>Ask anything about your portfolio</Text>
-
-                  {!supabaseUser ? (
-                    <View style={{
-                      backgroundColor: todayCardBg,
-                      borderRadius: 12,
-                      borderWidth: 1,
-                      borderColor: todayCardBorder,
-                      padding: 24,
-                      alignItems: 'center',
-                    }}>
-                      <Text style={{ color: colors.muted, fontSize: 14, textAlign: 'center', marginBottom: 12 }}>Sign in to use AI Stack Advisor</Text>
-                      <TouchableOpacity
-                        style={{ backgroundColor: colors.gold, paddingVertical: 10, paddingHorizontal: 24, borderRadius: 10 }}
-                        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setGuestMode(false); }}
-                      >
-                        <Text style={{ color: '#000', fontWeight: '700', fontSize: 14 }}>Sign In</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <View style={{
-                      backgroundColor: todayCardBg,
-                      borderRadius: 12,
-                      borderWidth: 1,
-                      borderColor: todayCardBorder,
-                      overflow: 'hidden',
-                    }}>
-                      {/* Chat area */}
-                      <ScrollView
-                        ref={advisorScrollRef}
-                        style={{ maxHeight: 400, padding: 12 }}
-                        onContentSizeChange={() => advisorScrollRef.current?.scrollToEnd({ animated: true })}
-                      >
-                        {advisorMessages.length === 0 ? (
-                          <View style={{ gap: 8, paddingVertical: 8 }}>
-                            <Text style={{ color: colors.muted, fontSize: 13, textAlign: 'center', marginBottom: 8 }}>Try asking:</Text>
-                            {[
-                              'How is my portfolio performing?',
-                              'Should I buy more silver or gold?',
-                              'Analyze my gold-to-silver ratio',
-                              'What if silver hits $100?',
-                              "What's my best and worst purchase?",
-                            ].map((q, i) => (
-                              <TouchableOpacity
-                                key={i}
-                                style={{
-                                  backgroundColor: isDarkMode ? 'rgba(212,168,67,0.08)' : 'rgba(212,168,67,0.1)',
-                                  borderRadius: 16,
-                                  paddingVertical: 10,
-                                  paddingHorizontal: 14,
-                                  borderWidth: 1,
-                                  borderColor: 'rgba(212,168,67,0.2)',
-                                  alignSelf: 'flex-start',
-                                }}
-                                onPress={() => {
-                                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                                  if (!hasGoldAccess) { setShowPaywallModal(true); return; }
-                                  sendAdvisorMessage(q);
-                                }}
-                              >
-                                <Text style={{ color: '#D4A843', fontSize: 13 }}>{q}</Text>
-                              </TouchableOpacity>
-                            ))}
-                          </View>
-                        ) : (
-                          <View style={{ gap: 10 }}>
-                            {advisorMessages.map((msg, i) => (
-                              <View
-                                key={i}
-                                style={{
-                                  alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                                  backgroundColor: msg.role === 'user' ? '#D4A843' : (isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'),
-                                  borderRadius: 14,
-                                  paddingVertical: 10,
-                                  paddingHorizontal: 14,
-                                  maxWidth: '85%',
-                                }}
-                              >
-                                <Text style={{
-                                  color: msg.role === 'user' ? '#000' : colors.text,
-                                  fontSize: 14,
-                                  lineHeight: 20,
-                                }}>{msg.text}</Text>
-                              </View>
-                            ))}
-                            {advisorLoading && (
-                              <View style={{
-                                alignSelf: 'flex-start',
-                                backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
-                                borderRadius: 14,
-                                paddingVertical: 10,
-                                paddingHorizontal: 14,
-                              }}>
-                                <Text style={{ color: colors.muted, fontSize: 13, fontStyle: 'italic' }}>Thinking...</Text>
-                              </View>
-                            )}
-                          </View>
-                        )}
-                      </ScrollView>
-
-                      {/* Input bar */}
-                      <View style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        borderTopWidth: 1,
-                        borderTopColor: todayCardBorder,
-                        paddingHorizontal: 12,
-                        paddingVertical: 8,
-                        gap: 8,
-                      }}>
-                        <TextInput
-                          style={{
-                            flex: 1,
-                            backgroundColor: isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
-                            borderRadius: 20,
-                            paddingVertical: 8,
-                            paddingHorizontal: 14,
-                            color: colors.text,
-                            fontSize: 14,
-                          }}
-                          placeholder="Ask about your portfolio..."
-                          placeholderTextColor={colors.muted}
-                          value={advisorInput}
-                          onChangeText={setAdvisorInput}
-                          onSubmitEditing={() => { if (!hasGoldAccess) { setShowPaywallModal(true); return; } sendAdvisorMessage(); }}
-                          returnKeyType="send"
-                          editable={!advisorLoading}
-                        />
-                        <TouchableOpacity
-                          onPress={() => { if (!hasGoldAccess) { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowPaywallModal(true); return; } sendAdvisorMessage(); }}
-                          disabled={!advisorInput.trim() || advisorLoading}
-                          style={{
-                            width: 36,
-                            height: 36,
-                            borderRadius: 18,
-                            backgroundColor: advisorInput.trim() ? '#D4A843' : (isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'),
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          <Text style={{ color: advisorInput.trim() ? '#000' : colors.muted, fontSize: 16, fontWeight: '700' }}>{'\u2191'}</Text>
-                        </TouchableOpacity>
-                      </View>
-
-                      {/* Questions remaining */}
-                      <View style={{ paddingHorizontal: 12, paddingBottom: 8 }}>
-                        <Text style={{ color: colors.muted, fontSize: 10, textAlign: 'center' }}>
-                          {hasGoldAccess ? `${25 - advisorQuestionsToday} questions remaining today` : 'Gold feature \u00B7 Try free for 7 days'}
-                        </Text>
-                      </View>
-                    </View>
-                  )}
-              </View>
+              {/* Troy advisor section removed — now accessible via FAB */}
 
               {/* ===== SECTION 5: FOOTER ===== */}
               <View style={{ alignItems: 'center', paddingVertical: 24, marginBottom: 20 }}>
@@ -8041,7 +7886,7 @@ function AppContent() {
                 marginBottom: 12,
               }}>
                 <Text style={{ color: colors.muted, fontSize: 12, fontWeight: '600', marginBottom: 8 }}>
-                  {'\u2726'} Portfolio Intelligence
+                  {'💬'} Troy's Analysis
                 </Text>
                 {effPortfolioIntelLoading ? (
                   <ActivityIndicator size="small" color="#D4A843" style={{ paddingVertical: 8 }} />
@@ -8051,11 +7896,11 @@ function AppContent() {
                     <TouchableOpacity onPress={() => setPortfolioIntelExpanded(!portfolioIntelExpanded)} style={{ marginTop: 4, paddingVertical: 12 }}>
                       <Text style={{ color: '#D4A843', fontSize: 15, fontWeight: '700' }}>{portfolioIntelExpanded ? 'See less' : 'See more'}</Text>
                     </TouchableOpacity>
-                    {portfolioIntelExpanded && <Text style={{ color: '#666', fontSize: 11, fontStyle: 'italic' }}>AI-generated analysis. Not financial advice.</Text>}
+                    {portfolioIntelExpanded && <Text style={{ color: '#666', fontSize: 11, fontStyle: 'italic' }}>Troy is AI-powered. Not financial advice.</Text>}
                   </>
                 ) : (
                   <Text style={{ color: colors.muted, fontSize: 13, fontStyle: 'italic' }}>
-                    Your portfolio intelligence will be available after 6:30 AM EST.
+                    Troy's analysis will be available after 6:30 AM EST.
                   </Text>
                 )}
               </View>
@@ -8075,10 +7920,10 @@ function AppContent() {
                 onPress={() => setShowPaywallModal(true)}
               >
                 <Text style={{ color: colors.muted, fontSize: 12, fontWeight: '600', marginBottom: 4 }}>
-                  {'\u2726'} Portfolio Intelligence
+                  {'💬'} Troy's Analysis
                 </Text>
                 <Text style={{ color: colors.muted, fontSize: 13 }}>
-                  Get AI-powered portfolio strategy analysis with Gold
+                  Get Troy's portfolio analysis with Gold
                 </Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, backgroundColor: 'rgba(251,191,36,0.15)', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 }}>
                   <Text style={{ color: colors.gold, fontSize: 11, fontWeight: '600' }}>UPGRADE</Text>
@@ -8727,7 +8572,7 @@ function AppContent() {
                 {/* Push Notifications Section */}
                 <Text style={{ color: colors.muted, fontSize: 13, fontWeight: '600', textTransform: 'uppercase', marginLeft: 16, marginTop: 16, marginBottom: 6 }}>Push Notifications</Text>
                 <View style={{ borderRadius: 10, overflow: 'hidden' }}>
-                  <NotifRow item={{ key: 'daily_brief', label: 'Daily Brief', description: 'Daily market summary each morning' }} isFirst isLast={false} />
+                  <NotifRow item={{ key: 'daily_brief', label: "Troy's Take", description: 'Daily market summary each morning' }} isFirst isLast={false} />
                   <RowSeparator />
                   <NotifRow item={{ key: 'breaking_news', label: 'Market Intelligence', description: 'Breaking news and major market events' }} isLast={false} />
                   <RowSeparator />
@@ -9253,6 +9098,186 @@ function AppContent() {
 
       </ScrollView>
 
+      {/* Troy FAB — floating gold button, every tab */}
+      <TouchableOpacity
+        style={{
+          position: 'absolute',
+          right: 20,
+          bottom: 80 + Math.max(insets.bottom, 10),
+          width: 56,
+          height: 56,
+          borderRadius: 28,
+          backgroundColor: '#D4A843',
+          alignItems: 'center',
+          justifyContent: 'center',
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.3,
+          shadowRadius: 6,
+          elevation: 8,
+          zIndex: 100,
+        }}
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          if (!hasGoldAccess) {
+            setShowPaywallModal(true);
+          } else {
+            setShowTroyChat(true);
+          }
+        }}
+        activeOpacity={0.8}
+      >
+        <Text style={{ color: '#000', fontSize: 22, fontWeight: '800' }}>T</Text>
+      </TouchableOpacity>
+
+      {/* Troy Chat Modal */}
+      <Modal visible={showTroyChat} animationType="slide" presentationStyle="pageSheet">
+        <SafeAreaView style={{ flex: 1, backgroundColor: isDarkMode ? '#000000' : '#f2f2f7' }}>
+          {/* Header */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: isDarkMode ? '#38383a' : '#c6c6c8' }}>
+            <View>
+              <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>Troy</Text>
+              <Text style={{ color: colors.muted, fontSize: 12 }}>Your Stack Analyst</Text>
+            </View>
+            <TouchableOpacity onPress={() => setShowTroyChat(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Text style={{ color: colors.gold, fontSize: 17, fontWeight: '600' }}>Done</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Chat messages */}
+          <ScrollView
+            ref={advisorScrollRef}
+            style={{ flex: 1, padding: 16 }}
+            onContentSizeChange={() => advisorScrollRef.current?.scrollToEnd({ animated: true })}
+            keyboardShouldPersistTaps="handled"
+          >
+            {advisorMessages.length === 0 ? (
+              <View style={{ gap: 12, paddingVertical: 20 }}>
+                <View style={{ alignItems: 'center', marginBottom: 12 }}>
+                  <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#D4A843', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+                    <Text style={{ color: '#000', fontSize: 24, fontWeight: '800' }}>T</Text>
+                  </View>
+                  <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>Ask Troy anything</Text>
+                  <Text style={{ color: colors.muted, fontSize: 13, marginTop: 4, textAlign: 'center' }}>Your personal stack analyst. I know your portfolio{'\n'}and can help you make smarter decisions.</Text>
+                </View>
+                {[
+                  'How is my portfolio performing?',
+                  'Should I buy more silver or gold?',
+                  'Analyze my gold-to-silver ratio',
+                  'What if silver hits $100?',
+                  "What's my best and worst purchase?",
+                ].map((q, i) => (
+                  <TouchableOpacity
+                    key={i}
+                    style={{
+                      backgroundColor: isDarkMode ? 'rgba(212,168,67,0.08)' : 'rgba(212,168,67,0.1)',
+                      borderRadius: 16,
+                      paddingVertical: 10,
+                      paddingHorizontal: 14,
+                      borderWidth: 1,
+                      borderColor: 'rgba(212,168,67,0.2)',
+                      alignSelf: 'flex-start',
+                    }}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      sendAdvisorMessage(q);
+                    }}
+                  >
+                    <Text style={{ color: '#D4A843', fontSize: 13 }}>{q}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ) : (
+              <View style={{ gap: 10 }}>
+                {advisorMessages.map((msg, i) => (
+                  <View
+                    key={i}
+                    style={{
+                      alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                      backgroundColor: msg.role === 'user' ? '#D4A843' : (isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'),
+                      borderRadius: 14,
+                      paddingVertical: 10,
+                      paddingHorizontal: 14,
+                      maxWidth: '85%',
+                    }}
+                  >
+                    <Text style={{
+                      color: msg.role === 'user' ? '#000' : colors.text,
+                      fontSize: 14,
+                      lineHeight: 20,
+                    }}>{msg.text}</Text>
+                  </View>
+                ))}
+                {advisorLoading && (
+                  <View style={{
+                    alignSelf: 'flex-start',
+                    backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+                    borderRadius: 14,
+                    paddingVertical: 10,
+                    paddingHorizontal: 14,
+                  }}>
+                    <Text style={{ color: colors.muted, fontSize: 13, fontStyle: 'italic' }}>Thinking...</Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </ScrollView>
+
+          {/* Input bar */}
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              borderTopWidth: 0.5,
+              borderTopColor: isDarkMode ? '#38383a' : '#c6c6c8',
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              gap: 8,
+              backgroundColor: isDarkMode ? '#000000' : '#f2f2f7',
+            }}>
+              <TextInput
+                style={{
+                  flex: 1,
+                  backgroundColor: isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+                  borderRadius: 20,
+                  paddingVertical: 10,
+                  paddingHorizontal: 14,
+                  color: colors.text,
+                  fontSize: 15,
+                }}
+                placeholder="Ask Troy..."
+                placeholderTextColor={colors.muted}
+                value={advisorInput}
+                onChangeText={setAdvisorInput}
+                onSubmitEditing={() => sendAdvisorMessage()}
+                returnKeyType="send"
+                editable={!advisorLoading}
+                autoFocus={false}
+              />
+              <TouchableOpacity
+                onPress={() => sendAdvisorMessage()}
+                disabled={!advisorInput.trim() || advisorLoading}
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 18,
+                  backgroundColor: advisorInput.trim() ? '#D4A843' : (isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'),
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text style={{ color: advisorInput.trim() ? '#000' : colors.muted, fontSize: 16, fontWeight: '700' }}>{'\u2191'}</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={{ paddingHorizontal: 12, paddingBottom: Math.max(insets.bottom, 8), backgroundColor: isDarkMode ? '#000000' : '#f2f2f7' }}>
+              <Text style={{ color: colors.muted, fontSize: 10, textAlign: 'center' }}>
+                {`${25 - advisorQuestionsToday} questions remaining today`}
+              </Text>
+            </View>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Modal>
+
       {/* Bottom Tabs */}
       <View style={[styles.bottomTabs, { backgroundColor: isDarkMode ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.95)', borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom, 10) }]}>
         {[
@@ -9348,10 +9373,10 @@ function AppContent() {
             </Text>
             <View style={{ backgroundColor: isDarkMode ? '#1c1c1e' : '#ffffff', borderRadius: 10, overflow: 'hidden', marginBottom: 20 }}>
               {[
-                { icon: '🧠', label: 'AI Intelligence Feed' },
+                { icon: '🧠', label: 'Market Intelligence' },
                 { icon: '🏦', label: 'COMEX Vault Watch' },
-                { icon: '📰', label: 'AI Daily Brief' },
-                { icon: '💬', label: 'AI Stack Advisor' },
+                { icon: '📰', label: "Troy's Take — Daily Brief" },
+                { icon: '💬', label: 'Troy — AI Stack Analyst' },
                 { icon: '📈', label: 'Spot Price History charts' },
                 { icon: '📊', label: 'Advanced Analytics' },
                 { icon: '📸', label: 'Unlimited receipt scans' },
@@ -9855,7 +9880,7 @@ function AppContent() {
         </View>
         <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
           <Text style={[styles.cardTitle, { color: '#007AFF' }]}>AI-Powered Features</Text>
-          <Text style={[styles.privacyItem, { color: colors.text }]}>• Daily Brief and Portfolio Intelligence use Google Gemini AI</Text>
+          <Text style={[styles.privacyItem, { color: colors.text }]}>• Troy's Take and Troy's Analysis use Google Gemini AI</Text>
           <Text style={[styles.privacyItem, { color: colors.text }]}>• Portfolio data is sent to the AI provider for analysis only</Text>
           <Text style={[styles.privacyItem, { color: colors.text }]}>• AI-generated content is for informational purposes, not financial advice</Text>
           <Text style={[styles.privacyItem, { color: colors.text }]}>• Your data is not shared beyond the AI provider</Text>
@@ -9893,7 +9918,7 @@ function AppContent() {
           <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>{'\u2022'} Metal Movers — Spot price changes across all metals</Text>
           <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>{'\u2022'} Vault Watch — COMEX warehouse inventory for Ag, Au, Pt</Text>
           <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>{'\u2022'} Market Intelligence — AI-curated news and analysis</Text>
-          <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>{'\u2022'} Daily Brief — AI market summary delivered to your feed</Text>
+          <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>{'\u2022'} Troy's Take — AI market summary delivered to your feed</Text>
         </View>
 
         <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
@@ -9914,7 +9939,7 @@ function AppContent() {
               <Text style={{ color: colors.gold, fontSize: scaledFonts.tiny, fontWeight: '600' }}>GOLD</Text>
             </View>
           </View>
-          <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>{'\u2022'} Portfolio Intelligence — AI analysis of your holdings</Text>
+          <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>{'\u2022'} Troy's Analysis — AI analysis of your holdings</Text>
           <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>{'\u2022'} Portfolio Value Chart — Track value over 1D to All Time</Text>
           <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>{'\u2022'} Spot Price History — Historical charts for each metal</Text>
           <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>{'\u2022'} Cost Basis Analysis — Total cost, P/L, and avg premium per metal</Text>
@@ -9932,7 +9957,7 @@ function AppContent() {
 
         <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
           <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>Settings</Text>
-          <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>{'\u2022'} Notifications — Toggle daily brief, price alerts, breaking news</Text>
+          <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>{'\u2022'} Notifications — Toggle Troy's Take, price alerts, breaking news</Text>
           <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>{'\u2022'} Appearance — Light, dark, or auto theme</Text>
           <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>{'\u2022'} Export & Backup — Backup, restore, or export CSV</Text>
         </View>
@@ -9948,7 +9973,7 @@ function AppContent() {
 
         <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
           <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>Push Notifications</Text>
-          <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>{'\u2022'} Daily Brief — Daily market summary push</Text>
+          <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>{'\u2022'} Troy's Take — Daily market summary push</Text>
           <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>{'\u2022'} Price Alerts — Triggered when your targets are hit</Text>
           <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>{'\u2022'} Breaking News & COMEX — Major events and vault changes</Text>
           <Text style={[styles.privacyItem, { color: colors.muted, fontSize: scaledFonts.small, marginTop: 4 }]}>Manage in Settings {'\u2192'} Notifications</Text>
