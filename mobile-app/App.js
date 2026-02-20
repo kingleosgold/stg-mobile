@@ -35,6 +35,7 @@ import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler'
 import GoldPaywall from './src/components/GoldPaywall';
 import Tutorial from './src/components/Tutorial';
 import TroyCoinIcon from './src/components/TroyCoinIcon';
+import GlobeIcon from './src/components/GlobeIcon';
 import ViewShot from 'react-native-view-shot';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import AuthScreen from './src/screens/AuthScreen';
@@ -2456,6 +2457,10 @@ function AppContent() {
   // Check if user has Gold access (Gold subscription or Lifetime)
   const hasGoldAccess = hasGold || hasLifetimeAccess;
 
+  // Troy daily question limits
+  const TROY_FREE_LIMIT = 3;
+  const TROY_GOLD_LIMIT = 30;
+
   // Save holdings to iCloud
   const syncToCloud = async (silver = silverItems, gold = goldItems, platinum = platinumItems, palladium = palladiumItems) => {
     if (!hasGoldAccess || !iCloudSyncEnabled || !iCloudAvailable || Platform.OS !== 'ios') return;
@@ -3300,12 +3305,12 @@ function AppContent() {
 
   // v2.0 Tutorial slides
   const v20TutorialSlides = [
-    { emoji: '☀️', title: 'Meet Your New Today Tab', description: 'Get AI-powered market intelligence every morning at 6:30 AM. See what moved, what changed, and what it means for your stack.' },
+    { emoji: '☀️', title: 'Meet Your New Today Tab', description: 'Get AI-powered market intelligence every morning. See what moved, what changed, and what it means for your stack.' },
     { emoji: '🏦', title: 'COMEX Vault Watch', description: 'Track real-time COMEX warehouse inventory for gold, silver, platinum, and palladium. See when supply gets tight.' },
     { emoji: '', emojiComponent: <View style={{ marginBottom: 20 }}><TroyCoinIcon size={72} /></View>, title: 'Meet Troy', description: "Your personal stack analyst. Ask Troy anything about your portfolio — 'Should I buy more silver?' 'What's my break-even?' Tap the gold button on any screen." },
     { emoji: '🔴🟡⚪🟢', title: 'Platinum & Palladium', description: 'Now track all four precious metals. Your portfolio just got more powerful.' },
-    ...(Platform.OS !== 'ios' ? [{ emoji: '🖥️', title: 'New Web App', description: 'Access your full portfolio at app.stacktrackergold.com — same account, same data, bigger screen. Your Bloomberg terminal for precious metals.', button: { label: 'Visit Web App', url: 'https://app.stacktrackergold.com' } }] : []),
     { emoji: '🧭', title: 'New Look, Same Power', description: "We've streamlined your navigation. Portfolio combines your dashboard and holdings in one place. Settings now lives in the tab bar. Everything you need, fewer taps." },
+    { emoji: '', emojiComponent: <View style={{ marginBottom: 20 }}><GlobeIcon size={72} color="#D4A843" /></View>, title: 'Your Stack, Everywhere', description: 'Access your full portfolio on the web at stacktrackergold.com. Same data, same Troy, bigger screen.' },
     { emoji: '✅', title: "You're All Set!", description: 'Enjoy Stack Tracker Gold v2.0. Built for stackers, by stackers.', highlight: 'Stack on! 🪙' },
   ];
 
@@ -3314,12 +3319,26 @@ function AppContent() {
     const text = (messageText || advisorInput).trim();
     if (!text || advisorLoading) return;
 
-    if (advisorQuestionsToday >= 25) {
-      Alert.alert('Daily Limit', 'You\'ve used all 25 questions for today. Check back tomorrow!');
-      return;
+    const dailyLimit = hasGoldAccess ? TROY_GOLD_LIMIT : TROY_FREE_LIMIT;
+    const userMsg = { role: 'user', text, timestamp: Date.now() };
+
+    if (advisorQuestionsToday >= dailyLimit) {
+      if (!hasGoldAccess) {
+        const upgradeMsg = {
+          role: 'assistant',
+          text: "That's my free limit for today. Upgrade to Gold and I'll analyze your entire stack anytime — cost basis, COMEX data, market intel, the works. Your call.",
+          timestamp: Date.now(),
+          isUpgradeCTA: true,
+        };
+        setAdvisorMessages(prev => [...prev, userMsg, upgradeMsg]);
+        setAdvisorInput('');
+        return;
+      } else {
+        Alert.alert('Daily Limit', "You've reached your daily limit. Check back tomorrow!");
+        return;
+      }
     }
 
-    const userMsg = { role: 'user', text, timestamp: Date.now() };
     setAdvisorMessages(prev => [...prev, userMsg]);
     setAdvisorInput('');
     setAdvisorLoading(true);
@@ -4780,8 +4799,8 @@ function AppContent() {
   // ============================================
 
   const fetchDailyBrief = async () => {
-    if (!supabaseUser || !hasGoldAccess) {
-      if (__DEV__) console.log(`📰 [Brief] Skipped: supabaseUser=${!!supabaseUser}, hasGoldAccess=${hasGoldAccess}`);
+    if (!supabaseUser) {
+      if (__DEV__) console.log(`📰 [Brief] Skipped: supabaseUser=${!!supabaseUser}`);
       return;
     }
     try {
@@ -4808,7 +4827,7 @@ function AppContent() {
   };
 
   const fetchPortfolioIntelligence = async () => {
-    if (!supabaseUser || !hasGoldAccess) return;
+    if (!supabaseUser) return;
     try {
       setPortfolioIntelLoading(true);
       const response = await fetch(`${API_BASE_URL}/v1/portfolio-intelligence?userId=${supabaseUser.id}`);
@@ -4994,12 +5013,12 @@ function AppContent() {
     }
   }, [tab]);
 
-  // Fetch daily brief when tab, user, or subscription status changes
+  // Fetch daily brief when tab or user changes
   useEffect(() => {
-    if (tab === 'today' && hasGoldAccess && supabaseUser && (!dailyBrief || !dailyBrief.is_current)) {
+    if (tab === 'today' && supabaseUser && (!dailyBrief || !dailyBrief.is_current)) {
       fetchDailyBrief();
     }
-  }, [tab, supabaseUser, hasGoldAccess]);
+  }, [tab, supabaseUser]);
 
   const onRefreshToday = async () => {
     setIsRefreshing(true);
@@ -6749,6 +6768,35 @@ function AppContent() {
                     </Text>
                   )}
                 </View>
+              ) : dailyBrief && dailyBrief.brief_text ? (
+                <View style={{
+                  backgroundColor: todayCardBg,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: todayCardBorder,
+                  borderLeftWidth: 3,
+                  borderLeftColor: '#D4A843',
+                  padding: 16,
+                  marginBottom: 16,
+                }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                    <TroyCoinIcon size={20} />
+                    <Text style={{ color: colors.muted, fontSize: 12, fontWeight: '600' }}>Troy's Take</Text>
+                  </View>
+                  <View style={{ maxHeight: 60, overflow: 'hidden' }}>
+                    <Text style={{ color: colors.text, fontSize: 14, lineHeight: 20 }}>{dailyBrief.brief_text}</Text>
+                  </View>
+                  {/* Gradient fade overlay */}
+                  <View style={{ height: 40, marginTop: -40 }}>
+                    <View style={{ flex: 1, backgroundColor: todayCardBg, opacity: 0 }} />
+                    <View style={{ flex: 1, backgroundColor: todayCardBg, opacity: 0.4 }} />
+                    <View style={{ flex: 1, backgroundColor: todayCardBg, opacity: 0.7 }} />
+                    <View style={{ flex: 1, backgroundColor: todayCardBg, opacity: 0.95 }} />
+                  </View>
+                  <TouchableOpacity onPress={() => setShowPaywallModal(true)} style={{ marginTop: 4 }}>
+                    <Text style={{ color: '#D4A843', fontSize: 13, fontWeight: '600' }}>Unlock Troy's full daily briefing with Gold →</Text>
+                  </TouchableOpacity>
+                </View>
               ) : (
                 <TouchableOpacity
                   style={{
@@ -7991,6 +8039,36 @@ function AppContent() {
                   </Text>
                 )}
               </View>
+            ) : effPortfolioIntel && effPortfolioIntel.text ? (
+              <View style={{
+                backgroundColor: colors.cardBg,
+                borderRadius: 16,
+                borderWidth: 1,
+                borderColor: colors.border,
+                borderLeftWidth: 3,
+                borderLeftColor: '#D4A843',
+                padding: 16,
+                marginHorizontal: 16,
+                marginBottom: 12,
+              }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                  <TroyCoinIcon size={20} />
+                  <Text style={{ color: colors.muted, fontSize: 12, fontWeight: '600' }}>Troy's Analysis</Text>
+                </View>
+                <View style={{ maxHeight: 60, overflow: 'hidden' }}>
+                  <Text style={{ color: colors.text, fontSize: 14, lineHeight: 20 }}>{effPortfolioIntel.text}</Text>
+                </View>
+                {/* Gradient fade overlay */}
+                <View style={{ height: 40, marginTop: -40 }}>
+                  <View style={{ flex: 1, backgroundColor: colors.cardBg, opacity: 0 }} />
+                  <View style={{ flex: 1, backgroundColor: colors.cardBg, opacity: 0.4 }} />
+                  <View style={{ flex: 1, backgroundColor: colors.cardBg, opacity: 0.7 }} />
+                  <View style={{ flex: 1, backgroundColor: colors.cardBg, opacity: 0.95 }} />
+                </View>
+                <TouchableOpacity onPress={() => setShowPaywallModal(true)} style={{ marginTop: 4 }}>
+                  <Text style={{ color: '#D4A843', fontSize: 13, fontWeight: '600' }}>Unlock Troy's full portfolio analysis with Gold →</Text>
+                </TouchableOpacity>
+              </View>
             ) : (
               <TouchableOpacity
                 style={{
@@ -9205,11 +9283,7 @@ function AppContent() {
             fabTapped.current = true;
             fabGlow.stopAnimation();
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            if (!hasGoldAccess) {
-              setShowPaywallModal(true);
-            } else {
-              setShowTroyChat(true);
-            }
+            setShowTroyChat(true);
           }}
           activeOpacity={1}
         >
@@ -9243,87 +9317,96 @@ function AppContent() {
             </TouchableOpacity>
           </View>
 
-          {/* Chat messages */}
-          <ScrollView
-            ref={advisorScrollRef}
-            style={{ flex: 1, padding: 16 }}
-            onContentSizeChange={() => advisorScrollRef.current?.scrollToEnd({ animated: true })}
-            keyboardShouldPersistTaps="handled"
-          >
-            {advisorMessages.length === 0 ? (
-              <View style={{ gap: 12, paddingVertical: 20 }}>
-                <View style={{ alignItems: 'center', marginBottom: 12 }}>
-                  <View style={{ marginBottom: 12 }}>
-                    <TroyCoinIcon size={56} />
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            {/* Chat messages */}
+            <ScrollView
+              ref={advisorScrollRef}
+              style={{ flex: 1, padding: 16 }}
+              onContentSizeChange={() => advisorScrollRef.current?.scrollToEnd({ animated: true })}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="interactive"
+            >
+              {advisorMessages.length === 0 ? (
+                <View style={{ gap: 12, paddingVertical: 20 }}>
+                  <View style={{ alignItems: 'center', marginBottom: 12 }}>
+                    <View style={{ marginBottom: 12 }}>
+                      <TroyCoinIcon size={56} />
+                    </View>
+                    <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>Ask Troy anything</Text>
+                    <Text style={{ color: colors.muted, fontSize: 13, marginTop: 4, textAlign: 'center' }}>Your personal stack analyst. I know your portfolio{'\n'}and can help you make smarter decisions.</Text>
                   </View>
-                  <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>Ask Troy anything</Text>
-                  <Text style={{ color: colors.muted, fontSize: 13, marginTop: 4, textAlign: 'center' }}>Your personal stack analyst. I know your portfolio{'\n'}and can help you make smarter decisions.</Text>
+                  {[
+                    'How is my portfolio performing?',
+                    'Should I buy more silver or gold?',
+                    'Analyze my gold-to-silver ratio',
+                    'What if silver hits $100?',
+                    "What's my best and worst purchase?",
+                  ].map((q, i) => (
+                    <TouchableOpacity
+                      key={i}
+                      style={{
+                        backgroundColor: isDarkMode ? 'rgba(212,168,67,0.08)' : 'rgba(212,168,67,0.1)',
+                        borderRadius: 16,
+                        paddingVertical: 10,
+                        paddingHorizontal: 14,
+                        borderWidth: 1,
+                        borderColor: 'rgba(212,168,67,0.2)',
+                        alignSelf: 'flex-start',
+                      }}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        sendAdvisorMessage(q);
+                      }}
+                    >
+                      <Text style={{ color: '#D4A843', fontSize: 13 }}>{q}</Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
-                {[
-                  'How is my portfolio performing?',
-                  'Should I buy more silver or gold?',
-                  'Analyze my gold-to-silver ratio',
-                  'What if silver hits $100?',
-                  "What's my best and worst purchase?",
-                ].map((q, i) => (
-                  <TouchableOpacity
-                    key={i}
-                    style={{
-                      backgroundColor: isDarkMode ? 'rgba(212,168,67,0.08)' : 'rgba(212,168,67,0.1)',
-                      borderRadius: 16,
-                      paddingVertical: 10,
-                      paddingHorizontal: 14,
-                      borderWidth: 1,
-                      borderColor: 'rgba(212,168,67,0.2)',
+              ) : (
+                <View style={{ gap: 10 }}>
+                  {advisorMessages.map((msg, i) => (
+                    <View
+                      key={i}
+                      style={{
+                        alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                        backgroundColor: msg.role === 'user' ? '#D4A843' : (isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'),
+                        borderRadius: 14,
+                        paddingVertical: 10,
+                        paddingHorizontal: 14,
+                        maxWidth: '85%',
+                      }}
+                    >
+                      <Text style={{
+                        color: msg.role === 'user' ? '#000' : colors.text,
+                        fontSize: 14,
+                        lineHeight: 20,
+                      }}>{msg.text}</Text>
+                      {msg.isUpgradeCTA && (
+                        <TouchableOpacity
+                          onPress={() => { setShowTroyChat(false); setShowPaywallModal(true); }}
+                          style={{ backgroundColor: '#D4A843', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 16, marginTop: 10, alignSelf: 'flex-start' }}
+                        >
+                          <Text style={{ color: '#000', fontSize: 14, fontWeight: '700' }}>Upgrade to Gold</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  ))}
+                  {advisorLoading && (
+                    <View style={{
                       alignSelf: 'flex-start',
-                    }}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      sendAdvisorMessage(q);
-                    }}
-                  >
-                    <Text style={{ color: '#D4A843', fontSize: 13 }}>{q}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            ) : (
-              <View style={{ gap: 10 }}>
-                {advisorMessages.map((msg, i) => (
-                  <View
-                    key={i}
-                    style={{
-                      alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                      backgroundColor: msg.role === 'user' ? '#D4A843' : (isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'),
+                      backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
                       borderRadius: 14,
                       paddingVertical: 10,
                       paddingHorizontal: 14,
-                      maxWidth: '85%',
-                    }}
-                  >
-                    <Text style={{
-                      color: msg.role === 'user' ? '#000' : colors.text,
-                      fontSize: 14,
-                      lineHeight: 20,
-                    }}>{msg.text}</Text>
-                  </View>
-                ))}
-                {advisorLoading && (
-                  <View style={{
-                    alignSelf: 'flex-start',
-                    backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
-                    borderRadius: 14,
-                    paddingVertical: 10,
-                    paddingHorizontal: 14,
-                  }}>
-                    <Text style={{ color: colors.muted, fontSize: 13, fontStyle: 'italic' }}>Thinking...</Text>
-                  </View>
-                )}
-              </View>
-            )}
-          </ScrollView>
+                    }}>
+                      <Text style={{ color: colors.muted, fontSize: 13, fontStyle: 'italic' }}>Thinking...</Text>
+                    </View>
+                  )}
+                </View>
+              )}
+            </ScrollView>
 
-          {/* Input bar */}
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            {/* Input bar */}
             <View style={{
               flexDirection: 'row',
               alignItems: 'center',
@@ -9368,11 +9451,15 @@ function AppContent() {
                 <Text style={{ color: advisorInput.trim() ? '#000' : colors.muted, fontSize: 16, fontWeight: '700' }}>{'\u2191'}</Text>
               </TouchableOpacity>
             </View>
-            <View style={{ paddingHorizontal: 12, paddingBottom: Math.max(insets.bottom, 8), backgroundColor: isDarkMode ? '#000000' : '#f2f2f7' }}>
-              <Text style={{ color: colors.muted, fontSize: 10, textAlign: 'center' }}>
-                {`${25 - advisorQuestionsToday} questions remaining today`}
-              </Text>
-            </View>
+            {hasGoldAccess && advisorQuestionsToday >= 25 && advisorQuestionsToday < TROY_GOLD_LIMIT ? (
+              <View style={{ paddingHorizontal: 12, paddingBottom: Math.max(insets.bottom, 8), backgroundColor: isDarkMode ? '#000000' : '#f2f2f7' }}>
+                <Text style={{ color: colors.muted, fontSize: 10, textAlign: 'center' }}>
+                  {`${TROY_GOLD_LIMIT - advisorQuestionsToday} left for today — resets at midnight`}
+                </Text>
+              </View>
+            ) : (
+              <View style={{ paddingBottom: Math.max(insets.bottom, 8), backgroundColor: isDarkMode ? '#000000' : '#f2f2f7' }} />
+            )}
           </KeyboardAvoidingView>
         </SafeAreaView>
       </Modal>
