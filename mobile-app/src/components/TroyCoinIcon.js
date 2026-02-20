@@ -5,7 +5,7 @@
  * Layer order (bottom to top):
  *   1. Main circle with radial gradient (#F5D780 → #A07C28)
  *   2. Outer rim stroke (#8B6914)
- *   3. Reeded edge dashed circle (#9A7B2D)
+ *   3. Reeded edge — radial tick marks (#9A7B2D)
  *   4. Inner bevel circle — subtle step between ridges and coin face (#FFE8A0, 0.15 opacity)
  *   5. Embossed T with shadow
  *
@@ -14,7 +14,7 @@
 
 import React from 'react';
 import { View, Text, Platform } from 'react-native';
-import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
+import Svg, { Circle, Path, Defs, RadialGradient, Stop } from 'react-native-svg';
 
 const TroyCoinIcon = ({ size = 20 }) => {
   const half = size / 2;
@@ -23,16 +23,23 @@ const TroyCoinIcon = ({ size = 20 }) => {
   // Radii scaled relative to size
   const bodyR = half - rimWidth;         // gradient fill
   const rimR = half - rimWidth / 2;      // outer rim stroke
-  const reedR = half - rimWidth * 1.5;   // reeded edge just inside rim
+  const reedR = half - rimWidth * 1.5;   // center radius of reeded edge
   const bevelR = half - rimWidth * 2.5;  // inner bevel — step between ridges and coin face
+  const tickLen = rimWidth * 0.9;        // radial length of each ridge tick
 
-  // Compute dasharray so ridges tile perfectly around 360° with no gap at seam
-  const reedCircumference = 2 * Math.PI * reedR;
-  const dashUnit = 1.5;
-  // Round to nearest even multiple so pattern completes cleanly
-  const reedSegments = Math.round(reedCircumference / (dashUnit * 2)) * 2;
-  const reedDash = reedCircumference / reedSegments;
-  const reedDasharray = `${reedDash.toFixed(3)} ${reedDash.toFixed(3)}`;
+  // Build reeded edge as explicit radial tick marks — no seam issues
+  const tickCount = Math.max(24, Math.round(2 * Math.PI * reedR / 2));
+  let reedPath = '';
+  for (let i = 0; i < tickCount; i++) {
+    const angle = (i / tickCount) * 2 * Math.PI;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const x1 = half + (reedR - tickLen / 2) * cos;
+    const y1 = half + (reedR - tickLen / 2) * sin;
+    const x2 = half + (reedR + tickLen / 2) * cos;
+    const y2 = half + (reedR + tickLen / 2) * sin;
+    reedPath += `M${x1.toFixed(2)},${y1.toFixed(2)}L${x2.toFixed(2)},${y2.toFixed(2)}`;
+  }
 
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
@@ -47,8 +54,8 @@ const TroyCoinIcon = ({ size = 20 }) => {
         <Circle cx={half} cy={half} r={bodyR} fill={`url(#troyCoinGrad_${size})`} />
         {/* 2. Outer rim stroke */}
         <Circle cx={half} cy={half} r={rimR} fill="none" stroke="#8B6914" strokeWidth={rimWidth} />
-        {/* 3. Reeded edge — dashed circle, dasharray tuned to tile seamlessly around 360° */}
-        <Circle cx={half} cy={half} r={reedR} fill="none" stroke="#9A7B2D" strokeWidth={rimWidth} strokeDasharray={reedDasharray} />
+        {/* 3. Reeded edge — individual radial ticks, guaranteed full 360° coverage */}
+        <Path d={reedPath} stroke="#9A7B2D" strokeWidth={0.8} strokeLinecap="butt" />
         {/* 4. Inner bevel — thin subtle circle separating ridges from coin face */}
         <Circle cx={half} cy={half} r={bevelR} fill="none" stroke="#FFE8A0" strokeWidth={0.5} opacity={0.15} />
       </Svg>
