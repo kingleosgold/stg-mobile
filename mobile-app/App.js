@@ -1063,8 +1063,22 @@ const ScrubChart = ({ data, color, fillColor, width, height, range, decimalPlace
   const chartW = width - yLabelW - rightPad;
   const chartH = height - xLabelH - topPad;
 
-  // Filter out invalid data points (null, undefined, zero, NaN)
+  // Filter out invalid data points and ensure ascending date order
   data = data.filter(d => d.value != null && !isNaN(d.value) && d.value > 0);
+  data.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+
+  // Filter out spike artifacts: drop points where value deviates >35% from neighbors' average
+  // (real prices don't jump 35% between 15-min data points; sustained jumps are preserved)
+  if (data.length > 2) {
+    data = data.filter((pt, i) => {
+      if (i === 0 || i === data.length - 1) return true;
+      const prev = data[i - 1].value;
+      const next = data[i + 1].value;
+      const avgNeighbor = (prev + next) / 2;
+      if (avgNeighbor === 0) return true;
+      return Math.abs(pt.value - avgNeighbor) / avgNeighbor < 0.35;
+    });
+  }
   if (data.length < 2) return <View style={{ height }} />;
 
   // Data bounds
@@ -1108,9 +1122,10 @@ const ScrubChart = ({ data, color, fillColor, width, height, range, decimalPlace
     const dateStr = data[i].date;
     const d = dateStr.includes('T') ? new Date(dateStr) : new Date(dateStr + 'T12:00:00');
     let label;
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     if (isNaN(d.getTime())) label = '';
     else if (range === 'ALL' || range === '5Y') label = `${d.getFullYear()}`;
-    else if (range === '1Y') label = `${d.getMonth() + 1}/${String(d.getFullYear()).slice(-2)}`;
+    else if (range === '1Y' || range === '6M') label = `${monthNames[d.getMonth()]} '${String(d.getFullYear()).slice(-2)}`;
     else label = `${d.getMonth() + 1}/${d.getDate()}`;
     if (!seenLabels.has(label)) {
       seenLabels.add(label);
@@ -4697,36 +4712,46 @@ function AppContent() {
       const data = await response.json();
       if (__DEV__) console.log('🧠 [Portfolio Intel] Response:', JSON.stringify(data).slice(0, 300));
 
-      // v1 may return intelligence as nested object, direct text, or with portfolio key
-      let intel = data.intelligence || data;
-      if (intel) {
-        // Extract plain text from whatever shape we get
-        let text = null;
-        if (typeof intel === 'string') {
-          text = intel;
-        } else if (typeof intel.text === 'string') {
-          // text might be a JSON string — try to parse it
+      // Helper: extract the first string value from an object (any key)
+      const extractString = (obj) => {
+        if (!obj || typeof obj !== 'object') return null;
+        for (const val of Object.values(obj)) {
+          if (typeof val === 'string' && val.length > 20) return val;
+        }
+        return null;
+      };
+
+      // v1 may return intelligence in various shapes — extract plain text robustly
+      let text = null;
+      const intel = data.intelligence || data;
+
+      if (typeof intel === 'string' && intel.length > 20) {
+        text = intel;
+      } else if (intel && typeof intel === 'object') {
+        // Check common keys first
+        if (typeof intel.text === 'string' && intel.text.length > 20) {
+          // text might itself be a JSON string wrapping the real content
           try {
             const parsed = JSON.parse(intel.text);
-            text = parsed.portfolio || parsed.text || parsed.analysis || intel.text;
+            text = extractString(parsed) || intel.text;
           } catch {
             text = intel.text;
           }
-        } else if (typeof intel.portfolio === 'string') {
-          text = intel.portfolio;
+        } else if (typeof intel.text === 'object' && intel.text) {
+          text = extractString(intel.text);
         }
+        // Fallback: try extracting any long string value from the object
+        if (!text) text = extractString(intel);
+      }
 
-        if (text) {
-          setPortfolioIntel({
-            text,
-            costBasis: intel.costBasis || intel.cost_basis || null,
-            purchaseStats: intel.purchaseStats || intel.purchase_stats || null,
-            date: intel.date || new Date().toISOString().split('T')[0],
-            is_current: intel.is_current ?? true,
-          });
-        } else {
-          setPortfolioIntel(null);
-        }
+      if (text) {
+        setPortfolioIntel({
+          text,
+          costBasis: intel?.costBasis || intel?.cost_basis || null,
+          purchaseStats: intel?.purchaseStats || intel?.purchase_stats || null,
+          date: intel?.date || new Date().toISOString().split('T')[0],
+          is_current: intel?.is_current ?? true,
+        });
       } else {
         setPortfolioIntel(null);
       }
