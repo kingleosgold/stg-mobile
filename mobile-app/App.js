@@ -1043,7 +1043,7 @@ const ScrubSparkline = ({ dataPoints, timestamps, svgW, svgH, strokeColor, gradi
  * ScrubChart — larger chart with y-axis labels, x-axis date labels, and long-press scrubber.
  * Replaces react-native-chart-kit LineChart for Analytics spot price charts.
  */
-const ScrubChart = ({ data, color, fillColor, width, height, range, decimalPlaces = 0, chartId = 'default', yFormat, tooltipFormat }) => {
+const ScrubChart = ({ data, color, fillColor, width, height, range, decimalPlaces = 0, chartId = 'default', yFormat, tooltipFormat, secondaryData, secondaryColor }) => {
   const [scrubIndex, setScrubIndex] = useState(null);
   const scrubIndexRef = useRef(null);
   const containerRef = useRef(null);
@@ -1079,12 +1079,37 @@ const ScrubChart = ({ data, color, fillColor, width, height, range, decimalPlace
       return Math.abs(pt.value - avgNeighbor) / avgNeighbor < 0.35;
     });
   }
+
+  // Filter out stale data plateaus: when 3+ consecutive points have identical values,
+  // keep only the first and last (these represent missing data where last price was carried forward)
+  if (data.length > 3) {
+    const filtered = [];
+    let i = 0;
+    while (i < data.length) {
+      let j = i;
+      while (j < data.length && data[j].value === data[i].value) j++;
+      const runLen = j - i;
+      if (runLen >= 3) {
+        // Long plateau: keep first and last only
+        filtered.push(data[i]);
+        if (j - 1 > i) filtered.push(data[j - 1]);
+      } else {
+        // Short run: keep all points
+        for (let k = i; k < j; k++) filtered.push(data[k]);
+      }
+      i = j;
+    }
+    data = filtered;
+  }
+
   if (data.length < 2) return <View style={{ height }} />;
 
-  // Data bounds
+  // Data bounds (include secondary data in range if present)
   const values = data.map(d => d.value);
-  const minVal = Math.min(...values);
-  const maxVal = Math.max(...values);
+  const secValues = secondaryData ? secondaryData.filter(d => d.value != null && d.value > 0).map(d => d.value) : [];
+  const allValues = [...values, ...secValues];
+  const minVal = Math.min(...allValues);
+  const maxVal = Math.max(...allValues);
   const valRange = maxVal - minVal || 1;
   const niceMin = minVal - valRange * 0.02;
   const niceMax = maxVal + valRange * 0.02;
@@ -1101,6 +1126,19 @@ const ScrubChart = ({ data, color, fillColor, width, height, range, decimalPlace
     return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
   }).join(' ');
   const fillD = `${pathD} L${svgW},${topPad + svgH} L0,${topPad + svgH} Z`;
+
+  // Build secondary path (optional, e.g. eligible line on vault chart)
+  let secondaryPathD = null;
+  if (secondaryData && secondaryData.length >= 2) {
+    const secFiltered = secondaryData.filter(d => d.value != null && d.value > 0);
+    if (secFiltered.length >= 2) {
+      secondaryPathD = secFiltered.map((pt, i) => {
+        const x = (i / (secFiltered.length - 1)) * svgW;
+        const y = topPad + svgH * (1 - (pt.value - niceMin) / niceRange);
+        return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+      }).join(' ');
+    }
+  }
 
   // Y-axis labels (5 levels)
   const yLabelCount = 5;
@@ -1265,6 +1303,10 @@ const ScrubChart = ({ data, color, fillColor, width, height, range, decimalPlace
           </Defs>
           <Path d={fillD} fill={`url(#${gradientId})`} />
           <Path d={pathD} stroke={color} strokeWidth={2} fill="none" />
+          {/* Secondary line (e.g. eligible inventory) */}
+          {secondaryPathD && (
+            <Path d={secondaryPathD} stroke={secondaryColor || 'rgba(255,255,255,0.4)'} strokeWidth={1.5} fill="none" strokeDasharray="4,3" />
+          )}
           {/* Crosshair */}
           {scrubIndex !== null && (
             <>
@@ -4071,44 +4113,20 @@ function AppContent() {
     setSpotHistoryMetal(prev => ({ ...prev, [metal]: { ...prev[metal], range } }));
   };
 
-  /** Fetch sparkline data from v1/prices/history (sparkline-24h endpoint doesn't exist on v1) */
+  /** Fetch 24-hour sparkline data from /v1/sparkline-24h */
   const fetchSparklineData = async () => {
     if (sparklineFetchedRef.current) return;
     try {
-      const metals = ['gold', 'silver', 'platinum', 'palladium'];
-      const results = await Promise.all(
-        metals.map(async (metal) => {
-          const res = await fetch(`${API_BASE_URL}/v1/prices/history?range=1M&metal=${metal}`);
-          if (!res.ok) return [];
-          const data = await res.json();
-          return (data.prices || []).filter(p => p.price != null && p.price > 0);
-        })
-      );
-
-      // Take last 24 points from each (~24 hours of hourly data)
-      const SPARKLINE_POINTS = 24;
-      const sparklines = {};
-      const timestamps = [];
-      let hasData = false;
-
-      metals.forEach((metal, i) => {
-        const pts = results[i];
-        const tail = pts.slice(-SPARKLINE_POINTS);
-        sparklines[metal] = tail.map(p => p.price);
-        if (metal === 'gold' && tail.length >= 2) {
-          hasData = true;
-          // Extract timestamps from gold for reference
-          tail.forEach(p => timestamps.push(p.date));
-        }
-      });
-
-      if (hasData) {
+      const res = await fetch(`${API_BASE_URL}/v1/sparkline-24h`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.success && data.sparklines && data.sparklines.gold?.length >= 2) {
         setSparklineData({
-          gold: sparklines.gold,
-          silver: sparklines.silver,
-          platinum: sparklines.platinum,
-          palladium: sparklines.palladium,
-          timestamps,
+          gold: data.sparklines.gold,
+          silver: data.sparklines.silver,
+          platinum: data.sparklines.platinum,
+          palladium: data.sparklines.palladium,
+          timestamps: data.timestamps || [],
         });
         sparklineFetchedRef.current = true;
       }
@@ -4788,7 +4806,7 @@ function AppContent() {
         const briefs = raw.articles.map(a => ({
           id: a.id,
           date: a.published_at?.split('T')[0] || today,
-          category: a.metal || 'general',
+          category: a.category || 'general',
           title: a.title,
           summary: a.summary,
           source: a.source || '',
@@ -7087,9 +7105,22 @@ function AppContent() {
                           {chartDataPoints.length >= 2 ? (
                             effHasGoldAccess ? (
                               <View style={{ paddingVertical: 12, paddingHorizontal: 4 }}>
-                                <Text style={{ color: colors.muted, fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginLeft: 12 }}>Registered Inventory (30d)</Text>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8, marginLeft: 12 }}>
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                    <View style={{ width: 12, height: 2, backgroundColor: currentVaultColor }} />
+                                    <Text style={{ color: colors.muted, fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8 }}>Registered</Text>
+                                  </View>
+                                  {currentVaultData.some(d => d.eligible_oz > 0) && (
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                      <View style={{ width: 12, height: 2, backgroundColor: 'rgba(255,255,255,0.4)', borderStyle: 'dashed' }} />
+                                      <Text style={{ color: colors.muted, fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.8 }}>Eligible</Text>
+                                    </View>
+                                  )}
+                                </View>
                                 <ScrubChart
                                   data={currentVaultData.filter(d => d.registered_oz > 0).map(d => ({ date: d.date, value: d.registered_oz }))}
+                                  secondaryData={currentVaultData.some(d => d.eligible_oz > 0) ? currentVaultData.filter(d => d.eligible_oz > 0).map(d => ({ date: d.date, value: d.eligible_oz })) : undefined}
+                                  secondaryColor="rgba(255,255,255,0.35)"
                                   color={currentVaultColor}
                                   width={SCREEN_WIDTH - 56}
                                   height={160}
