@@ -3900,7 +3900,7 @@ function AppContent() {
         const histResults = await Promise.all(
           metals.map(async (metal) => {
             try {
-              const res = await fetch(`${API_BASE_URL}/v1/prices/history?range=ALL&metal=${metal}`);
+              const res = await fetch(`${API_BASE_URL}/v1/prices/history?range=ALL&metal=${metal}&maxPoints=200`);
               if (!res.ok) return [];
               const data = await res.json();
               return (data.prices || []).map(p => ({
@@ -4089,7 +4089,7 @@ function AppContent() {
 
     try {
       const response = await fetch(
-        `${API_BASE_URL}/v1/prices/history?range=${range}&metal=${metal}`
+        `${API_BASE_URL}/v1/prices/history?range=${range}&metal=${metal}&maxPoints=200`
       );
       const result = await response.json();
 
@@ -4858,7 +4858,7 @@ function AppContent() {
       for (let i = 0; i < metals.length; i++) {
         const latest = latestResults[i];
         const histRaw = historyResults[i];
-        const historyArr = (histRaw?.history || []).map(h => ({
+        const historyArr = (histRaw?.data?.[metals[i]] || histRaw?.history || []).map(h => ({
           date: h.date,
           registered_oz: h.registered_oz || 0,
           eligible_oz: h.eligible_oz || 0,
