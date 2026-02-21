@@ -5195,27 +5195,59 @@ function AppContent() {
 
     // Read file as base64
     const fileInfo = await FileSystem.getInfoAsync(asset.uri, { size: true });
+    const fileSizeKB = fileInfo.size ? (fileInfo.size / 1024).toFixed(0) : '?';
+    const fileSizeMB = fileInfo.size ? (fileInfo.size / (1024 * 1024)).toFixed(1) : '?';
+
     const fullBase64 = await FileSystem.readAsStringAsync(asset.uri, {
       encoding: FileSystem.EncodingType.Base64
     });
 
-    if (__DEV__) console.log(`   File size: ${fileInfo.size ? (fileInfo.size / 1024).toFixed(2) + ' KB' : 'unknown'}`);
+    if (__DEV__) console.log(`   File size: ${fileSizeKB} KB`);
     if (__DEV__) console.log(`   Base64 length: ${fullBase64.length} characters`);
 
     const mimeType = asset.mimeType || asset.type || 'image/jpeg';
+    const payloadSizeMB = (JSON.stringify({ image: fullBase64, mimeType, originalSize: fileInfo.size }).length / (1024 * 1024)).toFixed(1);
 
-    const response = await fetch(`${API_BASE_URL}/v1/scan-receipt`, {
-      method: 'POST',
-      body: JSON.stringify({
-        image: fullBase64,
-        mimeType: mimeType,
-        originalSize: fileInfo.size
-      }),
-      headers: { 'Content-Type': 'application/json' },
-    });
+    if (__DEV__) console.log(`   Payload size: ~${payloadSizeMB} MB`);
 
-    const data = await response.json();
-    return data;
+    // Fetch with 60-second timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/v1/scan-receipt`, {
+        method: 'POST',
+        body: JSON.stringify({
+          image: fullBase64,
+          mimeType: mimeType,
+          originalSize: fileInfo.size
+        }),
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorBody = await response.text().catch(() => '(could not read body)');
+        const errMsg = `Server returned ${response.status}: ${errorBody.substring(0, 200)}`;
+        console.error(`❌ Scan API error: ${errMsg}`);
+        throw new Error(errMsg);
+      }
+
+      const raw = await response.json();
+      // Normalize: stg-api nests results under `data`, old Railway backend was flat
+      if (raw.data && typeof raw.data === 'object') {
+        return { success: raw.success, ...raw.data };
+      }
+      return raw;
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      if (fetchError.name === 'AbortError') {
+        throw new Error(`Scan timed out after 60s (image ${fileSizeMB} MB, payload ~${payloadSizeMB} MB)`);
+      }
+      throw fetchError;
+    }
   };
 
   // Perform the actual scan after tips
@@ -5231,7 +5263,7 @@ function AppContent() {
         Alert.alert('Permission Required', 'Please allow access to your camera to take photos of receipts.');
         return;
       }
-      result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1.0 });
+      result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.7 });
     } else {
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permissionResult.granted) {
@@ -5241,7 +5273,7 @@ function AppContent() {
       // Allow multiple selection for gallery (up to 5 images)
       result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        quality: 1.0,
+        quality: 0.7,
         allowsMultipleSelection: true,
         selectionLimit: 5
       });
@@ -5280,12 +5312,20 @@ function AppContent() {
             if (!purchaseDate && data.purchaseDate) purchaseDate = parseDate(data.purchaseDate);
             if (!purchaseTime && data.purchaseTime) purchaseTime = data.purchaseTime;
             successCount++;
-            if (__DEV__) console.log(`✅ Image ${i + 1}: Found ${data.items.length} items`);
+            console.log(`✅ Image ${i + 1}: Found ${data.items.length} items`);
           } else {
-            if (__DEV__) console.log(`⚠️ Image ${i + 1}: No items found`);
+            console.log(`⚠️ Image ${i + 1}: No items found. Response:`, JSON.stringify(data).substring(0, 300));
           }
         } catch (imgError) {
-          if (__DEV__) console.error(`❌ Image ${i + 1} failed:`, imgError.message);
+          console.error(`❌ Image ${i + 1} failed:`, imgError.message);
+          // Surface error visibly in TestFlight
+          if (totalImages === 1) {
+            // Single image — show error immediately (outer catch won't help since we swallowed it)
+            setScanStatus('error');
+            setScanMessage(`Scan failed: ${imgError.message.substring(0, 100)}`);
+            setTimeout(() => { setScanStatus(null); setScanMessage(''); }, 8000);
+            return;
+          }
         }
       }
 
@@ -5419,16 +5459,14 @@ function AppContent() {
 
         if (__DEV__) console.log(`✅ Processed ${processedItems.length} items for preview`);
       } else {
-        if (__DEV__) console.log('⚠️ Server returned success=false or no items found');
+        console.log('⚠️ Server returned success=false or no items found');
         setScanStatus('error');
         setScanMessage("Couldn't read receipt. This scan didn't count against your limit.");
       }
     } catch (error) {
-      if (__DEV__) console.error('❌ Scan receipt error:', error);
-      if (__DEV__) console.error('Error message:', error.message);
-      if (__DEV__) console.error('Error stack:', error.stack);
+      console.error('❌ Scan receipt error:', error.message);
       setScanStatus('error');
-      setScanMessage("Scan failed. This didn't count against your limit.");
+      setScanMessage(`Scan failed: ${error.message.substring(0, 120)}`);
     }
 
     setTimeout(() => { setScanStatus(null); setScanMessage(''); }, 5000);
