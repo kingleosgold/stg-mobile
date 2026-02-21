@@ -156,7 +156,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       // Get the redirect URL
       const redirectUrl = AuthSession.makeRedirectUri({
-        scheme: 'com.stacktrackerpro.app',
+        scheme: 'stacktrackergold',
         path: 'auth/callback',
       });
 
@@ -306,7 +306,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       // Get the redirect URL
       const redirectUrl = AuthSession.makeRedirectUri({
-        scheme: 'com.stacktrackerpro.app',
+        scheme: 'stacktrackergold',
         path: 'auth/callback',
       });
 

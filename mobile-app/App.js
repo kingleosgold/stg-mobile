@@ -1522,7 +1522,7 @@ function AppContent() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [showBenefitsScreen, setShowBenefitsScreen] = useState(false);
-  const [settingsSubPage, setSettingsSubPage] = useState(null); // null, 'notifications', 'appearance', 'display', 'exportBackup'
+  const [settingsSubPage, setSettingsSubPage] = useState(null); // null, 'notifications', 'appearance', 'display', 'exportBackup', 'advanced'
 
   // Sort State
   const [sortBy, setSortBy] = useState('date-newest'); // date-newest, date-oldest, value-high, value-low, metal, name
@@ -8980,6 +8980,49 @@ function AppContent() {
             );
           }
 
+          if (settingsSubPage === 'advanced') {
+            return (
+              <View style={pageStyle}>
+                <SubPageHeader title="Advanced" />
+                <Text style={{ color: colors.text, fontSize: 28, fontWeight: '700', marginLeft: 16, marginBottom: 8 }}>Advanced</Text>
+
+                {supabaseUser && (
+                  <>
+                    <SectionHeader title="Support" />
+                    <View style={{ borderRadius: 10, overflow: 'hidden' }}>
+                      <TouchableOpacity
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          backgroundColor: groupBg,
+                          paddingVertical: 12,
+                          paddingHorizontal: 16,
+                          minHeight: 44,
+                          borderRadius: 10,
+                        }}
+                        onPress={() => {
+                          Clipboard.setString(supabaseUser.id);
+                          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                          Alert.alert('Copied', 'Support ID copied to clipboard');
+                        }}
+                      >
+                        <View style={{ flex: 1, marginRight: 12 }}>
+                          <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>Support ID</Text>
+                          <Text style={{ color: colors.muted, fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', marginTop: 4 }} numberOfLines={1}>{supabaseUser.id}</Text>
+                        </View>
+                        <Text style={{ color: '#007AFF', fontSize: scaledFonts.small }}>Copy</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <SectionFooter text="Share this ID with support when requesting help." />
+                  </>
+                )}
+
+                <View style={{ height: 50 }} />
+              </View>
+            );
+          }
+
           // ===== MAIN SETTINGS PAGE =====
           return (
             <View style={pageStyle}>
@@ -9108,6 +9151,13 @@ function AppContent() {
                   label="Export & Backup"
                   onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSettingsSubPage('exportBackup'); scrollRef.current?.scrollTo({ y: 0, animated: false }); }}
                   isFirst={true}
+                  isLast={false}
+                />
+                <RowSeparator />
+                <SettingsRow
+                  label="Advanced"
+                  onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSettingsSubPage('advanced'); scrollRef.current?.scrollTo({ y: 0, animated: false }); }}
+                  isFirst={false}
                   isLast={true}
                 />
               </View>
