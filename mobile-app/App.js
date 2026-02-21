@@ -965,10 +965,7 @@ const ScrubSparkline = ({ dataPoints, timestamps, svgW, svgH, strokeColor, gradi
 
   const min = Math.min(...dataPoints);
   const max = Math.max(...dataPoints);
-  // Enforce minimum Y-axis range of 0.5% of mid-value to prevent auto-scaling
-  // from amplifying micro-noise (e.g., $0.04 variation on $2935 gold during closed markets)
-  const mid = (max + min) / 2;
-  const range = Math.max(max - min, mid * 0.005) || 1;
+  const range = max - min || 1;
 
   // Build points array, then use monotone interpolation for smooth curves
   const pts = dataPoints.map((v, i) => ({
@@ -6735,28 +6732,7 @@ function AppContent() {
           const effTotalMeltValue = demoData ? demoData.totalMeltValue : totalMeltValue;
           const effMarketsClosed = demoData ? false : marketsClosed;
 
-          // During closed markets, smooth sparkline data with moving average to eliminate
-          // price_log micro-noise that auto-scaling would amplify into visual jaggedness
-          const effSparklineData = (() => {
-            const raw = demoData ? demoData.sparklineData : sparklineData;
-            if (!raw || !effMarketsClosed) return raw;
-            const smooth = (pts) => {
-              if (!pts || pts.length < 5) return pts;
-              return pts.map((_, i) => {
-                const start = Math.max(0, i - 2);
-                const end = Math.min(pts.length, i + 3);
-                const w = pts.slice(start, end);
-                return w.reduce((s, v) => s + v, 0) / w.length;
-              });
-            };
-            return {
-              ...raw,
-              gold: smooth(raw.gold),
-              silver: smooth(raw.silver),
-              platinum: smooth(raw.platinum),
-              palladium: smooth(raw.palladium),
-            };
-          })();
+          const effSparklineData = demoData ? demoData.sparklineData : sparklineData;
           const effHasGoldAccess = demoData ? true : hasGoldAccess;
 
           // Metal movers data (fixed grid: Ag top-left, Au top-right, Pt bottom-left, Pd bottom-right)
@@ -6962,7 +6938,7 @@ function AppContent() {
 
                 <Text style={{ color: colors.text, fontSize: scaledFonts.huge, fontWeight: '700', marginBottom: 2 }}>${formatCurrency(effTotalMeltValue, 0)}</Text>
 
-                {effSparklineData && effSparklineData.gold.length >= 2 && effTotalMeltValue > 0 && (() => {
+                {!effMarketsClosed && effSparklineData && effSparklineData.gold.length >= 2 && effTotalMeltValue > 0 && (() => {
                   const goldPts = effSparklineData.gold;
                   const silverPts = effSparklineData.silver;
                   const effGoldOzt = demoData ? 68.2 : totalGoldOzt;
@@ -6971,20 +6947,8 @@ function AppContent() {
                   const effPalladiumOzt = demoData ? 3.0 : totalPalladiumOzt;
                   const portfolioPoints = goldPts.map((g, i) => (effGoldOzt * g) + (effSilverOzt * (silverPts[i] || 0)) + (effPlatinumOzt * (effSparklineData.platinum[i] || 0)) + (effPalladiumOzt * (effSparklineData.palladium[i] || 0)));
 
-                  // If portfolio points show negligible variation during closed markets, show message instead of misleading flat line
-                  const maxP = Math.max(...portfolioPoints);
-                  const minP = Math.min(...portfolioPoints);
-                  const isFlat = maxP > 0 && (maxP - minP) / maxP < 0.001;
-                  if (isFlat && effMarketsClosed) {
-                    return (
-                      <Text style={{ color: '#71717a', fontSize: scaledFonts.tiny, marginBottom: 4, fontStyle: 'italic' }}>
-                        Chart updates when markets open
-                      </Text>
-                    );
-                  }
-
                   const isUp = displayDailyChangePct >= 0;
-                  const sparkColor = effMarketsClosed ? '#71717a' : (isUp ? '#4CAF50' : '#F44336');
+                  const sparkColor = isUp ? '#4CAF50' : '#F44336';
                   return (
                     <ScrubSparkline
                       dataPoints={portfolioPoints}
@@ -7056,7 +7020,7 @@ function AppContent() {
                           <Text style={{ color: m.color, fontSize: scaledFonts.small, fontWeight: '700' }}>{m.label}</Text>
                         </View>
 
-                        {points.length >= 2 && (
+                        {!effMarketsClosed && points.length >= 2 && (
                           <ScrubSparkline
                             dataPoints={points}
                             timestamps={effSparklineData?.timestamps}
