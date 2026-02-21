@@ -4323,9 +4323,15 @@ app.post('/api/advisor/chat', async (req, res) => {
       .filter(Boolean)
       .join(', ');
 
-    const systemPrompt = `You are the Stack Advisor, an AI assistant for precious metals investors inside the Stack Tracker Gold app. You have access to the user's portfolio and current market data.
+    const systemPrompt = `You are the Stack Advisor, an AI assistant for precious metals investors inside the Stack Tracker Gold app. You have access to the user's stack and current market data.
 
-PORTFOLIO SUMMARY:
+FORMATTING:
+- Use **bold** for emphasis on key numbers, dollar amounts, percentages, and metal names.
+- Use paragraph breaks for readability.
+- Do NOT use headers (#), bullet points, tables, code blocks, or any heavy formatting.
+- Keep it conversational prose with selective bold for important figures.
+
+STACK SUMMARY:
 Total Value: $${totalValue.toFixed(2)}
 Total Cost Basis: $${totalCost.toFixed(2)}
 Overall ${totalValue >= totalCost ? 'Gain' : 'Loss'}: ${totalValue >= totalCost ? '+' : ''}$${(totalValue - totalCost).toFixed(2)} (${totalCost > 0 ? (((totalValue - totalCost) / totalCost) * 100).toFixed(1) : '0'}%)
@@ -4344,7 +4350,7 @@ Gold/Silver Ratio: ${gsRatio}
 Today's Moves: ${changeText || 'No data available'}
 
 RULES:
-- Give specific, actionable advice based on their actual portfolio
+- Give specific, actionable advice based on their actual stack
 - Reference their holdings by name when relevant (e.g. "Your 1832 American Silver Eagles are up 64%...")
 - Use current spot prices in calculations
 - When discussing buying: mention current premiums and cost-per-oz context
@@ -4484,11 +4490,11 @@ async function generateDailyBrief(userId) {
     .join('\n');
 
   // Call Gemini 2.0 Flash (plain text, no Google Search tool)
-  const systemPrompt = `You are a senior precious metals market analyst writing a personalized daily briefing for an investor. Be concise, insightful, and specific to their portfolio. Write 3-4 short paragraphs. Use plain text, no markdown headers or bullet points. Address the reader as "you" and reference their actual holdings. Do NOT start with "Good morning" or any time-of-day greeting — jump straight into the market analysis.`;
+  const systemPrompt = `You are a senior precious metals market analyst writing a personalized daily briefing for an investor. Be concise, insightful, and specific to their stack. Write 3-4 short paragraphs. Use plain text, no markdown headers or bullet points. Address the reader as "you" and reference their actual holdings. Do NOT start with "Good morning" or any time-of-day greeting — jump straight into the market analysis.`;
 
   const userPrompt = `Write a daily market brief for today (${today}).
 
-PORTFOLIO:
+THE STACK:
 Total Value: $${totalValue.toFixed(2)} | Cost Basis: $${totalCost.toFixed(2)} | ${totalValue >= totalCost ? 'Gain' : 'Loss'}: $${Math.abs(totalValue - totalCost).toFixed(2)}
 Holdings: ${metalSummary || 'No holdings yet'}
 
@@ -4500,7 +4506,7 @@ Gold/Silver Ratio: ${prices.silver > 0 ? (prices.gold / prices.silver).toFixed(1
 TODAY'S NEWS:
 ${newsContext || 'No news available yet today.'}
 
-Write a personalized briefing covering: 1) How today's market moves affect their specific portfolio, 2) Key news and what it means for their metals, 3) One brief forward-looking thought. Keep it under 250 words.`;
+Write a personalized briefing covering: 1) How today's market moves affect their specific stack, 2) Key news and what it means for their metals, 3) One brief forward-looking thought. Keep it under 250 words.`;
 
   const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
   const geminiResp = await axios.post(geminiUrl, {
@@ -4578,12 +4584,12 @@ async function generatePortfolioIntelligence(userId) {
       const pct = totalValue > 0 ? ((val / totalValue) * 100).toFixed(1) : '0';
       const gain = val - v.cost;
       const gainPct = v.cost > 0 ? ((gain / v.cost) * 100).toFixed(1) : 'N/A';
-      return `${m.charAt(0).toUpperCase() + m.slice(1)}: ${v.oz.toFixed(2)} oz, $${val.toFixed(0)} (${pct}% of portfolio), cost basis $${v.cost.toFixed(0)}, ${gain >= 0 ? '+' : ''}$${gain.toFixed(0)} (${gainPct}%)`;
+      return `${m.charAt(0).toUpperCase() + m.slice(1)}: ${v.oz.toFixed(2)} oz, $${val.toFixed(0)} (${pct}% of stack), cost basis $${v.cost.toFixed(0)}, ${gain >= 0 ? '+' : ''}$${gain.toFixed(0)} (${gainPct}%)`;
     }).join('\n');
 
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 
-  const systemPrompt = `You are a senior precious metals portfolio strategist. Return a JSON object with exactly three keys: "portfolio", "costBasis", and "purchaseStats". Each value is a plain-text paragraph (2-3 sentences). Do NOT use markdown, headers, or bullet points. Do NOT start with any greeting. Address the reader as "you".
+  const systemPrompt = `You are a senior precious metals stack strategist. Return a JSON object with exactly three keys: "portfolio", "costBasis", and "purchaseStats". Each value is a plain-text paragraph (2-3 sentences). Do NOT use markdown, headers, or bullet points. Do NOT start with any greeting. Address the reader as "you".
 
 - "portfolio": Allocation and diversification analysis — concentration risk, metal mix assessment, strategic positioning.
 - "costBasis": Cost basis insights — unrealized gains/losses by metal, which positions are performing best/worst, average cost vs current spot.
@@ -4591,9 +4597,9 @@ async function generatePortfolioIntelligence(userId) {
 
 Return ONLY valid JSON, no other text.`;
 
-  const userPrompt = `Analyze this precious metals portfolio (${today}).
+  const userPrompt = `Analyze this precious metals stack (${today}).
 
-PORTFOLIO OVERVIEW:
+STACK OVERVIEW:
 Total Value: $${totalValue.toFixed(0)} | Total Cost: $${totalCost.toFixed(0)} | ${totalValue >= totalCost ? 'Gain' : 'Loss'}: $${Math.abs(totalValue - totalCost).toFixed(0)} (${totalCost > 0 ? ((totalValue - totalCost) / totalCost * 100).toFixed(1) : '0'}%)
 Items: ${userHoldings.length}
 
@@ -4809,7 +4815,7 @@ app.post('/api/daily-brief/generate', async (req, res) => {
             const firstSentence = result.brief.brief_text.split(/[.!]\s/)[0];
             const body = firstSentence.length > 100 ? firstSentence.slice(0, 97) + '...' : firstSentence;
             await sendPushNotification(tokenData.expo_push_token, {
-              title: '☀️ Your Daily Brief is Ready',
+              title: '☀️ Your daily brief from Troy is ready',
               body,
               data: { type: 'daily_brief' },
               sound: 'default',
@@ -5561,7 +5567,7 @@ fetchLiveSpotPrices().then(() => {
                       const firstSentence = result.brief.brief_text.split(/[.!]\s/)[0];
                       const body = firstSentence.length > 100 ? firstSentence.slice(0, 97) + '...' : firstSentence;
                       await sendPushNotification(tokenData.expo_push_token, {
-                        title: '\u2600\uFE0F Your Daily Brief is Ready',
+                        title: '\u2600\uFE0F Your daily brief from Troy is ready',
                         body,
                         data: { type: 'daily_brief' },
                         sound: 'default',
