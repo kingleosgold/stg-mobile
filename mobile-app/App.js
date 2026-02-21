@@ -4250,22 +4250,45 @@ function AppContent() {
     setSpotHistoryMetal(prev => ({ ...prev, [metal]: { ...prev[metal], range } }));
   };
 
-  /** Fetch 24-hour sparkline data from /v1/sparkline-24h */
+  /** Fetch 24-hour sparkline data from /v1/sparkline-24h
+   *  When markets are closed, serve cached Friday-close data so sparklines freeze in place.
+   *  When markets are open, fetch fresh data and cache it for the next close. */
   const fetchSparklineData = async () => {
     if (sparklineFetchedRef.current) return;
+
+    const closed = isMarketClosedClientSide();
+
+    // During closed markets, prefer cached Friday-close sparkline data
+    if (closed) {
+      try {
+        const cached = await AsyncStorage.getItem('sparkline_frozen');
+        if (cached) {
+          setSparklineData(JSON.parse(cached));
+          sparklineFetchedRef.current = true;
+          return;
+        }
+      } catch (e) {}
+    }
+
     try {
       const res = await fetch(`${API_BASE_URL}/v1/sparkline-24h`);
       if (!res.ok) return;
       const data = await res.json();
       if (data.success && data.sparklines && data.sparklines.gold?.length >= 2) {
-        setSparklineData({
+        const sparkData = {
           gold: data.sparklines.gold,
           silver: data.sparklines.silver,
           platinum: data.sparklines.platinum,
           palladium: data.sparklines.palladium,
           timestamps: data.timestamps || [],
-        });
+        };
+        setSparklineData(sparkData);
         sparklineFetchedRef.current = true;
+
+        // Cache when markets are open so weekends show Friday's close
+        if (!closed) {
+          AsyncStorage.setItem('sparkline_frozen', JSON.stringify(sparkData)).catch(() => {});
+        }
       }
     } catch (e) {
       if (__DEV__) console.log('Sparkline fetch error:', e.message);
@@ -6938,7 +6961,7 @@ function AppContent() {
 
                 <Text style={{ color: colors.text, fontSize: scaledFonts.huge, fontWeight: '700', marginBottom: 2 }}>${formatCurrency(effTotalMeltValue, 0)}</Text>
 
-                {!effMarketsClosed && effSparklineData && effSparklineData.gold.length >= 2 && effTotalMeltValue > 0 && (() => {
+                {effSparklineData && effSparklineData.gold.length >= 2 && effTotalMeltValue > 0 && (() => {
                   const goldPts = effSparklineData.gold;
                   const silverPts = effSparklineData.silver;
                   const effGoldOzt = demoData ? 68.2 : totalGoldOzt;
@@ -6947,7 +6970,10 @@ function AppContent() {
                   const effPalladiumOzt = demoData ? 3.0 : totalPalladiumOzt;
                   const portfolioPoints = goldPts.map((g, i) => (effGoldOzt * g) + (effSilverOzt * (silverPts[i] || 0)) + (effPlatinumOzt * (effSparklineData.platinum[i] || 0)) + (effPalladiumOzt * (effSparklineData.palladium[i] || 0)));
 
-                  const isUp = displayDailyChangePct >= 0;
+                  // When closed, derive color from frozen data trend; when open, use live daily change
+                  const isUp = effMarketsClosed
+                    ? portfolioPoints[portfolioPoints.length - 1] >= portfolioPoints[0]
+                    : displayDailyChangePct >= 0;
                   const sparkColor = isUp ? '#4CAF50' : '#F44336';
                   return (
                     <ScrubSparkline
@@ -6992,8 +7018,11 @@ function AppContent() {
                   {metalMovers.map((m, idx) => {
                     const metalKey = m.label.toLowerCase();
                     const points = effSparklineData?.[metalKey] || [];
-                    const isUp = m.pct >= 0;
-                    const sparkColor = effMarketsClosed ? m.color : (isUp ? '#4CAF50' : '#F44336');
+                    // When closed, derive color from frozen data trend; when open, use live change %
+                    const isUp = effMarketsClosed
+                      ? (points.length >= 2 ? points[points.length - 1] >= points[0] : true)
+                      : m.pct >= 0;
+                    const sparkColor = isUp ? '#4CAF50' : '#F44336';
                     const isBiggestMover = m.symbol === biggestMoverSymbol && !effMarketsClosed && Math.abs(m.pct) > 0.1;
                     const glowColor = isBiggestMover ? (m.pct >= 0 ? '#4CAF50' : '#F44336') : 'transparent';
                     return (
@@ -7020,7 +7049,7 @@ function AppContent() {
                           <Text style={{ color: m.color, fontSize: scaledFonts.small, fontWeight: '700' }}>{m.label}</Text>
                         </View>
 
-                        {!effMarketsClosed && points.length >= 2 && (
+                        {points.length >= 2 && (
                           <ScrubSparkline
                             dataPoints={points}
                             timestamps={effSparklineData?.timestamps}
