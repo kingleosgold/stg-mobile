@@ -3309,7 +3309,7 @@ function AppContent() {
     { emoji: '🏦', title: 'COMEX Vault Watch', description: 'Track real-time COMEX warehouse inventory for gold, silver, platinum, and palladium. See when supply gets tight.' },
     { emoji: '', emojiComponent: <View style={{ marginBottom: 20 }}><TroyCoinIcon size={72} /></View>, title: 'Meet Troy', description: "Your personal stack analyst. Ask Troy anything about your portfolio — 'Should I buy more silver?' 'What's my break-even?' Tap the gold button on any screen." },
     { emoji: '🔴🟡⚪🟢', title: 'Platinum & Palladium', description: 'Now track all four precious metals. Your portfolio just got more powerful.' },
-    { emoji: '🧭', title: 'New Look, Same Power', description: "We've streamlined your navigation. Portfolio combines your dashboard and holdings in one place. Settings now lives in the tab bar. Everything you need, fewer taps." },
+    { emoji: '🧭', title: 'New Look, Same Power', description: "We've streamlined your navigation. Stack combines your dashboard and holdings in one place. Settings now lives in the tab bar. Everything you need, fewer taps." },
     { emoji: '', emojiComponent: <View style={{ marginBottom: 20 }}><GlobeIcon size={72} color="#D4A843" /></View>, title: 'Your Stack, Everywhere', description: 'Access your full portfolio on the web at stacktrackergold.com. Same data, same Troy, bigger screen.' },
     { emoji: '✅', title: "You're All Set!", description: 'Enjoy Stack Tracker Gold v2.0. Built for stackers, by stackers.', highlight: 'Stack on! 🪙' },
   ];
@@ -6454,7 +6454,7 @@ function AppContent() {
       { key: 'vaultWatch', label: 'Vault Watch' },
       { key: 'intelligenceFeed', label: 'Intelligence Feed' },
     ]},
-    { key: 'portfolio', label: 'Portfolio', items: [
+    { key: 'portfolio', label: 'Stack', items: [
       { key: 'portfolioSummary', label: 'Summary' },
       { key: 'holdings', label: 'Holdings' },
     ]},
@@ -9518,7 +9518,7 @@ function AppContent() {
       <View style={[styles.bottomTabs, { backgroundColor: isDarkMode ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.95)', borderTopColor: colors.border, paddingBottom: Math.max(insets.bottom, 10) }]}>
         {[
           { key: 'today', label: 'Today', Icon: TodayIcon },
-          { key: 'portfolio', label: 'Portfolio', Icon: HoldingsIcon },
+          { key: 'portfolio', label: 'Stack', Icon: HoldingsIcon },
           { key: 'analytics', label: 'Analytics', Icon: DashboardIcon },
           { key: 'tools', label: 'Tools', Icon: ToolsIcon },
           { key: 'settings', label: 'Settings', Icon: SettingsIcon },
@@ -10157,7 +10157,7 @@ function AppContent() {
         </View>
 
         <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
-          <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>Portfolio Tab</Text>
+          <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>Stack Tab</Text>
           <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>{'\u2022'} Add holdings manually with the "+" button</Text>
           <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>{'\u2022'} AI Receipt Scanner — Snap a photo to auto-extract purchase data</Text>
           <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>{'\u2022'} Swipe left on a holding to edit or delete</Text>
