@@ -6946,9 +6946,11 @@ function AppContent() {
                   const effPalladiumOzt = demoData ? 3.0 : totalPalladiumOzt;
                   const portfolioPoints = goldPts.map((g, i) => (effGoldOzt * g) + (effSilverOzt * (silverPts[i] || 0)) + (effPlatinumOzt * (effSparklineData.platinum[i] || 0)) + (effPalladiumOzt * (effSparklineData.palladium[i] || 0)));
 
-                  // If all portfolio points are identical (no real price movement yet), show message instead of flat line
-                  const allSame = portfolioPoints.every(p => Math.abs(p - portfolioPoints[0]) < 0.01);
-                  if (allSame && effMarketsClosed) {
+                  // If portfolio points show negligible variation during closed markets, show message instead of misleading flat line
+                  const maxP = Math.max(...portfolioPoints);
+                  const minP = Math.min(...portfolioPoints);
+                  const isFlat = maxP > 0 && (maxP - minP) / maxP < 0.001;
+                  if (isFlat && effMarketsClosed) {
                     return (
                       <Text style={{ color: '#71717a', fontSize: scaledFonts.tiny, marginBottom: 4, fontStyle: 'italic' }}>
                         Chart updates when markets open

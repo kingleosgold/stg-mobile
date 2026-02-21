@@ -21,6 +21,7 @@ import {
   ScrollView,
   Linking,
 } from 'react-native';
+import TroyCoinIcon from './TroyCoinIcon';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -36,16 +37,17 @@ const Tutorial = ({ visible, onComplete, slides: customSlides }) => {
       emoji: '🪙',
       title: 'Track Your Stack',
       description: 'Keep tabs on your precious metals stack. Track gold, silver, and everything in between with precision.',
-      highlight: 'Your data stays on YOUR device. 100% private.',
+      highlight: 'Your data is encrypted and synced securely. We never sell your data to third parties.',
     },
     {
       emoji: '📷',
       title: 'Scan Receipts with AI',
-      description: 'Just snap a photo of your receipt and let Claude AI extract all the details automatically.',
+      description: 'Just snap a photo of your receipt and let Troy extract all the details automatically.',
       highlight: 'No manual entry. No hassle.',
     },
     {
-      emoji: '👑',
+      emoji: '',
+      emojiComponent: <View style={{ marginBottom: 20 }}><TroyCoinIcon size={72} /></View>,
       title: 'Go Gold for More',
       description: 'Free tier: stack tracking, live prices, basic analytics. Gold tier: AI intelligence, Vault Watch, full analytics, and more.',
       highlight: 'Start stacking for free!',
