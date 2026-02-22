@@ -4250,45 +4250,22 @@ function AppContent() {
     setSpotHistoryMetal(prev => ({ ...prev, [metal]: { ...prev[metal], range } }));
   };
 
-  /** Fetch 24-hour sparkline data from /v1/sparkline-24h
-   *  When markets are closed, serve cached Friday-close data so sparklines freeze in place.
-   *  When markets are open, fetch fresh data and cache it for the next close. */
+  /** Fetch sparkline data — backend returns last 24 trading hours (weekend gaps filtered out) */
   const fetchSparklineData = async () => {
     if (sparklineFetchedRef.current) return;
-
-    const closed = isMarketClosedClientSide();
-
-    // During closed markets, prefer cached Friday-close sparkline data
-    if (closed) {
-      try {
-        const cached = await AsyncStorage.getItem('sparkline_frozen');
-        if (cached) {
-          setSparklineData(JSON.parse(cached));
-          sparklineFetchedRef.current = true;
-          return;
-        }
-      } catch (e) {}
-    }
-
     try {
       const res = await fetch(`${API_BASE_URL}/v1/sparkline-24h`);
       if (!res.ok) return;
       const data = await res.json();
       if (data.success && data.sparklines && data.sparklines.gold?.length >= 2) {
-        const sparkData = {
+        setSparklineData({
           gold: data.sparklines.gold,
           silver: data.sparklines.silver,
           platinum: data.sparklines.platinum,
           palladium: data.sparklines.palladium,
           timestamps: data.timestamps || [],
-        };
-        setSparklineData(sparkData);
+        });
         sparklineFetchedRef.current = true;
-
-        // Cache when markets are open so weekends show Friday's close
-        if (!closed) {
-          AsyncStorage.setItem('sparkline_frozen', JSON.stringify(sparkData)).catch(() => {});
-        }
       }
     } catch (e) {
       if (__DEV__) console.log('Sparkline fetch error:', e.message);

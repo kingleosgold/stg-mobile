@@ -526,8 +526,10 @@ app.get('/api/widget-data', async (req, res) => {
 });
 
 /**
- * 24-hour sparkline data for Today tab (Portfolio Pulse + Metal Movers)
- * Returns hourly price points from the last 24 hours
+ * 24-hour TRADING sparkline data for Today tab (Portfolio Pulse + Metal Movers)
+ * Returns hourly price points from the last 24 trading hours, filtering out
+ * market-closed windows (Fri 5PM ET → Sun 6PM ET). Looks back up to 96 clock
+ * hours to bridge weekend gaps.
  */
 app.get('/api/sparkline-24h', async (req, res) => {
   try {
@@ -538,20 +540,39 @@ app.get('/api/sparkline-24h', async (req, res) => {
     if (isSupabaseAvailable()) {
       try {
         const supabaseClient = getSupabase();
-        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        // Look back 96 hours to guarantee 24 trading hours across weekend gaps
+        const lookbackDate = new Date(Date.now() - 96 * 60 * 60 * 1000).toISOString();
         const { data: logs, error: logError } = await supabaseClient
           .from('price_log')
           .select('timestamp, gold_price, silver_price, platinum_price, palladium_price')
-          .gte('timestamp', twentyFourHoursAgo)
+          .gte('timestamp', lookbackDate)
           .order('timestamp', { ascending: true });
 
         if (logError) {
           console.log(`[Sparkline-24h] price_log query error:`, logError.message);
         }
         if (logs && logs.length > 0) {
+          // Filter out rows during market closed windows (Fri 5PM ET → Sun 6PM ET)
+          const tradingLogs = logs.filter(row => {
+            try {
+              const d = new Date(row.timestamp);
+              const parts = {};
+              for (const p of new Intl.DateTimeFormat('en-US', {
+                timeZone: 'America/New_York', hour12: false, weekday: 'short', hour: 'numeric',
+              }).formatToParts(d)) { parts[p.type] = p.value; }
+              const dayMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+              const day = dayMap[parts.weekday];
+              const hour = parseInt(parts.hour, 10);
+              if (day === 6) return false;              // Saturday
+              if (day === 0 && hour < 18) return false; // Sunday before 6PM ET
+              if (day === 5 && hour >= 17) return false; // Friday 5PM ET+
+              return true;
+            } catch (e) { return true; }
+          });
+
           // Downsample to hourly: keep last entry per hour
           const byHour = {};
-          for (const row of logs) {
+          for (const row of tradingLogs) {
             const hourKey = row.timestamp.substring(0, 13); // YYYY-MM-DDTHH
             byHour[hourKey] = row;
           }
