@@ -1592,6 +1592,9 @@ function AppContent() {
   const [sparklineData, setSparklineData] = useState(null); // { gold: [N numbers], silver: [...], timestamps: [...] }
   const sparklineFetchedRef = useRef(false);
 
+  // Post-sign-in loading gate — show loading screen until Supabase sync completes after sign-in
+  const [needsPostSignInSync, setNeedsPostSignInSync] = useState(false);
+
   // Share My Stack
   const shareViewRef = useRef(null);
   const [isGeneratingShare, setIsGeneratingShare] = useState(false);
@@ -1805,7 +1808,10 @@ function AppContent() {
   };
 
   // Reset all in-memory state to defaults (used by both clearAllData and performSignOut)
-  const resetAllState = () => {
+  // fullReset=true (default): resets everything including app preferences (for clearAllData)
+  // fullReset=false: preserves theme, large text, tutorial flags, and keeps dataLoaded true (for sign-out)
+  const resetAllState = (fullReset = true) => {
+    // Always reset user-specific data
     setSilverItems([]);
     setGoldItems([]);
     setPlatinumItems([]);
@@ -1818,16 +1824,11 @@ function AppContent() {
     setPriceTimestamp(null);
     setSpotPricesLive(false);
     setSpotChange({ gold: { amount: null, percent: null, prevClose: null }, silver: { amount: null, percent: null, prevClose: null }, platinum: { amount: null, percent: null, prevClose: null }, palladium: { amount: null, percent: null, prevClose: null } });
-    setSpotChangeDisplayMode('percent');
     setMidnightSnapshot(null);
-    setThemePreference('dark');
-    setLargeText(false);
-    setHideWidgetValues(false);
     setAdvisorMessages([]);
     setAdvisorInput('');
     setAdvisorQuestionsToday(0);
     setShowTroyChat(false);
-    setShowTroyFab(true);
     setDailyBrief(null);
     setBriefExpanded(false);
     setPortfolioIntel(null);
@@ -1852,8 +1853,17 @@ function AppContent() {
     setShowAccountScreen(false);
     setShowBenefitsScreen(false);
     setDrawerOpen(false);
-    setDataLoaded(false);
     setHasSyncedOnce(false);
+
+    // Only reset app-level preferences on full reset (clearAllData from settings)
+    if (fullReset) {
+      setThemePreference('dark');
+      setLargeText(false);
+      setHideWidgetValues(false);
+      setSpotChangeDisplayMode('percent');
+      setShowTroyFab(true);
+      setDataLoaded(false);
+    }
   };
 
   // Clear all app data and reset to fresh state (user-initiated from Settings)
@@ -1869,17 +1879,32 @@ function AppContent() {
     }
   };
 
-  // Sign out: clear all data, logout services, navigate to auth screen
+  // Sign out: clear user data, logout services, navigate to auth screen
+  // Preserves app preferences (theme, large text, tutorial flags, etc.)
   const performSignOut = async () => {
     try {
+      const userId = supabaseUser?.id;
       // 1. Logout from RevenueCat
       try { await logoutRevenueCat(); } catch (e) { if (__DEV__) console.error('RevenueCat logout failed:', e); }
       // 2. Sign out from Supabase
       await supabaseSignOut();
-      // 3. Clear all persisted data
-      await AsyncStorage.clear();
-      // 4. Reset all in-memory state
-      resetAllState();
+      // 3. Selective clear — remove user data, preserve app preferences
+      const userKeys = [
+        'stack_silver', 'stack_gold', 'stack_platinum', 'stack_palladium',
+        'stack_midnight_snapshot',
+        'stack_advisor_count',
+        'stack_price_alerts',
+        'stack_icloud_sync_enabled', 'stack_last_sync_time', 'stack_last_modified',
+        'stack_silver_milestone', 'stack_gold_milestone',
+        'stack_last_silver_milestone_reached', 'stack_last_gold_milestone_reached',
+        'stack_review_prompts', 'stack_first_open_date',
+        'lastSnapshotDate',
+        'stack_guest_mode',
+      ];
+      if (userId) userKeys.push(`stack_synced_${userId}`);
+      await AsyncStorage.multiRemove(userKeys);
+      // 4. Reset user state only (preserve theme, tutorial flags, large text, etc.)
+      resetAllState(false);
       // 5. Navigate to auth screen (not guest mode)
       setGuestMode(false);
     } catch (error) {
@@ -2749,7 +2774,9 @@ function AppContent() {
     // 3. Haven't synced yet this session
     if (supabaseUser && dataLoaded && !hasSyncedOnce && !isSyncing) {
       if (__DEV__) console.log('Auto-sync triggered: user signed in, data loaded');
-      syncHoldingsWithSupabase();
+      syncHoldingsWithSupabase().finally(() => {
+        setNeedsPostSignInSync(false);
+      });
     }
   }, [supabaseUser, dataLoaded, hasSyncedOnce, isSyncing]);
 
@@ -6433,6 +6460,7 @@ function AppContent() {
   const handleAuthSuccess = () => {
     setShowAuthScreen(false);
     disableGuestMode();
+    setNeedsPostSignInSync(true); // Show loading until sync completes
   };
 
   // Show reset password screen when opened via deep link
@@ -6445,7 +6473,7 @@ function AppContent() {
     );
   }
 
-  if (isLoading || authLoading || guestMode === null) {
+  if (isLoading || authLoading || guestMode === null || needsPostSignInSync) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator size="large" color={colors.silver} />
