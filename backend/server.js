@@ -188,7 +188,7 @@ async function fetchLiveSpotPrices() {
 
     // Save as Friday close if it's Friday afternoon (after 4pm ET)
     // This ensures we have frozen values for the weekend
-    const etOptions = { timeZone: 'America/New_York', hour12: false };
+    const etOptions = { timeZone: 'America/New_York', hourCycle: 'h23' };
     const etString = now.toLocaleString('en-US', etOptions);
     const etDate = new Date(etString);
     if (etDate.getDay() === 5 && etDate.getHours() >= 16) {
@@ -558,7 +558,7 @@ app.get('/api/sparkline-24h', async (req, res) => {
               const d = new Date(row.timestamp);
               const parts = {};
               for (const p of new Intl.DateTimeFormat('en-US', {
-                timeZone: 'America/New_York', hour12: false, weekday: 'short', hour: 'numeric',
+                timeZone: 'America/New_York', hourCycle: 'h23', weekday: 'short', hour: 'numeric',
               }).formatToParts(d)) { parts[p.type] = p.value; }
               const dayMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
               const day = dayMap[parts.weekday];

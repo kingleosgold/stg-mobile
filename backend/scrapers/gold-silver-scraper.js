@@ -22,10 +22,13 @@ const { findClosestLoggedPrice } = require('../services/priceLogger');
 function areMarketsClosed() {
   // Get current time in Eastern Time using Intl.DateTimeFormat.formatToParts
   // This is reliable on all servers regardless of system timezone
+  // IMPORTANT: Use hourCycle: 'h23' (not hour12: false) to guarantee 0-23 range.
+  // hour12: false can produce "24" for midnight on some Node.js/ICU versions,
+  // causing Saturday 12:xx AM to parse as Friday hour 24 and slip through.
   const now = new Date();
   const fmt = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
-    hour12: false,
+    hourCycle: 'h23',
     weekday: 'short',
     hour: 'numeric',
     minute: 'numeric',
