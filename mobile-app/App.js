@@ -9833,6 +9833,9 @@ function AppContent() {
                   textAlignVertical="top"
                   returnKeyType="default"
                   blurOnSubmit={false}
+                  autoCorrect={true}
+                  spellCheck={true}
+                  autoCapitalize="sentences"
                 />
                 <TouchableOpacity
                   onPress={() => sendTroyMessage()}
