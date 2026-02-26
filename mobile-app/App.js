@@ -9,7 +9,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput,
   Alert, Modal, Platform, SafeAreaView, StatusBar, ActivityIndicator,
   Keyboard, TouchableWithoutFeedback, KeyboardAvoidingView, Dimensions, AppState, FlatList, Clipboard, Linking,
-  useColorScheme, RefreshControl, Switch, Image, Animated, LayoutAnimation,
+  useColorScheme, RefreshControl, Switch, Image, Animated, LayoutAnimation, PanResponder,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import ErrorBoundary from './ErrorBoundary';
@@ -77,6 +77,29 @@ const ICLOUD_HOLDINGS_KEY = 'stack_tracker_holdings.json';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const API_BASE_URL = Constants.expoConfig?.extra?.apiUrl || 'https://api.stacktrackergold.com';
 const appVersion = Constants.expoConfig?.version || Constants.manifest?.version || '0.0.0';
+
+const useSwipeBack = (onClose) => {
+  const startX = useRef(0);
+  return PanResponder.create({
+    onStartShouldSetPanResponder: () => false,
+    onMoveShouldSetPanResponder: (evt, gestureState) => {
+      return startX.current < 40 && gestureState.dx > 15 && Math.abs(gestureState.dy) < 30;
+    },
+    onMoveShouldSetPanResponderCapture: (evt, gestureState) => {
+      return startX.current < 40 && gestureState.dx > 15 && Math.abs(gestureState.dy) < 30;
+    },
+    onPanResponderGrant: () => {},
+    onPanResponderMove: () => {},
+    onPanResponderRelease: (evt, gestureState) => {
+      if (gestureState.dx > 80) onClose();
+    },
+    onPanResponderTerminate: () => {},
+    onStartShouldSetPanResponderCapture: (evt) => {
+      startX.current = evt.nativeEvent.pageX;
+      return false;
+    },
+  });
+};
 
 const isVersionBelow = (current, minimum) => {
   const cur = current.split('.').map(Number);
@@ -1523,6 +1546,21 @@ function AppContent() {
   const fabScale = useRef(new Animated.Value(1)).current;
   const fabGlow = useRef(new Animated.Value(0.4)).current;
   const fabTapped = useRef(false);
+
+  // Swipe-back gesture responders for full-screen pages
+  const troySwipe = useRef(useSwipeBack(() => { setShowTroyChat(false); setTroySidebarVisible(false); })).current;
+  const accountSwipe = useRef(useSwipeBack(() => setShowAccountScreen(false))).current;
+  const benefitsSwipe = useRef(useSwipeBack(() => setShowBenefitsScreen(false))).current;
+  const addModalSwipe = useRef(useSwipeBack(() => { resetForm(); setShowAddModal(false); })).current;
+  const speculationSwipe = useRef(useSwipeBack(() => setShowSpeculationModal(false))).current;
+  const junkCalcSwipe = useRef(useSwipeBack(() => setShowJunkCalcModal(false))).current;
+  const premiumSwipe = useRef(useSwipeBack(() => setShowPremiumAnalysisModal(false))).current;
+  const privacySwipe = useRef(useSwipeBack(() => setShowPrivacyModal(false))).current;
+  const helpSwipe = useRef(useSwipeBack(() => setShowHelpModal(false))).current;
+  const alertSwipe = useRef(useSwipeBack(() => { setShowAddAlertModal(false); setNewAlert({ metal: 'silver', targetPrice: '', direction: 'above' }); })).current;
+  const milestoneSwipe = useRef(useSwipeBack(() => { setShowMilestoneModal(false); setTempSilverMilestone(''); setTempGoldMilestone(''); })).current;
+  const detailSwipe = useRef(useSwipeBack(() => { setShowDetailView(false); setDetailItem(null); setDetailMetal(null); })).current;
+
   const [showImportPreview, setShowImportPreview] = useState(false);
   const [importData, setImportData] = useState([]);
   const [showDealerSelector, setShowDealerSelector] = useState(false);
@@ -9682,7 +9720,7 @@ function AppContent() {
 
       {/* Troy Chat — Full Screen */}
       {showTroyChat && (
-        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 9999 }}>
+        <View {...troySwipe.panHandlers} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 9999 }}>
           <SafeAreaView style={{ flex: 1, backgroundColor: '#000' }}>
 
             {/* Header */}
@@ -9960,30 +9998,32 @@ function AppContent() {
         ))}
       </View>
 
-      {/* ACCOUNT SCREEN MODAL */}
-      <Modal visible={showAccountScreen} animationType="slide" presentationStyle="pageSheet">
-        <AccountScreen
-          onClose={() => setShowAccountScreen(false)}
-          onSignOut={() => performSignOut()}
-          hasGold={hasGold}
-          hasLifetime={hasLifetimeAccess}
-          colors={colors}
-        />
-      </Modal>
+      {/* ACCOUNT SCREEN */}
+      {showAccountScreen && (
+        <View {...accountSwipe.panHandlers} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 9998 }}>
+          <AccountScreen
+            onClose={() => setShowAccountScreen(false)}
+            onSignOut={() => performSignOut()}
+            hasGold={hasGold}
+            hasLifetime={hasLifetimeAccess}
+            colors={colors}
+          />
+        </View>
+      )}
 
       {/* Benefits Screen */}
-      <Modal visible={showBenefitsScreen} animationType="slide" presentationStyle="pageSheet">
-        <SafeAreaView style={{ flex: 1, backgroundColor: isDarkMode ? '#000000' : '#f2f2f7' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: isDarkMode ? '#38383a' : '#c6c6c8' }}>
-            <TouchableOpacity onPress={() => setShowBenefitsScreen(false)}>
-              <Text style={{ color: '#007AFF', fontSize: scaledFonts.normal }}>Done</Text>
-            </TouchableOpacity>
-            <Text style={{ color: colors.text, fontSize: scaledFonts.medium, fontWeight: '700' }}>
-              {hasLifetimeAccess ? 'Lifetime Benefits' : hasGold ? 'Gold Benefits' : 'Membership'}
-            </Text>
-            <View style={{ width: 40 }} />
-          </View>
-          <ScrollView style={{ flex: 1, padding: 16 }}>
+      {showBenefitsScreen && (
+        <View {...benefitsSwipe.panHandlers} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 9998 }}>
+          <SafeAreaView style={{ flex: 1, backgroundColor: '#000' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' }}>
+              <TouchableOpacity onPress={() => setShowBenefitsScreen(false)} style={{ marginRight: 12 }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ color: '#C9A84C', fontSize: 28, fontWeight: '300' }}>{'\u2039'}</Text>
+              </TouchableOpacity>
+              <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700', flex: 1 }}>
+                {hasLifetimeAccess ? 'Lifetime Benefits' : hasGold ? 'Gold Benefits' : 'Membership'}
+              </Text>
+            </View>
+            <ScrollView style={{ flex: 1, padding: 16 }}>
             {/* Current plan header */}
             <View style={{ alignItems: 'center', paddingVertical: 24 }}>
               <Text style={{ fontSize: 48, marginBottom: 12 }}>{hasLifetimeAccess ? '💎' : hasGold ? '👑' : '🥈'}</Text>
@@ -10074,28 +10114,27 @@ function AppContent() {
             <View style={{ height: 40 }} />
           </ScrollView>
         </SafeAreaView>
-      </Modal>
+      </View>
+      )}
 
-      {/* ADD/EDIT MODAL - Custom with sticky save button */}
-      <Modal visible={showAddModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
+      {/* ADD/EDIT — Full Screen */}
+      {showAddModal && (
+        <View {...addModalSwipe.panHandlers} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 9998 }}>
+          <SafeAreaView style={{ flex: 1, backgroundColor: '#000' }}>
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={[styles.modalKeyboardView, { backgroundColor: isDarkMode ? '#1a1a2e' : '#ffffff' }]}
+            style={{ flex: 1 }}
           >
-            <View style={[styles.modalContent, { backgroundColor: isDarkMode ? '#1a1a2e' : '#ffffff' }]}>
+            <View style={{ flex: 1 }}>
               {/* Header */}
-              <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
-                <Text style={[styles.modalTitle, { color: colors.text, fontSize: scaledFonts.xlarge }]}>{editingItem ? 'Edit' : 'Add'} Purchase</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' }}>
                 <TouchableOpacity
                   onPress={() => {
-                    // If editing a scanned item, return to scan results without losing data
                     if (editingItem?.scannedIndex !== undefined) {
                       resetForm();
                       setShowAddModal(false);
                       setShowScannedItemsPreview(true);
                     } else if (editingItem?.importIndex !== undefined) {
-                      // If editing an imported item, return to import preview
                       resetForm();
                       setShowAddModal(false);
                       setShowImportPreview(true);
@@ -10104,11 +10143,12 @@ function AppContent() {
                       setShowAddModal(false);
                     }
                   }}
-                  style={[styles.closeButton, { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }]}
-                  hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+                  style={{ marginRight: 12 }}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                  <Text style={[styles.closeButtonText, { color: colors.text, fontSize: scaledFonts.large }]}>✕</Text>
+                  <Text style={{ color: '#C9A84C', fontSize: 28, fontWeight: '300' }}>{'\u2039'}</Text>
                 </TouchableOpacity>
+                <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700', flex: 1 }}>{editingItem ? 'Edit' : 'Add'} Purchase</Text>
               </View>
 
               {/* Guest mode warning */}
@@ -10331,7 +10371,7 @@ function AppContent() {
               </View>
             </KeyboardAvoidingView>
 
-            {/* DATE/TIME PICKER OVERLAYS — must be inside this Modal */}
+            {/* DATE/TIME PICKER OVERLAYS */}
             <DatePickerModal
               visible={showDatePicker}
               onClose={() => setShowDatePicker(false)}
@@ -10350,17 +10390,21 @@ function AppContent() {
                 handleTimeChange(time);
               }}
             />
-          </View>
-      </Modal>
+          </SafeAreaView>
+        </View>
+      )}
 
-      {/* SPECULATION MODAL */}
-      <ModalWrapper
-        visible={showSpeculationModal}
-        onClose={() => setShowSpeculationModal(false)}
-        title="What If..."
-        colors={colors}
-        isDarkMode={isDarkMode}
-      >
+      {/* SPECULATION */}
+      {showSpeculationModal && (
+        <View {...speculationSwipe.panHandlers} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 9998 }}>
+          <SafeAreaView style={{ flex: 1, backgroundColor: '#000' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' }}>
+              <TouchableOpacity onPress={() => setShowSpeculationModal(false)} style={{ marginRight: 12 }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ color: '#C9A84C', fontSize: 28, fontWeight: '300' }}>{'\u2039'}</Text>
+              </TouchableOpacity>
+              <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700', flex: 1 }}>What If...</Text>
+            </View>
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
         {/* Inputs at TOP */}
         <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
           <View style={{ flex: 1 }}><FloatingInput label="Silver" value={specSilverPrice} onChangeText={setSpecSilverPrice} keyboardType="decimal-pad" prefix="$" colors={colors} isDarkMode={isDarkMode} scaledFonts={scaledFonts} /></View>
@@ -10405,16 +10449,22 @@ function AppContent() {
             </View>
           ))}
         </View>
-      </ModalWrapper>
+            </ScrollView>
+          </SafeAreaView>
+        </View>
+      )}
 
-      {/* JUNK SILVER MODAL */}
-      <ModalWrapper
-        visible={showJunkCalcModal}
-        onClose={() => setShowJunkCalcModal(false)}
-        title="Junk Silver Calculator"
-        colors={colors}
-        isDarkMode={isDarkMode}
-      >
+      {/* JUNK SILVER CALCULATOR */}
+      {showJunkCalcModal && (
+        <View {...junkCalcSwipe.panHandlers} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 9998 }}>
+          <SafeAreaView style={{ flex: 1, backgroundColor: '#000' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' }}>
+              <TouchableOpacity onPress={() => setShowJunkCalcModal(false)} style={{ marginRight: 12 }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ color: '#C9A84C', fontSize: 28, fontWeight: '300' }}>{'\u2039'}</Text>
+              </TouchableOpacity>
+              <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700', flex: 1 }}>Junk Silver Calculator</Text>
+            </View>
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
         {/* Type selector at TOP */}
         <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
           {[{ k: '90', l: '90%' }, { k: '40', l: '40%' }, { k: '35', l: 'War Nickels' }].map(t => (
@@ -10445,16 +10495,22 @@ function AppContent() {
             {junkType === '35' && '35% silver: War Nickels (1942-1945). Each contains 0.0563 oz silver.'}
           </Text>
         </View>
-      </ModalWrapper>
+            </ScrollView>
+          </SafeAreaView>
+        </View>
+      )}
 
-      {/* PREMIUM ANALYSIS MODAL */}
-      <ModalWrapper
-        visible={showPremiumAnalysisModal}
-        onClose={() => setShowPremiumAnalysisModal(false)}
-        title="Premium Analysis"
-        colors={colors}
-        isDarkMode={isDarkMode}
-      >
+      {/* PREMIUM ANALYSIS */}
+      {showPremiumAnalysisModal && (
+        <View {...premiumSwipe.panHandlers} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 9998 }}>
+          <SafeAreaView style={{ flex: 1, backgroundColor: '#000' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' }}>
+              <TouchableOpacity onPress={() => setShowPremiumAnalysisModal(false)} style={{ marginRight: 12 }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ color: '#C9A84C', fontSize: 28, fontWeight: '300' }}>{'\u2039'}</Text>
+              </TouchableOpacity>
+              <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700', flex: 1 }}>Premium Analysis</Text>
+            </View>
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
         {(() => {
           // Simply read saved item.premium values — already calculated when added/edited
           const metalPremiums = [
@@ -10525,16 +10581,22 @@ function AppContent() {
             </>
           );
         })()}
-      </ModalWrapper>
+            </ScrollView>
+          </SafeAreaView>
+        </View>
+      )}
 
-      {/* PRIVACY MODAL */}
-      <ModalWrapper
-        visible={showPrivacyModal}
-        onClose={() => setShowPrivacyModal(false)}
-        title="Privacy & Security"
-        colors={colors}
-        isDarkMode={isDarkMode}
-      >
+      {/* PRIVACY & SECURITY */}
+      {showPrivacyModal && (
+        <View {...privacySwipe.panHandlers} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 9998 }}>
+          <SafeAreaView style={{ flex: 1, backgroundColor: '#000' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' }}>
+              <TouchableOpacity onPress={() => setShowPrivacyModal(false)} style={{ marginRight: 12 }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ color: '#C9A84C', fontSize: 28, fontWeight: '300' }}>{'\u2039'}</Text>
+              </TouchableOpacity>
+              <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700', flex: 1 }}>Privacy & Security</Text>
+            </View>
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
           <Text style={[styles.cardTitle, { color: colors.success }]}>How We Protect Your Data</Text>
           <Text style={[styles.privacyItem, { color: colors.text }]}>• Your stack data is stored securely on our servers for sync and backup</Text>
@@ -10568,16 +10630,22 @@ function AppContent() {
         >
           <Text style={{ color: '#007AFF', fontSize: scaledFonts.normal }}>View Complete Privacy Policy</Text>
         </TouchableOpacity>
-      </ModalWrapper>
+            </ScrollView>
+          </SafeAreaView>
+        </View>
+      )}
 
-      {/* Help Guide Modal */}
-      <ModalWrapper
-        visible={showHelpModal}
-        onClose={() => setShowHelpModal(false)}
-        title="Help Guide"
-        colors={colors}
-        isDarkMode={isDarkMode}
-      >
+      {/* HELP GUIDE */}
+      {showHelpModal && (
+        <View {...helpSwipe.panHandlers} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 9998 }}>
+          <SafeAreaView style={{ flex: 1, backgroundColor: '#000' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' }}>
+              <TouchableOpacity onPress={() => setShowHelpModal(false)} style={{ marginRight: 12 }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ color: '#C9A84C', fontSize: 28, fontWeight: '300' }}>{'\u2039'}</Text>
+              </TouchableOpacity>
+              <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700', flex: 1 }}>Help Guide</Text>
+            </View>
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
           <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>Today Tab</Text>
           <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>{'\u2022'} Stack Pulse — Daily P/L and stack snapshot</Text>
@@ -10649,7 +10717,10 @@ function AppContent() {
           <Text style={[styles.cardTitle, { color: colors.text, fontSize: scaledFonts.medium }]}>Support</Text>
           <Text style={[styles.privacyItem, { color: colors.text, fontSize: scaledFonts.small }]}>{'\u2022'} Email stacktrackergold@gmail.com for help</Text>
         </View>
-      </ModalWrapper>
+            </ScrollView>
+          </SafeAreaView>
+        </View>
+      )}
 
       {/* Gold Paywall */}
       <GoldPaywall
@@ -10658,17 +10729,17 @@ function AppContent() {
         onPurchaseSuccess={checkEntitlements}
       />
 
-      {/* Add Price Alert Modal */}
-      <ModalWrapper
-        visible={showAddAlertModal}
-        onClose={() => {
-          setShowAddAlertModal(false);
-          setNewAlert({ metal: 'silver', targetPrice: '', direction: 'above' });
-        }}
-        title="Price Alerts"
-        colors={colors}
-        isDarkMode={isDarkMode}
-      >
+      {/* PRICE ALERTS */}
+      {showAddAlertModal && (
+        <View {...alertSwipe.panHandlers} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 9998 }}>
+          <SafeAreaView style={{ flex: 1, backgroundColor: '#000' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' }}>
+              <TouchableOpacity onPress={() => { setShowAddAlertModal(false); setNewAlert({ metal: 'silver', targetPrice: '', direction: 'above' }); }} style={{ marginRight: 12 }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ color: '#C9A84C', fontSize: 28, fontWeight: '300' }}>{'\u2039'}</Text>
+              </TouchableOpacity>
+              <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700', flex: 1 }}>Price Alerts</Text>
+            </View>
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
         {/* TODO v2.1: ATH alerts section removed — implement with backend tracking */}
 
         {/* Custom Price Alert */}
@@ -10838,20 +10909,22 @@ function AppContent() {
             ))}
           </View>
         )}
-      </ModalWrapper>
+            </ScrollView>
+          </SafeAreaView>
+        </View>
+      )}
 
-      {/* Edit Milestones Modal */}
-      <ModalWrapper
-        visible={showMilestoneModal}
-        onClose={() => {
-          setShowMilestoneModal(false);
-          setTempSilverMilestone('');
-          setTempGoldMilestone('');
-        }}
-        title="Edit Stack Milestones"
-        colors={colors}
-        isDarkMode={isDarkMode}
-      >
+      {/* STACK MILESTONES */}
+      {showMilestoneModal && (
+        <View {...milestoneSwipe.panHandlers} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 9998 }}>
+          <SafeAreaView style={{ flex: 1, backgroundColor: '#000' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' }}>
+              <TouchableOpacity onPress={() => { setShowMilestoneModal(false); setTempSilverMilestone(''); setTempGoldMilestone(''); }} style={{ marginRight: 12 }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ color: '#C9A84C', fontSize: 28, fontWeight: '300' }}>{'\u2039'}</Text>
+              </TouchableOpacity>
+              <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700', flex: 1 }}>Stack Milestones</Text>
+            </View>
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
         <View style={{ marginBottom: 20 }}>
           <Text style={{ color: colors.muted, marginBottom: 16, fontSize: scaledFonts.small }}>
             Set custom goals for your stack. Leave blank to use default milestones.
@@ -10999,7 +11072,10 @@ function AppContent() {
             <Text style={{ color: colors.muted, fontWeight: '500', fontSize: scaledFonts.normal }}>Reset to Default Milestones</Text>
           </TouchableOpacity>
         )}
-      </ModalWrapper>
+            </ScrollView>
+          </SafeAreaView>
+        </View>
+      )}
 
       {/* Scanned Items Preview Modal */}
       <ModalWrapper
@@ -11332,17 +11408,16 @@ function AppContent() {
       </Modal>
 
       {/* Detail View Modal */}
-      <ModalWrapper
-        visible={showDetailView}
-        onClose={() => {
-          setShowDetailView(false);
-          setDetailItem(null);
-          setDetailMetal(null);
-        }}
-        title="Item Details"
-        colors={colors}
-        isDarkMode={isDarkMode}
-      >
+      {showDetailView && (
+        <View {...detailSwipe.panHandlers} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 9998 }}>
+          <SafeAreaView style={{ flex: 1, backgroundColor: '#000' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' }}>
+              <TouchableOpacity onPress={() => { setShowDetailView(false); setDetailItem(null); setDetailMetal(null); }} style={{ marginRight: 12 }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={{ color: '#C9A84C', fontSize: 28, fontWeight: '300' }}>{'\u2039'}</Text>
+              </TouchableOpacity>
+              <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700', flex: 1 }}>Holding Details</Text>
+            </View>
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         {detailItem && (
           <>
             <View style={[styles.card, { backgroundColor: colors.cardBg, borderColor: colors.border }]}>
@@ -11444,7 +11519,10 @@ function AppContent() {
             </View>
           </>
         )}
-      </ModalWrapper>
+            </ScrollView>
+          </SafeAreaView>
+        </View>
+      )}
 
       {/* Sort Menu Modal */}
       <ModalWrapper
