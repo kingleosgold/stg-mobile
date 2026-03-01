@@ -22,6 +22,21 @@ export const hasGoldEntitlement = async () => {
 };
 
 /**
+ * Check if user has Silver entitlement
+ * @returns {Promise<boolean>} True if user has active Silver entitlement
+ */
+export const hasSilverEntitlement = async () => {
+  try {
+    const customerInfo = await Purchases.getCustomerInfo();
+    const activeEntitlements = customerInfo?.entitlements?.active || {};
+    return activeEntitlements['Silver'] !== undefined;
+  } catch (error) {
+    if (__DEV__) console.log('Error checking Silver entitlement:', error);
+    return false;
+  }
+};
+
+/**
  * Get all user entitlements
  * @returns {Promise<object>} Customer info with all entitlements
  */
@@ -32,6 +47,8 @@ export const getUserEntitlements = async () => {
     const activeEntitlements = customerInfo?.entitlements?.active || {};
     return {
       hasGold: activeEntitlements['Gold'] !== undefined,
+      hasSilver: activeEntitlements['Silver'] !== undefined,
+      hasLifetime: activeEntitlements['Lifetime'] !== undefined,
       entitlements: activeEntitlements,
       originalAppUserId: customerInfo?.originalAppUserId || null,
     };
@@ -39,6 +56,8 @@ export const getUserEntitlements = async () => {
     if (__DEV__) console.log('Error getting user entitlements:', error);
     return {
       hasGold: false,
+      hasSilver: false,
+      hasLifetime: false,
       entitlements: {},
       originalAppUserId: null,
     };
@@ -124,15 +143,18 @@ export const logoutRevenueCat = async () => {
 
 /**
  * Restore previous purchases
- * @returns {Promise<boolean>} True if restoration was successful
+ * @returns {Promise<{hasGold: boolean, hasSilver: boolean, hasLifetime: boolean}>} Restored entitlements
  */
 export const restorePurchases = async () => {
   try {
     const customerInfo = await Purchases.restorePurchases();
     // Safety check for entitlements
     const activeEntitlements = customerInfo?.entitlements?.active || {};
-    const hasGold = activeEntitlements['Gold'] !== undefined;
-    return hasGold;
+    return {
+      hasGold: activeEntitlements['Gold'] !== undefined,
+      hasSilver: activeEntitlements['Silver'] !== undefined,
+      hasLifetime: activeEntitlements['Lifetime'] !== undefined,
+    };
   } catch (error) {
     console.error('Error restoring purchases:', error);
     throw error;

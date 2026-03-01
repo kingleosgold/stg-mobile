@@ -1,6 +1,6 @@
 /**
- * Stack Tracker Pro - Gold Paywall Component
- * Premium subscription paywall with RevenueCat integration
+ * Stack Tracker Pro - Subscription Paywall Component
+ * Two-tier Silver/Gold paywall with RevenueCat integration
  */
 
 import React, { useState, useEffect } from 'react';
@@ -14,10 +14,8 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
-  TextInput,
   Linking,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Purchases from 'react-native-purchases';
 import * as Haptics from 'expo-haptics';
 import { restorePurchases } from '../utils/entitlements';
@@ -26,11 +24,36 @@ import TroyCoinIcon from './TroyCoinIcon';
 const PRIVACY_URL = 'https://api.stacktrackergold.com/privacy';
 const TERMS_URL = 'https://api.stacktrackergold.com/terms';
 
-const GoldPaywall = ({ visible, onClose, onPurchaseSuccess }) => {
-  const [offerings, setOfferings] = useState(null);
+const SILVER_COLOR = '#A8B5C8';
+const GOLD_COLOR = '#fbbf24';
+
+const SILVER_FEATURES = [
+  { icon: 'troy', text: 'Your Daily Brief' },
+  { icon: 'troy', text: 'Troy — 10 questions/day' },
+  { icon: '📈', text: 'Spot Price History' },
+  { icon: '📊', text: 'Holdings Breakdown & Break-Even' },
+  { icon: '📰', text: 'The Stack Signal' },
+  { icon: '📸', text: '10 receipt scans/month' },
+];
+
+const GOLD_FEATURES = [
+  { icon: '🧠', text: 'AI Intelligence Feed' },
+  { icon: '🏦', text: 'COMEX Vault Watch' },
+  { icon: 'troy', text: 'Troy — 30 questions/day' },
+  { icon: '📊', text: 'Advanced Analytics & Cost Basis' },
+  { icon: '📸', text: 'Unlimited receipt scans' },
+  { icon: '☁️', text: 'Cloud sync across devices' },
+  { icon: '🔍', text: 'AI Deal Finder (coming soon)' },
+];
+
+const GoldPaywall = ({ visible, onClose, onPurchaseSuccess, userTier = 'free' }) => {
+  const [allOfferings, setAllOfferings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(null);
   const [restoring, setRestoring] = useState(false);
+  const [billingCycle, setBillingCycle] = useState('yearly'); // 'monthly' or 'yearly'
+
+  const isSilverUser = userTier === 'silver';
 
   useEffect(() => {
     if (visible) {
@@ -42,17 +65,29 @@ const GoldPaywall = ({ visible, onClose, onPurchaseSuccess }) => {
     try {
       setLoading(true);
       const offerings = await Purchases.getOfferings();
-      if (offerings.current !== null) {
-        setOfferings(offerings.current);
+
+      // Get all available offerings (Silver + Gold)
+      const result = {};
+
+      // Gold offering (default/current)
+      if (offerings.current) {
+        result.gold = offerings.current;
+      }
+
+      // Silver offering — look for it by identifier
+      if (offerings.all && offerings.all['Silver']) {
+        result.silver = offerings.all['Silver'];
+      }
+
+      if (Object.keys(result).length > 0) {
+        setAllOfferings(result);
       } else {
-        // No offerings available - will show fallback UI
-        if (__DEV__) console.log('No offerings available, showing coming soon UI');
-        setOfferings(null);
+        if (__DEV__) console.log('No offerings available');
+        setAllOfferings(null);
       }
     } catch (error) {
-      // Error loading offerings - will show fallback UI
       if (__DEV__) console.log('Error loading offerings:', error);
-      setOfferings(null);
+      setAllOfferings(null);
     } finally {
       setLoading(false);
     }
@@ -60,21 +95,27 @@ const GoldPaywall = ({ visible, onClose, onPurchaseSuccess }) => {
 
   const handlePurchase = async (packageToPurchase) => {
     try {
-      // Haptic feedback when starting purchase
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
       setPurchasing(packageToPurchase.identifier);
       const { customerInfo } = await Purchases.purchasePackage(packageToPurchase);
 
-      // Safety check for entitlements
       const activeEntitlements = customerInfo?.entitlements?.active || {};
-      if (activeEntitlements['Gold']) {
-        // Success haptic
+      if (activeEntitlements['Gold'] || activeEntitlements['Lifetime']) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
         Alert.alert(
           'Welcome to Gold!',
-          'Your subscription is now active. Enjoy unlimited items!',
+          'Your subscription is now active. Enjoy the full Stack Tracker experience!',
+          [{ text: 'Start Stacking', onPress: () => {
+            onPurchaseSuccess?.();
+            onClose();
+          }}]
+        );
+      } else if (activeEntitlements['Silver']) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert(
+          'Welcome to Silver!',
+          'Your subscription is now active. Enjoy enhanced analytics and more!',
           [{ text: 'Start Stacking', onPress: () => {
             onPurchaseSuccess?.();
             onClose();
@@ -95,12 +136,14 @@ const GoldPaywall = ({ visible, onClose, onPurchaseSuccess }) => {
   const handleRestore = async () => {
     try {
       setRestoring(true);
-      const hasGold = await restorePurchases();
+      const restored = await restorePurchases();
 
-      if (hasGold) {
+      if (restored.hasGold || restored.hasSilver) {
         Alert.alert(
           'Purchases Restored!',
-          'Your Gold subscription has been restored.',
+          restored.hasGold
+            ? 'Your Gold subscription has been restored.'
+            : 'Your Silver subscription has been restored.',
           [{ text: 'Continue', onPress: () => {
             onPurchaseSuccess?.();
             onClose();
@@ -117,51 +160,126 @@ const GoldPaywall = ({ visible, onClose, onPurchaseSuccess }) => {
     }
   };
 
-  const renderPackage = (pkg, title, description, badge = null) => {
+  const getPackage = (tier, cycle) => {
+    if (!allOfferings) return null;
+    const offering = allOfferings[tier];
+    if (!offering) return null;
+    if (cycle === 'lifetime') return offering.lifetime || null;
+    return cycle === 'yearly' ? (offering.annual || null) : (offering.monthly || null);
+  };
+
+  const renderTierCard = (tier, tierColor, tierLabel, tierIcon, features, badge = null) => {
+    const pkg = getPackage(tier, billingCycle);
+    if (!pkg) return null;
+
     const isPurchasing = purchasing === pkg.identifier;
+    const isHighlighted = tier === 'gold';
 
     return (
-      <TouchableOpacity
-        key={pkg.identifier}
-        style={[
-          styles.packageCard,
-          badge && styles.popularPackage,
-        ]}
-        onPress={() => handlePurchase(pkg)}
-        disabled={isPurchasing || loading}
-      >
+      <View style={[
+        styles.tierCard,
+        isHighlighted && { borderColor: tierColor, borderWidth: 2 },
+      ]}>
         {badge && (
-          <View style={[styles.popularBadge, badge === 'BEST VALUE' && { backgroundColor: '#22c55e' }]}>
-            <Text style={styles.popularText}>{badge}</Text>
+          <View style={[styles.tierBadge, { backgroundColor: tierColor }]}>
+            <Text style={styles.tierBadgeText}>{badge}</Text>
           </View>
         )}
 
-        <View style={styles.packageHeader}>
-          <Text style={styles.packageTitle}>{title}</Text>
-          <Text style={styles.packagePrice}>
-            {pkg.product.priceString}
-          </Text>
+        {/* Tier Header */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <Text style={{ fontSize: 24 }}>{tierIcon}</Text>
+          <Text style={[styles.tierLabel, { color: tierColor }]}>{tierLabel}</Text>
         </View>
 
-        <Text style={styles.packageDescription}>{description}</Text>
+        {/* Price */}
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4, marginBottom: 4 }}>
+          <Text style={[styles.tierPrice, { color: '#fff' }]}>{pkg.product.priceString}</Text>
+          <Text style={{ color: '#71717a', fontSize: 14 }}>/{billingCycle === 'yearly' ? 'yr' : 'mo'}</Text>
+        </View>
+
+        {billingCycle === 'yearly' && tier !== 'lifetime' && (
+          <Text style={{ color: '#71717a', fontSize: 12, marginBottom: 8 }}>
+            That's {(pkg.product.price / 12).toFixed(2)}/mo
+          </Text>
+        )}
+
+        {/* Features */}
+        <View style={{ marginTop: 8, marginBottom: 12 }}>
+          {tier === 'gold' && (
+            <Text style={{ color: '#a1a1aa', fontSize: 12, fontWeight: '600', marginBottom: 6 }}>Everything in Silver, plus:</Text>
+          )}
+          {features.map((f, i) => (
+            <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+              {f.icon === 'troy' ? (
+                <View style={{ width: 18 }}><TroyCoinIcon size={16} /></View>
+              ) : (
+                <Text style={{ fontSize: 14, width: 18 }}>{f.icon}</Text>
+              )}
+              <Text style={{ color: '#d4d4d8', fontSize: 13, flex: 1 }}>{f.text}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* CTA Button */}
+        {isPurchasing ? (
+          <ActivityIndicator color={tierColor} style={{ marginTop: 8, marginBottom: 8 }} />
+        ) : (
+          <TouchableOpacity
+            style={[styles.tierCTA, { backgroundColor: tierColor }]}
+            onPress={() => handlePurchase(pkg)}
+            disabled={loading}
+          >
+            <Text style={[styles.tierCTAText, tier === 'silver' && { color: '#1a1a2e' }]}>
+              {tier === 'gold' ? 'Try Gold Free for 7 Days' : 'Try Silver Free for 7 Days'}
+            </Text>
+          </TouchableOpacity>
+        )}
+        <Text style={{ color: '#71717a', fontSize: 11, textAlign: 'center', marginTop: 6 }}>
+          Then {pkg.product.priceString}/{billingCycle === 'yearly' ? 'yr' : 'mo'} · Cancel anytime
+        </Text>
+      </View>
+    );
+  };
+
+  const renderLifetimeCard = () => {
+    const pkg = getPackage('gold', 'lifetime');
+    if (!pkg) return null;
+
+    const isPurchasing = purchasing === pkg.identifier;
+
+    return (
+      <View style={[styles.tierCard, { borderColor: '#22c55e', borderWidth: 2 }]}>
+        <View style={[styles.tierBadge, { backgroundColor: '#22c55e' }]}>
+          <Text style={styles.tierBadgeText}>BEST VALUE</Text>
+        </View>
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <Text style={{ fontSize: 24 }}>💎</Text>
+          <Text style={[styles.tierLabel, { color: '#22c55e' }]}>Lifetime</Text>
+        </View>
+
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4, marginBottom: 4 }}>
+          <Text style={[styles.tierPrice, { color: '#fff' }]}>{pkg.product.priceString}</Text>
+          <Text style={{ color: '#71717a', fontSize: 14 }}> one-time</Text>
+        </View>
+
+        <Text style={{ color: '#a1a1aa', fontSize: 13, marginBottom: 12 }}>
+          All Gold features forever. No subscription.
+        </Text>
 
         {isPurchasing ? (
-          <ActivityIndicator color="#fbbf24" style={{ marginTop: 12 }} />
+          <ActivityIndicator color="#22c55e" style={{ marginTop: 8, marginBottom: 8 }} />
         ) : (
-          <>
-            <View style={[styles.subscribeButton, badge === 'BEST VALUE' && { backgroundColor: '#22c55e' }]}>
-              <Text style={styles.subscribeButtonText}>
-                {title === 'Lifetime' ? 'Buy Once' : 'Try Free for 7 Days'}
-              </Text>
-            </View>
-            {title !== 'Lifetime' && (
-              <Text style={{ color: '#71717a', fontSize: 11, textAlign: 'center', marginTop: 6 }}>
-                Then {pkg.product.priceString}/{title === 'Monthly' ? 'mo' : 'yr'} · Cancel anytime
-              </Text>
-            )}
-          </>
+          <TouchableOpacity
+            style={[styles.tierCTA, { backgroundColor: '#22c55e' }]}
+            onPress={() => handlePurchase(pkg)}
+            disabled={loading}
+          >
+            <Text style={styles.tierCTAText}>Buy Once, Stack Forever</Text>
+          </TouchableOpacity>
         )}
-      </TouchableOpacity>
+      </View>
     );
   };
 
@@ -176,12 +294,13 @@ const GoldPaywall = ({ visible, onClose, onPurchaseSuccess }) => {
         <View style={styles.container}>
           {/* Header */}
           <View style={styles.header}>
-            <View style={styles.goldIcon}>
-              <Text style={styles.goldIconText}>👑</Text>
-            </View>
-            <Text style={styles.title}>Upgrade to Gold</Text>
+            <Text style={styles.title}>
+              {isSilverUser ? 'Upgrade to Gold' : 'Choose Your Plan'}
+            </Text>
             <Text style={styles.subtitle}>
-              AI-powered intelligence for serious stackers
+              {isSilverUser
+                ? 'Unlock the full Stack Tracker experience'
+                : 'AI-powered intelligence for serious stackers'}
             </Text>
             <TouchableOpacity
               onPress={onClose}
@@ -192,42 +311,47 @@ const GoldPaywall = ({ visible, onClose, onPurchaseSuccess }) => {
             </TouchableOpacity>
           </View>
 
-          {/* Features */}
-          <View style={styles.featuresSection}>
-            <Feature icon="🧠" text="AI Intelligence Feed" />
-            <Feature icon="🏦" text="COMEX Vault Watch" />
-            <Feature icon="troy" text="Troy — AI Stack Analyst" />
-            <Feature icon="troy" text="Your Daily Brief" />
-            <Feature icon="🔍" text="AI Deal Finder (coming soon)" />
-            <Feature icon="📈" text="Spot Price History" />
-            <Feature icon="📊" text="Advanced Analytics" />
+          {/* Billing Toggle */}
+          <View style={styles.billingToggle}>
+            <TouchableOpacity
+              style={[styles.toggleOption, billingCycle === 'monthly' && styles.toggleActive]}
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setBillingCycle('monthly'); }}
+            >
+              <Text style={[styles.toggleText, billingCycle === 'monthly' && styles.toggleTextActive]}>Monthly</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.toggleOption, billingCycle === 'yearly' && styles.toggleActive]}
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setBillingCycle('yearly'); }}
+            >
+              <Text style={[styles.toggleText, billingCycle === 'yearly' && styles.toggleTextActive]}>Yearly</Text>
+              <View style={styles.saveBadge}>
+                <Text style={styles.saveBadgeText}>SAVE 33%</Text>
+              </View>
+            </TouchableOpacity>
           </View>
 
-          {/* Packages */}
+          {/* Tier Cards */}
           <ScrollView
             style={styles.packagesScroll}
             showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 16 }}
           >
             {loading ? (
-              <ActivityIndicator size="large" color="#fbbf24" style={{ marginTop: 40 }} />
-            ) : offerings ? (
+              <ActivityIndicator size="large" color={GOLD_COLOR} style={{ marginTop: 40 }} />
+            ) : allOfferings ? (
               <>
-                {offerings.monthly && renderPackage(
-                  offerings.monthly,
-                  'Monthly',
-                  'Full access, cancel anytime'
-                )}
-                {offerings.annual && renderPackage(
-                  offerings.annual,
-                  'Yearly',
-                  'Save 33% vs monthly — best for serious stackers',
-                  'SAVE 33%'
-                )}
-                {offerings.lifetime && renderPackage(
-                  offerings.lifetime,
-                  'Lifetime',
-                  'One-time payment, stack forever',
-                  'BEST VALUE'
+                {/* If Silver user, only show Gold upgrade */}
+                {isSilverUser ? (
+                  <>
+                    {renderTierCard('gold', GOLD_COLOR, 'Gold', '👑', GOLD_FEATURES, 'MOST POPULAR')}
+                    {renderLifetimeCard()}
+                  </>
+                ) : (
+                  <>
+                    {renderTierCard('silver', SILVER_COLOR, 'Silver', '🥈', SILVER_FEATURES)}
+                    {renderTierCard('gold', GOLD_COLOR, 'Gold', '👑', GOLD_FEATURES, 'MOST POPULAR')}
+                    {renderLifetimeCard()}
+                  </>
                 )}
               </>
             ) : (
@@ -237,24 +361,21 @@ const GoldPaywall = ({ visible, onClose, onPurchaseSuccess }) => {
                 <Text style={styles.errorMessage}>
                   Could not connect to the subscription service. Please check your internet connection and try again.
                 </Text>
-                <TouchableOpacity
-                  style={styles.retryButton}
-                  onPress={loadOfferings}
-                >
+                <TouchableOpacity style={styles.retryButton} onPress={loadOfferings}>
                   <Text style={styles.retryButtonText}>Retry</Text>
                 </TouchableOpacity>
               </View>
             )}
           </ScrollView>
 
-          {/* Restore Purchases - Prominent Ghost Button */}
+          {/* Restore Purchases */}
           <TouchableOpacity
             onPress={handleRestore}
             style={styles.restoreButtonProminent}
             disabled={restoring}
           >
             {restoring ? (
-              <ActivityIndicator size="small" color="#fbbf24" />
+              <ActivityIndicator size="small" color={GOLD_COLOR} />
             ) : (
               <Text style={styles.restoreButtonProminentText}>Restore Purchases</Text>
             )}
@@ -281,13 +402,6 @@ const GoldPaywall = ({ visible, onClose, onPurchaseSuccess }) => {
   );
 };
 
-const Feature = ({ icon, text }) => (
-  <View style={styles.feature}>
-    {icon === 'troy' ? <View style={styles.featureIcon}><TroyCoinIcon size={20} /></View> : <Text style={styles.featureIcon}>{icon}</Text>}
-    <Text style={styles.featureText}>{text}</Text>
-  </View>
-);
-
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
@@ -300,33 +414,21 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     paddingTop: 24,
     paddingBottom: Platform.OS === 'ios' ? 34 : 24,
-    maxHeight: '90%',
+    maxHeight: '92%',
   },
   header: {
     alignItems: 'center',
     paddingHorizontal: 24,
-    marginBottom: 24,
-  },
-  goldIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: '#fbbf24',
-    justifyContent: 'center',
-    alignItems: 'center',
     marginBottom: 16,
   },
-  goldIconText: {
-    fontSize: 40,
-  },
   title: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '700',
     color: '#fff',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#a1a1aa',
     textAlign: 'center',
   },
@@ -346,98 +448,94 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '600',
   },
-  featuresSection: {
-    paddingHorizontal: 24,
-    marginBottom: 24,
-  },
-  feature: {
+  billingToggle: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
+    marginHorizontal: 24,
+    marginBottom: 16,
+    backgroundColor: '#27293d',
+    borderRadius: 10,
+    padding: 3,
   },
-  featureIcon: {
-    fontSize: 20,
-    marginRight: 12,
-    width: 24,
-  },
-  featureText: {
-    fontSize: 16,
-    color: '#d4d4d8',
+  toggleOption: {
     flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  toggleActive: {
+    backgroundColor: '#3a3c52',
+  },
+  toggleText: {
+    color: '#71717a',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  toggleTextActive: {
+    color: '#fff',
+  },
+  saveBadge: {
+    backgroundColor: '#22c55e',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  saveBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
   },
   packagesScroll: {
     paddingHorizontal: 24,
+    maxHeight: '55%',
   },
-  packageCard: {
+  tierCard: {
     backgroundColor: '#27293d',
     borderRadius: 16,
-    padding: 20,
-    marginBottom: 12,
-    borderWidth: 2,
+    padding: 18,
+    marginBottom: 14,
+    borderWidth: 1,
     borderColor: 'transparent',
     position: 'relative',
   },
-  popularPackage: {
-    borderColor: '#fbbf24',
-    backgroundColor: '#2a2a3e',
-  },
-  popularBadge: {
+  tierBadge: {
     position: 'absolute',
     top: -10,
-    right: 20,
-    backgroundColor: '#fbbf24',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+    right: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 10,
   },
-  popularText: {
-    fontSize: 11,
+  tierBadgeText: {
+    fontSize: 10,
     fontWeight: '700',
     color: '#1a1a2e',
   },
-  packageHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  packageTitle: {
-    fontSize: 20,
+  tierLabel: {
+    fontSize: 22,
     fontWeight: '700',
-    color: '#fff',
   },
-  packagePrice: {
-    fontSize: 24,
+  tierPrice: {
+    fontSize: 28,
     fontWeight: '700',
-    color: '#fbbf24',
   },
-  packageDescription: {
-    fontSize: 14,
-    color: '#a1a1aa',
-    marginBottom: 12,
-  },
-  subscribeButton: {
-    backgroundColor: '#fbbf24',
-    paddingVertical: 12,
-    borderRadius: 8,
+  tierCTA: {
+    paddingVertical: 13,
+    borderRadius: 10,
     alignItems: 'center',
   },
-  subscribeButtonText: {
-    fontSize: 16,
+  tierCTAText: {
+    fontSize: 15,
     fontWeight: '700',
     color: '#1a1a2e',
-  },
-  noOfferings: {
-    color: '#a1a1aa',
-    textAlign: 'center',
-    marginTop: 40,
-    fontSize: 16,
   },
   legalLinks: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 16,
+    marginTop: 12,
     gap: 8,
   },
   legalLinkText: {
@@ -451,15 +549,15 @@ const styles = StyleSheet.create({
   },
   restoreButtonProminent: {
     marginHorizontal: 24,
-    marginTop: 16,
-    paddingVertical: 12,
+    marginTop: 12,
+    paddingVertical: 10,
     borderRadius: 8,
     borderWidth: 1.5,
     borderColor: '#fbbf24',
     alignItems: 'center',
   },
   restoreButtonProminentText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: '#fbbf24',
   },
@@ -468,7 +566,7 @@ const styles = StyleSheet.create({
     color: '#71717a',
     textAlign: 'center',
     paddingHorizontal: 24,
-    marginTop: 8,
+    marginTop: 6,
   },
   errorContainer: {
     alignItems: 'center',
