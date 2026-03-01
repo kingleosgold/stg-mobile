@@ -1222,9 +1222,15 @@ const ScrubChart = ({ data, color, fillColor, width, height, range, decimalPlace
   const allValues = [...values, ...secValues];
   const minVal = Math.min(...allValues);
   const maxVal = Math.max(...allValues);
-  const valRange = maxVal - minVal || 1;
-  const niceMin = minVal - valRange * 0.02;
-  const niceMax = maxVal + valRange * 0.02;
+  const rawRange = maxVal - minVal;
+  // Minimum visual range: prevents Y-axis labels from rounding to the same string
+  // (e.g. $599.8k–$600.2k all showing "$600k"). Uses 3% of mean value.
+  const meanVal = (maxVal + minVal) / 2 || 1;
+  const minVisualRange = meanVal * 0.03;
+  const valRange = Math.max(rawRange, minVisualRange) || 1;
+  const midPoint = (maxVal + minVal) / 2;
+  const niceMin = midPoint - valRange * 0.52;
+  const niceMax = midPoint + valRange * 0.52;
   const niceRange = niceMax - niceMin;
 
   // SVG viewBox dimensions
@@ -1254,14 +1260,22 @@ const ScrubChart = ({ data, color, fillColor, width, height, range, decimalPlace
     }
   }
 
-  // Y-axis labels (5 levels)
+  // Y-axis labels (5 levels spanning the visible chart range)
   const yLabelCount = 5;
   const yLabels = [];
   for (let i = 0; i < yLabelCount; i++) {
-    yLabels.push(maxVal - (i / (yLabelCount - 1)) * (maxVal - minVal));
+    yLabels.push(niceMax - (i / (yLabelCount - 1)) * niceRange);
   }
+  const yStep = niceRange / (yLabelCount - 1);
   const formatY = yFormat || ((v) => {
-    if (v >= 100000) return `$${(v / 1000).toLocaleString('en-US', { maximumFractionDigits: 0 })}k`;
+    if (v >= 100000) {
+      // Adapt precision so adjacent labels show distinct values
+      if (yStep < 500) return `$${v.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+      if (yStep < 5000) return `$${(v / 1000).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}k`;
+      return `$${(v / 1000).toLocaleString('en-US', { maximumFractionDigits: 0 })}k`;
+    }
+    if (yStep < 1) return `$${v.toFixed(2)}`;
+    if (yStep < 10) return `$${v.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`;
     return `$${Math.round(v).toLocaleString('en-US')}`;
   });
 
