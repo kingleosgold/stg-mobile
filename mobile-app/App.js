@@ -1183,7 +1183,18 @@ const ScrubChart = ({ data, color, fillColor, width, height, range, decimalPlace
   // (real prices don't jump 35% between 15-min data points; sustained jumps are preserved)
   if (data.length > 2) {
     data = data.filter((pt, i) => {
-      if (i === 0 || i === data.length - 1) return true;
+      if (i === 0) {
+        // Check first point against its neighbor
+        const next = data[1].value;
+        if (next > 0 && Math.abs(pt.value - next) / next > 0.5) return false;
+        return true;
+      }
+      if (i === data.length - 1) {
+        // Check last point against its neighbor (catches bad trailing snapshots)
+        const prev = data[i - 1].value;
+        if (prev > 0 && Math.abs(pt.value - prev) / prev > 0.5) return false;
+        return true;
+      }
       const prev = data[i - 1].value;
       const next = data[i + 1].value;
       const avgNeighbor = (prev + next) / 2;
@@ -1222,15 +1233,9 @@ const ScrubChart = ({ data, color, fillColor, width, height, range, decimalPlace
   const allValues = [...values, ...secValues];
   const minVal = Math.min(...allValues);
   const maxVal = Math.max(...allValues);
-  const rawRange = maxVal - minVal;
-  // Minimum visual range: prevents Y-axis labels from rounding to the same string
-  // (e.g. $599.8k–$600.2k all showing "$600k"). Uses 3% of mean value.
-  const meanVal = (maxVal + minVal) / 2 || 1;
-  const minVisualRange = meanVal * 0.03;
-  const valRange = Math.max(rawRange, minVisualRange) || 1;
-  const midPoint = (maxVal + minVal) / 2;
-  const niceMin = midPoint - valRange * 0.52;
-  const niceMax = midPoint + valRange * 0.52;
+  const valRange = maxVal - minVal || 1;
+  const niceMin = minVal - valRange * 0.02;
+  const niceMax = maxVal + valRange * 0.02;
   const niceRange = niceMax - niceMin;
 
   // SVG viewBox dimensions
@@ -1260,22 +1265,23 @@ const ScrubChart = ({ data, color, fillColor, width, height, range, decimalPlace
     }
   }
 
-  // Y-axis labels (5 levels spanning the visible chart range)
+  // Y-axis labels (5 levels)
   const yLabelCount = 5;
   const yLabels = [];
   for (let i = 0; i < yLabelCount; i++) {
-    yLabels.push(niceMax - (i / (yLabelCount - 1)) * niceRange);
+    yLabels.push(maxVal - (i / (yLabelCount - 1)) * (maxVal - minVal));
   }
-  const yStep = niceRange / (yLabelCount - 1);
+  const yStep = (maxVal - minVal) / (yLabelCount - 1);
   const formatY = yFormat || ((v) => {
     if (v >= 100000) {
       // Adapt precision so adjacent labels show distinct values
-      if (yStep < 500) return `$${v.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
-      if (yStep < 5000) return `$${(v / 1000).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}k`;
+      // yStep < 50 ($200 range): full dollar "$600,100"
+      // yStep < 500 ($2k range): one-decimal k "$600.1k"
+      // yStep >= 500: integer k "$600k"
+      if (yStep < 50) return `$${v.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+      if (yStep < 500) return `$${(v / 1000).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}k`;
       return `$${(v / 1000).toLocaleString('en-US', { maximumFractionDigits: 0 })}k`;
     }
-    if (yStep < 1) return `$${v.toFixed(2)}`;
-    if (yStep < 10) return `$${v.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`;
     return `$${Math.round(v).toLocaleString('en-US')}`;
   });
 
