@@ -4481,39 +4481,30 @@ function AppContent() {
    */
   const filterSnapshotsByRange = (snapshots, range) => {
     if (!snapshots || snapshots.length === 0) return [];
+    if (range === 'ALL') return snapshots;
 
+    // Today in Eastern time
     const now = new Date();
-    let startDate;
+    const eastern = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const today = new Date(eastern.getFullYear(), eastern.getMonth(), eastern.getDate());
 
-    switch (range.toUpperCase()) {
-      case '1D':
-        // Return empty - the chart will handle 1D specially using midnightSnapshot
-        return [];
-      case '1W':
-        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        break;
-      case '1M':
-        startDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
-        break;
-      case '3M':
-        startDate = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
-        break;
-      case '6M':
-        startDate = new Date(now.getFullYear(), now.getMonth() - 6, now.getDate());
-        break;
-      case '1Y':
-        startDate = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
-        break;
-      case '5Y':
-        startDate = new Date(now.getFullYear() - 5, now.getMonth(), now.getDate());
-        break;
-      case 'ALL':
-      default:
-        return snapshots; // Return all
+    const cutoff = new Date(today);
+    switch (range) {
+      case '1M': cutoff.setMonth(cutoff.getMonth() - 1); break;
+      case '3M': cutoff.setMonth(cutoff.getMonth() - 3); break;
+      case '6M': cutoff.setMonth(cutoff.getMonth() - 6); break;
+      case '1Y': cutoff.setFullYear(cutoff.getFullYear() - 1); break;
+      case '5Y': cutoff.setFullYear(cutoff.getFullYear() - 5); break;
+      default: return snapshots;
     }
 
-    const startDateStr = startDate.toISOString().split('T')[0];
-    return snapshots.filter(s => s.date >= startDateStr);
+    const cutoffStr = cutoff.toISOString().split('T')[0];
+    const todayStr = today.toISOString().split('T')[0];
+
+    const filtered = snapshots.filter(s => s.date >= cutoffStr && s.date <= todayStr);
+
+    // If no data in range, return all data (don't show empty chart)
+    return filtered.length > 0 ? filtered : snapshots;
   };
 
   /**
