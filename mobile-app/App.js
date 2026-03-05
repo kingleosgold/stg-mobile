@@ -1732,6 +1732,8 @@ function AppContent() {
   const [stackSignalLoading, setStackSignalLoading] = useState(false);
   const [stackSignalRefreshing, setStackSignalRefreshing] = useState(false);
   const [expandedArticleId, setExpandedArticleId] = useState(null);
+  const [likedArticles, setLikedArticles] = useState({}); // { [articleId]: { liked: bool, count: number } }
+  const viewedArticlesRef = useRef(new Set()); // session dedup for view tracking
 
   // Custom Milestone State
   const [showMilestoneModal, setShowMilestoneModal] = useState(false);
@@ -3635,6 +3637,65 @@ function AppContent() {
     } catch (err) {
       if (__DEV__) console.log('Stack Signal load more error:', err.message);
     }
+  };
+
+  // --- Signal social engagement helpers ---
+  const recordArticleView = async (articleId) => {
+    try {
+      const body = supabaseUser?.id
+        ? { userId: supabaseUser.id }
+        : { deviceId: await getDeviceId() };
+      const res = await fetch(`${API_BASE_URL}/v1/articles/${articleId}/view`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (data.view_count !== undefined) {
+        setStackSignalArticles(prev => prev.map(a =>
+          a.id === articleId ? { ...a, view_count: data.view_count } : a
+        ));
+      }
+    } catch (e) { /* silent */ }
+  };
+
+  const toggleArticleLike = async (articleId) => {
+    if (!supabaseUser?.id) {
+      setShowAuthScreen(true);
+      return;
+    }
+    // Optimistic update
+    setLikedArticles(prev => {
+      const cur = prev[articleId] || { liked: false, count: 0 };
+      return { ...prev, [articleId]: { liked: !cur.liked, count: cur.count + (cur.liked ? -1 : 1) } };
+    });
+    try {
+      const res = await fetch(`${API_BASE_URL}/v1/articles/${articleId}/like`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: supabaseUser.id }),
+      });
+      const data = await res.json();
+      if (data.like_count !== undefined) {
+        setLikedArticles(prev => ({ ...prev, [articleId]: { liked: data.liked, count: data.like_count } }));
+      }
+    } catch (e) {
+      // Revert optimistic update
+      setLikedArticles(prev => {
+        const cur = prev[articleId] || { liked: false, count: 0 };
+        return { ...prev, [articleId]: { liked: !cur.liked, count: cur.count + (cur.liked ? -1 : 1) } };
+      });
+    }
+  };
+
+  const fetchArticleLikeStatus = async (articleId) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/v1/articles/${articleId}/likes?userId=${supabaseUser?.id || ''}`);
+      const data = await res.json();
+      if (data.like_count !== undefined) {
+        setLikedArticles(prev => ({ ...prev, [articleId]: { liked: !!data.user_liked, count: data.like_count } }));
+      }
+    } catch (e) { /* silent */ }
   };
 
   const handleShareArticle = async (article) => {
@@ -9627,6 +9688,13 @@ function AppContent() {
                             return;
                           }
                           setExpandedArticleId(item.id);
+                          // Record view once per session
+                          if (!viewedArticlesRef.current.has(item.id)) {
+                            viewedArticlesRef.current.add(item.id);
+                            recordArticleView(item.id);
+                          }
+                          // Fetch like status
+                          fetchArticleLikeStatus(item.id);
                           if (!item.troy_commentary && item.slug) {
                             try {
                               const fullRes = await stackSignalAPI.fetchArticle(item.slug);
@@ -9671,6 +9739,38 @@ function AppContent() {
                           {item.troy_one_liner ? (
                               <Text style={{ color: '#C9A84C', fontSize: 13, fontStyle: 'italic', lineHeight: 18 }} numberOfLines={isExpanded ? undefined : 2}>{item.troy_one_liner}</Text>
                           ) : null}
+
+                          {/* Social bar — views, likes, share */}
+                          {(() => {
+                            const likeState = likedArticles[item.id];
+                            const viewCount = item.view_count || 0;
+                            const likeCount = likeState ? likeState.count : (item.like_count || 0);
+                            const isLiked = likeState ? likeState.liked : false;
+                            return (
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 8 }}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+                                    <Path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke={colors.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                    <Circle cx="12" cy="12" r="3" stroke={colors.muted} strokeWidth="2" />
+                                  </Svg>
+                                  <Text style={{ color: colors.muted, fontSize: 12 }}>{viewCount}</Text>
+                                </View>
+                                <TouchableOpacity onPress={() => toggleArticleLike(item.id)} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                  <Svg width={14} height={14} viewBox="0 0 24 24" fill={isLiked ? '#E8432A' : 'none'}>
+                                    <Path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z" stroke={isLiked ? '#E8432A' : colors.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                  </Svg>
+                                  <Text style={{ color: isLiked ? '#E8432A' : colors.muted, fontSize: 12 }}>{likeCount}</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity onPress={() => handleShareArticle(item)} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+                                    <Path d="M12 2L12 15" stroke={colors.muted} strokeWidth="2" strokeLinecap="round" />
+                                    <Path d="M8.5 7.5L12 4L15.5 7.5" stroke={colors.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                    <Path d="M20 14V18C20 19.1046 19.1046 20 18 20H6C4.89543 20 4 19.1046 4 18V14" stroke={colors.muted} strokeWidth="2" strokeLinecap="round" />
+                                  </Svg>
+                                </TouchableOpacity>
+                              </View>
+                            );
+                          })()}
 
                           {isExpanded && (
                             <View style={{ marginTop: 12 }}>
@@ -10846,6 +10946,13 @@ function AppContent() {
                           return;
                         }
                         setExpandedArticleId(item.id);
+                        // Record view once per session
+                        if (!viewedArticlesRef.current.has(item.id)) {
+                          viewedArticlesRef.current.add(item.id);
+                          recordArticleView(item.id);
+                        }
+                        // Fetch like status
+                        fetchArticleLikeStatus(item.id);
                         // Fetch full article details if not already loaded
                         if (!item.troy_commentary && item.slug) {
                           try {
@@ -10891,6 +10998,38 @@ function AppContent() {
                         {item.troy_one_liner ? (
                           <Text style={{ color: '#999', fontSize: 13, fontStyle: 'italic', lineHeight: 18 }} numberOfLines={isExpanded ? undefined : 2}>{item.troy_one_liner}</Text>
                         ) : null}
+
+                        {/* Social bar — views, likes, share */}
+                        {(() => {
+                          const likeState = likedArticles[item.id];
+                          const viewCount = item.view_count || 0;
+                          const likeCount = likeState ? likeState.count : (item.like_count || 0);
+                          const isLiked = likeState ? likeState.liked : false;
+                          return (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 8 }}>
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+                                  <Path d="M1 12C1 12 5 4 12 4C19 4 23 12 23 12C23 12 19 20 12 20C5 20 1 12 1 12Z" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                  <Circle cx="12" cy="12" r="3" stroke="#666" strokeWidth="2" />
+                                </Svg>
+                                <Text style={{ color: '#666', fontSize: 12 }}>{viewCount}</Text>
+                              </View>
+                              <TouchableOpacity onPress={() => toggleArticleLike(item.id)} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                <Svg width={14} height={14} viewBox="0 0 24 24" fill={isLiked ? '#E8432A' : 'none'}>
+                                  <Path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78z" stroke={isLiked ? '#E8432A' : '#666'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                </Svg>
+                                <Text style={{ color: isLiked ? '#E8432A' : '#666', fontSize: 12 }}>{likeCount}</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity onPress={() => handleShareArticle(item)} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+                                  <Path d="M12 2L12 15" stroke="#666" strokeWidth="2" strokeLinecap="round" />
+                                  <Path d="M8.5 7.5L12 4L15.5 7.5" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                  <Path d="M20 14V18C20 19.1046 19.1046 20 18 20H6C4.89543 20 4 19.1046 4 18V14" stroke="#666" strokeWidth="2" strokeLinecap="round" />
+                                </Svg>
+                              </TouchableOpacity>
+                            </View>
+                          );
+                        })()}
 
                         {isExpanded && (
                           <View style={{ marginTop: 12 }}>
