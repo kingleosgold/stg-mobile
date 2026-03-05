@@ -3210,6 +3210,27 @@ function AppContent() {
     }
   };
 
+  // Sync RevenueCat tier → Supabase profiles (fire-and-forget, never blocks UI)
+  const syncSubscriptionToSupabase = async (userId, tierOverride) => {
+    try {
+      const tier = tierOverride || userTier || 'free';
+      const tierMap = {
+        'gold': { subscription_tier: 'gold', subscription_status: 'active' },
+        'lifetime': { subscription_tier: 'lifetime', subscription_status: 'active' },
+        'silver': { subscription_tier: 'silver', subscription_status: 'active' },
+        'free': { subscription_tier: 'free', subscription_status: null },
+      };
+      const values = tierMap[tier] || tierMap['free'];
+      const { error } = await supabase.from('profiles').update(values).eq('id', userId);
+      if (__DEV__) {
+        if (error) console.log('[Sync] Failed to sync tier to Supabase:', error.message);
+        else console.log(`[Sync] Synced tier to Supabase: ${tier}`);
+      }
+    } catch (e) {
+      if (__DEV__) console.log('[Sync] Error syncing subscription:', e.message);
+    }
+  };
+
   // Restore purchases handler (used by inline upgrade bars)
   const handleRestore = async () => {
     try {
@@ -3265,6 +3286,13 @@ function AppContent() {
             // Additional delay before checking entitlements
             await new Promise(resolve => setTimeout(resolve, 100));
             await checkEntitlements();
+            // Sync RevenueCat tier → Supabase (fire-and-forget)
+            if (appUserId) {
+              const syncInfo = await Purchases.getCustomerInfo();
+              const syncActive = syncInfo?.entitlements?.active || {};
+              const syncTier = syncActive['Lifetime'] ? 'lifetime' : syncActive['Gold'] ? 'gold' : syncActive['Silver'] ? 'silver' : 'free';
+              syncSubscriptionToSupabase(appUserId, syncTier);
+            }
             if (__DEV__) console.log('✅ RevenueCat setup complete');
           } else {
             if (__DEV__) console.log('⚠️ RevenueCat initialization returned false, skipping entitlements');
@@ -3281,6 +3309,33 @@ function AppContent() {
 
     return () => clearTimeout(timeoutId);
   }, [isAuthenticated, supabaseUser?.id, guestMode]); // Re-run when user changes
+
+  // RevenueCat real-time listener — updates tier immediately on purchase/restore/expiry
+  useEffect(() => {
+    const listener = Purchases.addCustomerInfoUpdateListener(async (customerInfo) => {
+      if (!customerInfo) return;
+      const activeEntitlements = customerInfo?.entitlements?.active || {};
+      const isGold = activeEntitlements['Gold'] !== undefined;
+      const isSilver = activeEntitlements['Silver'] !== undefined;
+      const isLifetime = activeEntitlements['Lifetime'] !== undefined;
+      const tier = getUserTier(customerInfo);
+
+      setHasGold(isGold);
+      setHasSilver(isSilver);
+      setHasLifetimeAccess(isLifetime);
+      setUserTier(tier);
+
+      if (__DEV__) console.log('[RevenueCat Listener] Tier updated:', tier);
+
+      // Sync to Supabase — use specific tier (lifetime vs gold)
+      if (supabaseUser?.id) {
+        const syncTier = isLifetime ? 'lifetime' : isGold ? 'gold' : isSilver ? 'silver' : 'free';
+        syncSubscriptionToSupabase(supabaseUser.id, syncTier);
+      }
+    });
+
+    return () => listener.remove();
+  }, [supabaseUser?.id]);
 
   // Register background fetch for iOS (keeps widget data fresh when app is closed)
   useEffect(() => {
