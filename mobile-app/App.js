@@ -1709,7 +1709,7 @@ function AppContent() {
   const [dailyBriefLoading, setDailyBriefLoading] = useState(false);
   const [briefExpanded, setBriefExpanded] = useState(false);
 
-  // Analytics Tab - Portfolio Intelligence
+  // Analytics Tab - Stack Intelligence
   const [portfolioIntel, setPortfolioIntel] = useState(null); // { text, costBasis, purchaseStats, date, is_current }
   const [portfolioIntelLoading, setPortfolioIntelLoading] = useState(false);
   const [portfolioIntelExpanded, setPortfolioIntelExpanded] = useState(false);
@@ -7005,7 +7005,7 @@ function AppContent() {
       { key: 'holdings', label: 'Holdings' },
     ]},
     { key: 'analytics', label: 'Analytics', items: [
-      { key: 'portfolioIntelligence', label: 'Portfolio Intelligence' },
+      { key: 'portfolioIntelligence', label: 'Stack Intelligence' },
       { key: 'portfolioValueChart', label: 'Stack Value Chart' },
       { key: 'spotPriceHistory', label: 'Spot Price History' },
       { key: 'holdingsBreakdown', label: 'Holdings Breakdown' },
@@ -7027,7 +7027,7 @@ function AppContent() {
       ...(Platform.OS !== 'ios' ? [{ key: 'webApp', label: 'Web App' }] : []),
       { key: 'account', label: 'Account' },
       { key: 'notifications', label: 'Notifications' },
-      { key: 'whatsNew', label: "What's New in v2.0" },
+      { key: 'whatsNew', label: "What's New in v2.1" },
       { key: 'about', label: 'About' },
     ]},
   ];
@@ -8329,6 +8329,39 @@ function AppContent() {
                     </View>
                   </ScrollView>
                 )}
+
+                {/* Troy one-liner — Stack summary */}
+                {totalCostBasis > 0 && (() => {
+                  const pct = totalGainLossPct;
+                  const absPct = Math.abs(pct).toFixed(1);
+                  // Find largest holding by oz
+                  const metals = [
+                    { label: 'gold', ozt: totalGoldOzt },
+                    { label: 'silver', ozt: totalSilverOzt },
+                    { label: 'platinum', ozt: totalPlatinumOzt },
+                    { label: 'palladium', ozt: totalPalladiumOzt },
+                  ].filter(m => m.ozt > 0).sort((a, b) => b.ozt - a.ozt);
+                  const largest = metals[0];
+                  const suffix = largest && metals.length > 1
+                    ? <Text> {largest.label.charAt(0).toUpperCase() + largest.label.slice(1)} doing the heavy lifting at <Text style={{ fontWeight: '700' }}>{formatOunces(largest.ozt, largest.label === 'silver' ? 0 : 2)} oz</Text>.</Text>
+                    : '.';
+                  let msg;
+                  if (pct > 50) {
+                    msg = <Text style={{ color: colors.muted, fontSize: scaledFonts.small, lineHeight: scaledFonts.small * 1.5, fontStyle: 'italic', flex: 1 }}>Your stack is up <Text style={{ fontWeight: '700' }}>{absPct}%</Text> all-time — patience pays in metal.{suffix}</Text>;
+                  } else if (pct > 20) {
+                    msg = <Text style={{ color: colors.muted, fontSize: scaledFonts.small, lineHeight: scaledFonts.small * 1.5, fontStyle: 'italic', flex: 1 }}>Up <Text style={{ fontWeight: '700' }}>{absPct}%</Text> since you started stacking — the thesis is working.{suffix}</Text>;
+                  } else if (pct > 0) {
+                    msg = <Text style={{ color: colors.muted, fontSize: scaledFonts.small, lineHeight: scaledFonts.small * 1.5, fontStyle: 'italic', flex: 1 }}>Stack is green at <Text style={{ fontWeight: '700' }}>+{absPct}%</Text> — every oz is doing its job.{suffix}</Text>;
+                  } else {
+                    msg = <Text style={{ color: colors.muted, fontSize: scaledFonts.small, lineHeight: scaledFonts.small * 1.5, fontStyle: 'italic', flex: 1 }}>Down <Text style={{ fontWeight: '700' }}>{absPct}%</Text> on paper — stackers buy time, not ticks.</Text>;
+                  }
+                  return (
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 12 }}>
+                      <TroyCoinIcon size={14} />
+                      {msg}
+                    </View>
+                  );
+                })()}
               </View>
 
               {/* ===== SECTION 2: SORT/FILTER/GROUP BAR ===== */}
@@ -8526,7 +8559,7 @@ function AppContent() {
               </>
             )}
 
-            {/* Portfolio Intelligence */}
+            {/* Stack Intelligence */}
             <View onLayout={(e) => { sectionOffsets.current['portfolioIntelligence'] = e.nativeEvent.layout.y; }}>
               {effHasGoldAccess ? (
                 <View style={{
@@ -8541,7 +8574,7 @@ function AppContent() {
                 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                     <TroyCoinIcon size={20} />
-                    <Text style={{ color: colors.muted, fontSize: scaledFonts.small, fontWeight: '600' }}>Portfolio Intelligence</Text>
+                    <Text style={{ color: colors.muted, fontSize: scaledFonts.small, fontWeight: '600' }}>Stack Intelligence</Text>
                   </View>
                   {effPortfolioIntelLoading ? (
                     <ActivityIndicator size="small" color="#D4A843" style={{ paddingVertical: 8 }} />
@@ -8555,7 +8588,7 @@ function AppContent() {
                     </>
                   ) : (
                     <Text style={{ color: colors.muted, fontSize: scaledFonts.small, fontStyle: 'italic' }}>
-                      Portfolio intelligence will be available after 6:30 AM EST.
+                      Stack intelligence will be available after 6:30 AM EST.
                     </Text>
                   )}
                 </View>
@@ -8572,7 +8605,7 @@ function AppContent() {
                 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                     <TroyCoinIcon size={20} />
-                    <Text style={{ color: colors.muted, fontSize: scaledFonts.small, fontWeight: '600' }}>Portfolio Intelligence</Text>
+                    <Text style={{ color: colors.muted, fontSize: scaledFonts.small, fontWeight: '600' }}>Stack Intelligence</Text>
                   </View>
                   <View style={{ maxHeight: 60, overflow: 'hidden' }}>
                     <Text style={{ color: colors.text, fontSize: scaledFonts.normal, lineHeight: scaledFonts.normal * 1.5 }}>{effPortfolioIntel.text}</Text>
@@ -8603,7 +8636,7 @@ function AppContent() {
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                     <TroyCoinIcon size={20} />
-                    <Text style={{ color: colors.muted, fontSize: scaledFonts.small, fontWeight: '600' }}>Portfolio Intelligence</Text>
+                    <Text style={{ color: colors.muted, fontSize: scaledFonts.small, fontWeight: '600' }}>Stack Intelligence</Text>
                   </View>
                   <Text style={{ color: colors.muted, fontSize: scaledFonts.small }}>
                     Get Troy's portfolio intelligence — upgrade to Gold
@@ -9532,7 +9565,7 @@ function AppContent() {
                 />
                 <RowSeparator />
                 <SettingsRow
-                  label="What's New in v2.0"
+                  label="What's New in v2.1"
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     AsyncStorage.removeItem('has_seen_v2_0_tutorial');
@@ -9557,7 +9590,7 @@ function AppContent() {
                   }}>
                   <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>Version</Text>
                   <Text style={{ color: screenshotMode ? '#D4A843' : colors.muted, fontSize: scaledFonts.normal }}>
-                    2.0.0{screenshotMode ? ' 📸' : ''}
+                    2.1.0{screenshotMode ? ' 📸' : ''}
                   </Text>
                 </TouchableOpacity>
                 <RowSeparator />
