@@ -2187,7 +2187,7 @@ function AppContent() {
         case 'cost_basis': setCurrentScreen('Analytics'); break;
         case 'daily_brief': setCurrentScreen('Dashboard'); break;
         case 'signal_article': setCurrentScreen('StackSignal'); break;
-        case 'dealer_comparison': setShowDealerPrices(true); break;
+        case 'dealer_comparison': setCurrentScreen('CompareDealers'); break;
         case 'speculation': setCurrentScreen('Analytics'); break;
         case 'purchasing_power': setCurrentScreen('Analytics'); break;
         default: break;
@@ -2317,6 +2317,9 @@ function AppContent() {
   const [advisorQuestionsToday, setAdvisorQuestionsToday] = useState(0);
   const [playingMessageId, setPlayingMessageId] = useState(null);
   const currentAudioRef = useRef(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [currentRecording, setCurrentRecording] = useState(null);
+  const [autoPlayNextResponse, setAutoPlayNextResponse] = useState(false);
   const troyFlatListRef = useRef(null);
   // Swipe-back gesture responders for full-screen pages
   const accountSwipe = useRef(useSwipeBack(() => setShowAccountScreen(false))).current;
@@ -2336,7 +2339,7 @@ function AppContent() {
   const exportSwipe = useRef(useSwipeBack(() => setSettingsSubPage(null))).current;
   const advancedSwipe = useRef(useSwipeBack(() => setSettingsSubPage(null))).current;
   const stackSignalSwipe = useRef(useSwipeBack(() => setShowStackSignal(false))).current;
-  const dealerPricesSwipe = useRef(useSwipeBack(() => setShowDealerPrices(false))).current;
+  const dealerPricesSwipe = useRef(useSwipeBack(() => setCurrentScreen('TroyChat'))).current;
 
   const [showImportPreview, setShowImportPreview] = useState(false);
   const [importData, setImportData] = useState([]);
@@ -4562,6 +4565,87 @@ function AppContent() {
     }
   };
 
+  const startVoiceRecording = async () => {
+    try {
+      console.log('🎙 Starting recording...');
+      const permission = await Audio.requestPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert('Permission needed', 'Allow microphone access to talk to Troy.');
+        return;
+      }
+
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+
+      const recording = new Audio.Recording();
+      await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      await recording.startAsync();
+
+      setIsRecording(true);
+      setCurrentRecording(recording);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      console.log('🎙 Recording started');
+    } catch (error) {
+      console.error('🎙 Recording error:', error);
+      Alert.alert('Error', 'Could not start recording.');
+    }
+  };
+
+  const stopVoiceRecording = async () => {
+    try {
+      console.log('🎙 Stopping recording...');
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+      await currentRecording.stopAndUnloadAsync();
+      const uri = currentRecording.getURI();
+
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
+
+      setIsRecording(false);
+      setCurrentRecording(null);
+
+      console.log('🎙 Recording stopped, URI:', uri);
+
+      setTroyLoading(true);
+
+      const formData = new FormData();
+      formData.append('audio', { uri, type: 'audio/m4a', name: 'recording.m4a' });
+      formData.append('userId', supabaseUser?.id || 'anonymous');
+
+      const response = await fetch(`${API_BASE_URL}/v1/troy/transcribe`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        if (response.status === 429) {
+          Alert.alert('Voice Limit', error.message || 'Daily voice limit reached. Upgrade to Gold for more.');
+          setTroyLoading(false);
+          return;
+        }
+        throw new Error(error.error || 'Transcription failed');
+      }
+
+      const { text } = await response.json();
+      console.log('🎙 Transcribed:', text);
+
+      setTroyLoading(false);
+
+      if (text && text.trim()) {
+        setAutoPlayNextResponse(true);
+        sendTroyMessage(text.trim());
+      } else {
+        Alert.alert('Could not hear you', 'Try speaking again, closer to the mic.');
+      }
+    } catch (error) {
+      console.error('🎙 Transcription error:', error);
+      setIsRecording(false);
+      setCurrentRecording(null);
+      setTroyLoading(false);
+      Alert.alert('Error', 'Voice transcription failed. Try again.');
+    }
+  };
+
   const playTroyVoice = async (text, messageId) => {
     // Stop if already playing this message
     if (playingMessageId === messageId) {
@@ -4584,41 +4668,77 @@ function AppContent() {
 
       setPlayingMessageId(messageId);
 
+      // Set audio mode for playback
+      await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+
       const truncatedText = text.substring(0, 2000);
+      console.log('🔊 Fetching audio...');
       const response = await fetch(`${API_BASE_URL}/v1/troy/speak`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: truncatedText, userId: revenueCatUserId || 'anonymous' }),
+        body: JSON.stringify({ text: truncatedText, userId: supabaseUser?.id || 'anonymous' }),
       });
+      console.log('🔊 Fetch status:', response.status, 'content-type:', response.headers.get('content-type'));
 
-      if (!response.ok) throw new Error('TTS failed');
+      if (response.status === 429) {
+        const err = await response.json().catch(() => ({}));
+        Alert.alert('Voice Limit', err.message || 'Daily voice limit reached. Upgrade to Gold for more.');
+        setPlayingMessageId(null);
+        return;
+      }
+      if (!response.ok) throw new Error(`TTS fetch failed: ${response.status}`);
 
-      // Convert response to a local file URI for expo-av
-      const blob = await response.blob();
-      const reader = new FileReader();
-      const base64 = await new Promise((resolve, reject) => {
-        reader.onloadend = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
+      // Read response as arrayBuffer, convert to base64, write to file
+      const arrayBuffer = await response.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      console.log('🔊 Received', bytes.length, 'bytes');
+
+      if (bytes.length < 100) {
+        throw new Error(`Audio too small (${bytes.length} bytes) — likely an error response`);
+      }
+
+      // Convert Uint8Array to base64 in chunks (avoid call stack overflow on large arrays)
+      let binary = '';
+      const chunkSize = 8192;
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        const chunk = bytes.subarray(i, i + chunkSize);
+        binary += String.fromCharCode.apply(null, chunk);
+      }
+      const base64 = btoa(binary);
 
       const fileUri = FileSystem.cacheDirectory + `troy-voice-${messageId}.mp3`;
-      await FileSystem.writeAsStringAsync(fileUri, base64.split(',')[1], { encoding: FileSystem.EncodingType.Base64 });
+      await FileSystem.writeAsStringAsync(fileUri, base64, { encoding: FileSystem.EncodingType.Base64 });
+
+      // Verify file was written
+      const fileInfo = await FileSystem.getInfoAsync(fileUri);
+      console.log('🔊 Audio file created:', fileUri, 'size:', fileInfo.size);
+
+      if (!fileInfo.exists || fileInfo.size < 100) {
+        throw new Error(`File write failed or empty: exists=${fileInfo.exists}, size=${fileInfo.size}`);
+      }
 
       const { sound } = await Audio.Sound.createAsync({ uri: fileUri });
+      console.log('🔊 Sound created');
       currentAudioRef.current = sound;
 
       sound.setOnPlaybackStatusUpdate((status) => {
+        console.log('🔊 Status:', status.isLoaded ? `playing=${status.isPlaying} finished=${status.didJustFinish} pos=${status.positionMillis}` : `error=${status.error}`);
         if (status.didJustFinish) {
           setPlayingMessageId(null);
           currentAudioRef.current = null;
           sound.unloadAsync();
         }
+        if (status.error) {
+          console.log('🔊 Playback error:', status.error);
+          setPlayingMessageId(null);
+          currentAudioRef.current = null;
+        }
       });
 
       await sound.playAsync();
+      console.log('🔊 Playing');
     } catch (error) {
-      console.error('🎙️ TTS error:', error.message);
+      console.log('🔊 Error:', error.message, error.stack);
       setPlayingMessageId(null);
       currentAudioRef.current = null;
     }
@@ -4696,6 +4816,12 @@ function AppContent() {
         setTroyConversations(prev => prev.map(c =>
           c.id === convId ? { ...c, title: response.title, updated_at: new Date().toISOString() } : c
         ));
+      }
+
+      // Auto-play Troy's voice response after voice input
+      if (autoPlayNextResponse && assistantMsg.content && assistantMsg.id) {
+        setAutoPlayNextResponse(false);
+        setTimeout(() => playTroyVoice(assistantMsg.content, assistantMsg.id), 500);
       }
     } catch (e) {
       console.error('Failed to send message:', e);
@@ -5163,7 +5289,7 @@ function AppContent() {
   const saveDailySnapshot = async () => {
     // Only for Gold/Lifetime subscribers
     if (!hasGold && !hasLifetimeAccess) return;
-    if (!revenueCatUserId) return;
+    if (!supabaseUser?.id) return;
     if (!spotPricesLive) return; // Need live prices for accurate snapshot
 
     try {
@@ -5187,7 +5313,7 @@ function AppContent() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: revenueCatUserId,
+          userId: supabaseUser.id,
           totalValue,
           goldValue,
           silverValue,
@@ -5638,14 +5764,14 @@ function AppContent() {
       let apiSnapshots = [];
 
       // Only fetch from API if we have a userId
-      if (revenueCatUserId) {
+      if (supabaseUser?.id) {
         try {
           // Add timeout
           const timeoutId = setTimeout(() => controller.abort(), 10000);
 
           // Always fetch ALL data - we filter client-side
           const response = await fetch(
-            `${API_BASE_URL}/v1/snapshots/${encodeURIComponent(revenueCatUserId)}?range=ALL`,
+            `${API_BASE_URL}/v1/snapshots/${encodeURIComponent(supabaseUser.id)}?range=ALL`,
             { signal: controller.signal }
           );
           clearTimeout(timeoutId);
@@ -5667,7 +5793,7 @@ function AppContent() {
           if (__DEV__) console.log('⚠️ API snapshot fetch failed:', apiError.message);
         }
       } else {
-        if (__DEV__) console.log('📊 No revenueCatUserId, skipping API fetch - using local calculation');
+        if (__DEV__) console.log('📊 No supabaseUser, skipping API fetch - using local calculation');
       }
 
       // Calculate historical data from holdings + historical spot prices
@@ -5753,10 +5879,10 @@ function AppContent() {
 
   // Save snapshot when data is loaded and prices are live
   useEffect(() => {
-    if (dataLoaded && spotPricesLive && revenueCatUserId && (hasGold || hasLifetimeAccess)) {
+    if (dataLoaded && spotPricesLive && supabaseUser?.id && (hasGold || hasLifetimeAccess)) {
       saveDailySnapshot();
     }
-  }, [dataLoaded, spotPricesLive, revenueCatUserId, hasGold, hasLifetimeAccess]);
+  }, [dataLoaded, spotPricesLive, supabaseUser?.id, hasGold, hasLifetimeAccess]);
 
   // Fetch analytics when tab opens (data is cached, so only fetches once per session)
   // This effect triggers when: user navigates to Analytics tab, OR RevenueCat values become available while on Analytics
@@ -5766,7 +5892,7 @@ function AppContent() {
 
     // Need subscription access (but NOT revenueCatUserId - we can calculate locally without it)
     if (!hasGold && !hasLifetimeAccess) {
-      if (__DEV__) console.log('📊 Analytics: waiting for subscription info...', { revenueCatUserId: !!revenueCatUserId, hasGold, hasLifetimeAccess });
+      if (__DEV__) console.log('📊 Analytics: waiting for subscription info...', { supabaseUser: !!supabaseUser?.id, hasGold, hasLifetimeAccess });
       return;
     }
 
@@ -5794,7 +5920,7 @@ function AppContent() {
         analyticsAbortRef.current.abort();
       }
     };
-  }, [currentScreen, revenueCatUserId, hasGold, hasLifetimeAccess]); // revenueCatUserId still triggers re-run when it becomes available
+  }, [currentScreen, supabaseUser?.id, hasGold, hasLifetimeAccess]);
 
   // Apply filter when range changes (instant, no API call)
   useEffect(() => {
@@ -7831,7 +7957,8 @@ function AppContent() {
       return;
     }
     if (screenKey === 'CompareDealers') {
-      setShowDealerPrices(true);
+      setShowDealerPrices(false); // Close overlay if it was open
+      setCurrentScreen('CompareDealers');
       drawerNavigation?.dispatch(DrawerActions.closeDrawer());
       return;
     }
@@ -7894,7 +8021,7 @@ function AppContent() {
         {/* Section B — Navigation */}
         <View style={{ paddingVertical: 8 }}>
           {sidebarNavItems.map((item) => {
-            const isActive = currentScreen === item.key || (item.key === 'VaultWatch' && currentScreen === 'Dashboard');
+            const isActive = currentScreen === item.key;
             const iconColor = isActive ? '#C9A84C' : '#9ca3af';
             const renderIcon = () => {
               switch (item.iconType) {
@@ -8050,9 +8177,10 @@ function AppContent() {
 
   if (isLoading || authLoading || guestMode === null || needsPostSignInSync) {
     return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color={colors.silver} />
-        <Text style={{ color: colors.muted, marginTop: 16 }}>Loading your stack...</Text>
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#0A0A0E' }]}>
+        <Image source={TROY_AVATAR} style={{ width: 72, height: 72, borderRadius: 36, marginBottom: 16 }} />
+        <Text style={{ color: '#fff', fontSize: 22, fontWeight: '700', marginBottom: 4 }}>TroyStack</Text>
+        <ActivityIndicator size="small" color="#DAA520" style={{ marginTop: 12 }} />
       </View>
     );
   }
@@ -8145,8 +8273,12 @@ function AppContent() {
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Image source={TROY_AVATAR} style={{ width: 32, height: 32, borderRadius: 16 }} />
                 <View style={{ marginLeft: 10 }}>
-                  <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700' }}>Troy</Text>
-                  <Text style={{ color: '#999', fontSize: 12 }}>Your Stack Analyst</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700' }}>Troy</Text>
+                    {playingMessageId && <Text style={{ color: '#DAA520', fontSize: 12, marginLeft: 4 }}>🔊</Text>}
+                    {isRecording && <Text style={{ color: '#EF4444', fontSize: 12, marginLeft: 4 }}>🎙</Text>}
+                  </View>
+                  <Text style={{ color: '#999', fontSize: 12 }}>{isRecording ? 'Listening...' : 'Your Stack Analyst'}</Text>
                 </View>
               </View>
             </>
@@ -8156,7 +8288,7 @@ function AppContent() {
                 <Text style={{ color: '#D4A843', fontSize: 22, fontWeight: '300' }}>{'\u2039'}</Text>
               </TouchableOpacity>
               <Text style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>
-                {currentScreen === 'Dashboard' ? 'Dashboard' : currentScreen === 'MyStack' ? 'My Stack' : currentScreen === 'Analytics' ? 'Analytics' : currentScreen === 'StackSignal' ? 'Stack Signal' : currentScreen === 'Settings' ? 'Settings' : currentScreen}
+                {currentScreen === 'Dashboard' ? 'Dashboard' : currentScreen === 'MyStack' ? 'My Stack' : currentScreen === 'Analytics' ? 'Analytics' : currentScreen === 'StackSignal' ? 'Stack Signal' : currentScreen === 'Settings' ? 'Settings' : currentScreen === 'CompareDealers' ? 'Compare Dealers' : currentScreen}
               </Text>
             </>
           )}
@@ -9388,7 +9520,7 @@ function AppContent() {
                   if (!hasGoldAccess) {
                     setShowPaywallModal(true);
                   } else {
-                    setShowDealerPrices(true);
+                    setCurrentScreen('CompareDealers');
                   }
                 }}
                 style={{
@@ -11098,7 +11230,11 @@ function AppContent() {
                             if (chip.action === 'brief') {
                               fetchAndShowDailyBrief();
                             } else if (chip.action === 'scan') {
-                              performScan('camera');
+                              Alert.alert('Scan Receipt', 'Choose a source', [
+                                { text: 'Take Photo', onPress: () => performScan('camera') },
+                                { text: 'Choose from Library', onPress: () => performScan('gallery') },
+                                { text: 'Cancel', style: 'cancel' },
+                              ]);
                             } else {
                               sendTroyMessage(chip.text);
                             }
@@ -11165,22 +11301,18 @@ function AppContent() {
                       <Text style={{ color: '#DAA520', fontSize: 14, marginLeft: 6 }}>→</Text>
                     </TouchableOpacity>
                   )}
-                  {/* Troy Voice — play button on assistant messages */}
+                  {/* Troy Voice — play button on assistant messages (caps enforced server-side) */}
                   {item.role === 'assistant' && (
-                    hasGoldAccess ? (
-                      <TouchableOpacity
-                        onPress={() => playTroyVoice(item.content, item.id)}
-                        style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, paddingVertical: 4, paddingHorizontal: 8 }}
-                      >
-                        {playingMessageId === item.id ? (
-                          <Text style={{ color: '#DAA520', fontSize: 13 }}>■ Stop</Text>
-                        ) : (
-                          <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>▶ Listen</Text>
-                        )}
-                      </TouchableOpacity>
-                    ) : (
-                      <Text style={{ color: 'rgba(255,255,255,0.25)', fontSize: 11, marginTop: 6, paddingHorizontal: 8 }}>🔒 Upgrade to hear Troy</Text>
-                    )
+                    <TouchableOpacity
+                      onPress={() => playTroyVoice(item.content, item.id)}
+                      style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, paddingVertical: 4, paddingHorizontal: 8 }}
+                    >
+                      {playingMessageId === item.id ? (
+                        <Text style={{ color: '#DAA520', fontSize: 13 }}>■ Stop</Text>
+                      ) : (
+                        <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>▶ Listen</Text>
+                      )}
+                    </TouchableOpacity>
                   )}
                 </View>
               )}
@@ -11212,7 +11344,13 @@ function AppContent() {
                       onPress={() => {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                         if (chip.action === 'brief') fetchAndShowDailyBrief();
-                        else if (chip.action === 'scan') performScan('camera');
+                        else if (chip.action === 'scan') {
+                          Alert.alert('Scan Receipt', 'Choose a source', [
+                            { text: 'Take Photo', onPress: () => performScan('camera') },
+                            { text: 'Choose from Library', onPress: () => performScan('gallery') },
+                            { text: 'Cancel', style: 'cancel' },
+                          ]);
+                        }
                         else sendTroyMessage(chip.text);
                       }}
                       style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#1a1a1a', borderRadius: 14, height: 30, paddingHorizontal: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' }}
@@ -11259,21 +11397,41 @@ function AppContent() {
                 spellCheck={true}
                 autoCapitalize="sentences"
               />
-              <TouchableOpacity
-                onPress={() => sendTroyMessage()}
-                disabled={!troyInputText.trim() || troyLoading}
-                style={{
-                  marginLeft: 8,
-                  width: 36,
-                  height: 36,
-                  borderRadius: 18,
-                  backgroundColor: troyInputText.trim() && !troyLoading ? '#C9A84C' : '#333',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                }}
-              >
-                <Text style={{ color: troyInputText.trim() && !troyLoading ? '#000' : '#666', fontSize: 16, fontWeight: '700' }}>{'\u2191'}</Text>
-              </TouchableOpacity>
+              {troyInputText.trim() ? (
+                <TouchableOpacity
+                  onPress={() => sendTroyMessage()}
+                  disabled={troyLoading}
+                  style={{
+                    marginLeft: 8,
+                    width: 36,
+                    height: 36,
+                    borderRadius: 18,
+                    backgroundColor: !troyLoading ? '#C9A84C' : '#333',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                  }}
+                >
+                  <Text style={{ color: !troyLoading ? '#000' : '#666', fontSize: 16, fontWeight: '700' }}>{'\u2191'}</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  onPress={isRecording ? stopVoiceRecording : startVoiceRecording}
+                  disabled={troyLoading}
+                  style={{
+                    marginLeft: 8,
+                    width: 36,
+                    height: 36,
+                    borderRadius: 18,
+                    backgroundColor: isRecording ? '#EF4444' : 'rgba(255,255,255,0.1)',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                  }}
+                >
+                  <Text style={{ color: isRecording ? '#fff' : 'rgba(255,255,255,0.5)', fontSize: 18 }}>
+                    {isRecording ? '■' : '🎙'}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           </KeyboardAvoidingView>
 
@@ -13375,12 +13533,12 @@ function AppContent() {
         </View>
       </Modal>
 
-      {/* ===== DEALER PRICE COMPARISON OVERLAY ===== */}
-      {showDealerPrices && (
-        <View {...dealerPricesSwipe.panHandlers} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 9998 }}>
+      {/* ===== COMPARE DEALERS SCREEN ===== */}
+      {currentScreen === 'CompareDealers' && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 9998 }}>
           <SafeAreaView style={{ flex: 1, backgroundColor: '#000' }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' }}>
-              <TouchableOpacity onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowDealerPrices(false); }} style={{ marginRight: 12 }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <TouchableOpacity onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setCurrentScreen('TroyChat'); }} style={{ marginRight: 12 }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                 <Text style={{ color: '#C9A84C', fontSize: 28, fontWeight: '300' }}>{'\u2039'}</Text>
               </TouchableOpacity>
               <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700', flex: 1 }}>Compare Dealer Prices</Text>

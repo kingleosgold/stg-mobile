@@ -5964,6 +5964,37 @@ app.post('/v1/troy/conversations/:id/messages', async (req, res) => {
 // TROY VOICE — ElevenLabs Text-to-Speech
 // ============================================
 
+// Voice usage tracking — in-memory, keyed by date:userId
+const voiceUsage = {};
+const VOICE_FREE_LIMIT = 1;
+const VOICE_GOLD_LIMIT = 20;
+
+function getVoiceUsage(userId) {
+  const today = new Date().toISOString().split('T')[0];
+  const key = `${today}:${userId}`;
+  return voiceUsage[key] || 0;
+}
+
+function incrementVoiceUsage(userId) {
+  const today = new Date().toISOString().split('T')[0];
+  const key = `${today}:${userId}`;
+  voiceUsage[key] = (voiceUsage[key] || 0) + 1;
+  // Clean up old days
+  for (const k of Object.keys(voiceUsage)) {
+    if (!k.startsWith(today)) delete voiceUsage[k];
+  }
+  return voiceUsage[key];
+}
+
+async function checkUserIsGold(userId) {
+  if (!isSupabaseAvailable()) return false;
+  try {
+    const supabase = getSupabase();
+    const { data } = await supabase.from('profiles').select('subscription_tier').eq('id', userId).single();
+    return data?.subscription_tier === 'gold' || data?.subscription_tier === 'lifetime';
+  } catch { return false; }
+}
+
 app.post('/v1/troy/speak', async (req, res) => {
   try {
     const { text, userId } = req.body;
@@ -5973,16 +6004,25 @@ app.post('/v1/troy/speak', async (req, res) => {
     }
 
     const apiKey = process.env.ELEVENLABS_API_KEY;
-    const voiceId = process.env.ELEVENLABS_VOICE_ID || 'pNInz6obpgDQGcFmaJgB'; // placeholder default
+    const voiceId = process.env.ELEVENLABS_VOICE_ID || 'pNInz6obpgDQGcFmaJgB';
 
     if (!apiKey) {
       return res.status(503).json({ error: 'TTS service not configured' });
     }
 
-    // Truncate to 2000 chars to control costs
-    const truncatedText = text.substring(0, 2000);
+    // Check voice usage cap
+    const isGold = await checkUserIsGold(userId);
+    const limit = isGold ? VOICE_GOLD_LIMIT : VOICE_FREE_LIMIT;
+    const used = getVoiceUsage(userId);
+    if (used >= limit) {
+      const msg = isGold
+        ? `You've used ${limit} voice plays today. Resets tomorrow.`
+        : `Free users get ${VOICE_FREE_LIMIT} voice play per day. Upgrade to Gold for ${VOICE_GOLD_LIMIT}.`;
+      return res.status(429).json({ error: 'Voice limit reached', message: msg });
+    }
 
-    console.log(`🎙️ [TTS] Request from ${userId.substring(0, 8)}... (${truncatedText.length} chars)`);
+    const truncatedText = text.substring(0, 2000);
+    console.log(`🎙️ [TTS] Request from ${userId.substring(0, 8)}... (${truncatedText.length} chars, ${used + 1}/${limit})`);
 
     const ttsResponse = await axios({
       method: 'post',
@@ -6004,6 +6044,8 @@ app.post('/v1/troy/speak', async (req, res) => {
       timeout: 30000,
     });
 
+    incrementVoiceUsage(userId);
+
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Transfer-Encoding', 'chunked');
     ttsResponse.data.pipe(res);
@@ -6013,6 +6055,70 @@ app.post('/v1/troy/speak', async (req, res) => {
     if (!res.headersSent) {
       return res.status(500).json({ error: 'TTS failed' });
     }
+  }
+});
+
+// Speech-to-Text transcription via OpenAI Whisper
+const transcribeUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+
+app.post('/v1/troy/transcribe', transcribeUpload.single('audio'), async (req, res) => {
+  try {
+    const userId = req.body.userId;
+    if (!userId) {
+      return res.status(400).json({ error: 'Missing userId' });
+    }
+
+    const openaiKey = process.env.OPENAI_API_KEY;
+    if (!openaiKey) {
+      return res.status(503).json({ error: 'Transcription service not configured' });
+    }
+
+    // Check voice usage cap (transcribe counts toward same voice cap)
+    const isGold = await checkUserIsGold(userId);
+    const limit = isGold ? VOICE_GOLD_LIMIT : VOICE_FREE_LIMIT;
+    const used = getVoiceUsage(userId);
+    if (used >= limit) {
+      const msg = isGold
+        ? `You've used ${limit} voice exchanges today. Resets tomorrow.`
+        : `Free users get ${VOICE_FREE_LIMIT} voice exchange per day. Upgrade to Gold for ${VOICE_GOLD_LIMIT}.`;
+      return res.status(429).json({ error: 'Voice limit reached', message: msg });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No audio file provided' });
+    }
+
+    console.log(`🎙️ [STT] Transcribe request from ${userId.substring(0, 8)}... (${(req.file.size / 1024).toFixed(0)}KB, ${used + 1}/${limit})`);
+
+    // Build multipart form for OpenAI Whisper API
+    const FormData = require('form-data');
+    const form = new FormData();
+    form.append('file', req.file.buffer, { filename: 'recording.m4a', contentType: 'audio/m4a' });
+    form.append('model', 'whisper-1');
+    form.append('language', 'en');
+
+    const whisperResponse = await axios.post(
+      'https://api.openai.com/v1/audio/transcriptions',
+      form,
+      {
+        headers: {
+          'Authorization': `Bearer ${openaiKey}`,
+          ...form.getHeaders(),
+        },
+        timeout: 30000,
+      }
+    );
+
+    const text = whisperResponse.data?.text || '';
+    console.log(`🎙️ [STT] Transcribed: "${text.substring(0, 80)}..."`);
+
+    incrementVoiceUsage(userId);
+
+    return res.json({ text });
+
+  } catch (error) {
+    console.error('❌ [STT] Error:', error.response?.status, error.response?.data, error.message);
+    return res.status(500).json({ error: 'Transcription failed' });
   }
 });
 
