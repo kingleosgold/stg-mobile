@@ -4,7 +4,8 @@
  * "Make Stacking Great Again" Edition 🪙
  */
 
-import React, { useState, useEffect, useRef, Component } from 'react';
+import 'react-native-reanimated';
+import React, { useState, useEffect, useRef, Component, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput,
   Alert, Modal, Platform, SafeAreaView, StatusBar, ActivityIndicator,
@@ -21,6 +22,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Haptics from 'expo-haptics';
+import { Audio } from 'expo-av';
 import Purchases from 'react-native-purchases';
 import * as XLSX from 'xlsx';
 import * as Notifications from 'expo-notifications';
@@ -31,7 +33,692 @@ import { syncWidgetData, isWidgetKitAvailable } from './src/utils/widgetKit';
 import { registerBackgroundFetch, getBackgroundFetchStatus } from './src/utils/backgroundTasks';
 // LineChart removed — all charts now use ScrubChart
 import Svg, { Path, Circle, Line, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
-import { Swipeable, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { Swipeable, GestureHandlerRootView, Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { NavigationContainer, useNavigation, DrawerActions } from '@react-navigation/native';
+import { createDrawerNavigator } from '@react-navigation/drawer';
+import Reanimated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  runOnJS,
+} from 'react-native-reanimated';
+const Drawer = createDrawerNavigator();
+
+// ============================================
+// PREVIEW CONTEXT + BOTTOM SHEET
+// ============================================
+
+const PreviewContext = React.createContext();
+
+function PreviewProvider({ children }) {
+  const [previewContent, setPreviewContent] = useState(null);
+  const [previewVisible, setPreviewVisible] = useState(false);
+  const onOpenFullRef = useRef(null);
+
+  const openPreview = useCallback((content) => {
+    setPreviewContent(content);
+    setPreviewVisible(true);
+  }, []);
+
+  const closePreview = useCallback(() => {
+    setPreviewVisible(false);
+    setTimeout(() => setPreviewContent(null), 300);
+  }, []);
+
+  const setOnOpenFull = useCallback((fn) => { onOpenFullRef.current = fn; }, []);
+  const handleOpenFull = useCallback(() => {
+    if (onOpenFullRef.current && previewContent) {
+      onOpenFullRef.current(previewContent);
+      closePreview();
+    }
+  }, [previewContent, closePreview]);
+
+  return (
+    <PreviewContext.Provider value={{ openPreview, closePreview, handleOpenFull, setOnOpenFull, previewContent, previewVisible }}>
+      {children}
+    </PreviewContext.Provider>
+  );
+}
+
+function usePreview() {
+  return React.useContext(PreviewContext);
+}
+
+// Preview content components
+const PREVIEW_METAL_COLORS = { gold: '#D4A843', silver: '#C0C0C0', platinum: '#7BB3D4', palladium: '#6BBF8A' };
+
+function PreviewChart({ data, chartType }) {
+  if (!data) return <Text style={{ color: '#52525b', padding: 24 }}>No chart data available</Text>;
+
+  if (chartType === 'ratio') {
+    const ratio = data.ratio || 'N/A';
+    return (
+      <View style={{ padding: 24 }}>
+        <Text style={{ color: '#fff', fontSize: 48, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>{ratio}</Text>
+        <Text style={{ color: '#71717a', fontSize: 14, textAlign: 'center', marginBottom: 24 }}>Gold / Silver Ratio</Text>
+        <View style={{ backgroundColor: '#1a1a1a', borderRadius: 12, padding: 16 }}>
+          <Text style={{ color: '#a1a1aa', fontSize: 14, lineHeight: 20 }}>
+            The gold-to-silver ratio measures how many ounces of silver it takes to buy one ounce of gold.
+            Historically, ratios above 80 have preceded significant silver rallies.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  // Spot price display
+  const metals = [
+    { key: 'gold', label: 'Gold', price: data.goldPrice, color: PREVIEW_METAL_COLORS.gold },
+    { key: 'silver', label: 'Silver', price: data.silverPrice, color: PREVIEW_METAL_COLORS.silver },
+    { key: 'platinum', label: 'Platinum', price: data.platinumPrice, color: PREVIEW_METAL_COLORS.platinum },
+    { key: 'palladium', label: 'Palladium', price: data.palladiumPrice, color: PREVIEW_METAL_COLORS.palladium },
+  ].filter(m => m.price);
+
+  return (
+    <View style={{ padding: 16 }}>
+      {metals.map(m => {
+        const chg = data.change?.[m.key];
+        const pct = chg?.percent;
+        const isUp = pct >= 0;
+        return (
+          <View key={m.key} style={{ backgroundColor: '#1a1a1a', borderRadius: 12, padding: 16, marginBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View>
+              <Text style={{ color: m.color, fontSize: 13, fontWeight: '600', marginBottom: 2 }}>{m.label}</Text>
+              <Text style={{ color: '#fff', fontSize: 24, fontWeight: '700' }}>${m.price?.toFixed(2)}</Text>
+            </View>
+            {pct != null && (
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={{ color: isUp ? '#22c55e' : '#ef4444', fontSize: 16, fontWeight: '700' }}>{isUp ? '+' : ''}{pct.toFixed(2)}%</Text>
+                {chg?.amount != null && <Text style={{ color: '#71717a', fontSize: 12 }}>{isUp ? '+' : ''}${chg.amount.toFixed(2)}</Text>}
+              </View>
+            )}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+function PreviewArticle({ article }) {
+  return (
+    <View style={{ padding: 24 }}>
+      <Text style={{ color: '#C9A84C', fontSize: 20, fontWeight: '700', marginBottom: 12 }}>{article?.title || 'Stack Signal'}</Text>
+      {article?.troy_commentary ? (
+        <Text style={{ color: '#d4d4d8', fontSize: 15, lineHeight: 22 }}>{article.troy_commentary}</Text>
+      ) : (
+        <Text style={{ color: '#71717a', fontSize: 14 }}>Open the Stack Signal tab for the latest articles.</Text>
+      )}
+    </View>
+  );
+}
+
+function PreviewPortfolio({ data }) {
+  if (!data) return <Text style={{ color: '#52525b', padding: 24 }}>No portfolio data available</Text>;
+
+  const { totalValue, totalCost, totalGain, totalGainPercent, metalTotals, holdings } = data;
+  const isPositive = totalGain >= 0;
+  const metalEntries = metalTotals ? Object.entries(metalTotals).filter(([_, v]) => v.oz > 0) : [];
+
+  return (
+    <View style={{ padding: 16 }}>
+      {/* Total value */}
+      <View style={{ alignItems: 'center', marginBottom: 20, paddingVertical: 16 }}>
+        <Text style={{ color: '#71717a', fontSize: 13, marginBottom: 4 }}>Total Stack Value</Text>
+        <Text style={{ color: '#fff', fontSize: 36, fontWeight: '700' }}>${totalValue?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
+          <Text style={{ color: isPositive ? '#22c55e' : '#ef4444', fontSize: 16, fontWeight: '700' }}>
+            {isPositive ? '+' : ''}${totalGain?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
+          </Text>
+          <Text style={{ color: isPositive ? '#22c55e' : '#ef4444', fontSize: 14 }}>
+            ({isPositive ? '+' : ''}{parseFloat(totalGainPercent || 0)}%)
+          </Text>
+        </View>
+      </View>
+
+      {/* Metal breakdown */}
+      {metalEntries.map(([metal, vals]) => {
+        const value = vals.oz * (data[`${metal}Price`] || (metal === 'gold' ? data.goldPrice : data.silverPrice) || 0);
+        const gain = value - vals.cost;
+        const gainPct = vals.cost > 0 ? ((gain / vals.cost) * 100) : 0;
+        const color = PREVIEW_METAL_COLORS[metal] || '#C0C0C0';
+        return (
+          <View key={metal} style={{ backgroundColor: '#1a1a1a', borderRadius: 12, padding: 14, marginBottom: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <View>
+              <Text style={{ color, fontSize: 14, fontWeight: '600', marginBottom: 2 }}>{metal.charAt(0).toUpperCase() + metal.slice(1)}</Text>
+              <Text style={{ color: '#a1a1aa', fontSize: 12 }}>{vals.oz.toFixed(2)} oz</Text>
+            </View>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>${value.toFixed(2)}</Text>
+              <Text style={{ color: gain >= 0 ? '#22c55e' : '#ef4444', fontSize: 12 }}>{gain >= 0 ? '+' : ''}{gainPct.toFixed(1)}%</Text>
+            </View>
+          </View>
+        );
+      })}
+
+      {/* Cost basis line */}
+      <View style={{ marginTop: 8, paddingTop: 12, borderTopWidth: 0.5, borderTopColor: 'rgba(255,255,255,0.1)', flexDirection: 'row', justifyContent: 'space-between' }}>
+        <Text style={{ color: '#71717a', fontSize: 13 }}>Cost Basis</Text>
+        <Text style={{ color: '#a1a1aa', fontSize: 13, fontWeight: '600' }}>${totalCost?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}</Text>
+      </View>
+    </View>
+  );
+}
+
+function PreviewDailyBrief({ data }) {
+  return (
+    <View style={{ padding: 24 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+        <Text style={{ fontSize: 20 }}>☀️</Text>
+        <Text style={{ color: '#C9A84C', fontSize: 18, fontWeight: '700' }}>Daily Brief</Text>
+      </View>
+      {data?.brief_text ? (
+        <Text style={{ color: '#d4d4d8', fontSize: 15, lineHeight: 22 }}>{data.brief_text}</Text>
+      ) : (
+        <Text style={{ color: '#71717a', fontSize: 14 }}>Open the Dashboard to read today's brief from Troy.</Text>
+      )}
+    </View>
+  );
+}
+
+function PreviewDealerComparison({ data }) {
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+      <Text style={{ color: '#C9A84C', fontSize: 18, fontWeight: '700', marginBottom: 8 }}>Dealer Comparison</Text>
+      <Text style={{ color: '#71717a', fontSize: 14, textAlign: 'center' }}>Open Compare Dealers from the sidebar for live pricing.</Text>
+    </View>
+  );
+}
+
+function PreviewCostBasis({ data }) {
+  if (!data?.holdings?.length) return <Text style={{ color: '#52525b', padding: 24 }}>No holdings data available</Text>;
+
+  const { holdings, totalCost, totalValue } = data;
+
+  // Group by metal
+  const byMetal = {};
+  for (const h of holdings) {
+    if (!byMetal[h.metal]) byMetal[h.metal] = { items: [], totalOz: 0, totalCost: 0, totalValue: 0 };
+    byMetal[h.metal].items.push(h);
+    byMetal[h.metal].totalOz += parseFloat(h.totalOz);
+    byMetal[h.metal].totalCost += parseFloat(h.totalCost);
+    byMetal[h.metal].totalValue += parseFloat(h.currentValue);
+  }
+
+  return (
+    <View style={{ padding: 16 }}>
+      {Object.entries(byMetal).map(([metal, d]) => {
+        const avgCost = d.totalOz > 0 ? d.totalCost / d.totalOz : 0;
+        const color = PREVIEW_METAL_COLORS[metal] || '#C0C0C0';
+        const gain = d.totalValue - d.totalCost;
+        return (
+          <View key={metal} style={{ backgroundColor: '#1a1a1a', borderRadius: 12, padding: 14, marginBottom: 10 }}>
+            <Text style={{ color, fontSize: 15, fontWeight: '700', marginBottom: 8 }}>{metal.charAt(0).toUpperCase() + metal.slice(1)}</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+              <Text style={{ color: '#71717a', fontSize: 13 }}>Avg Cost/oz</Text>
+              <Text style={{ color: '#d4d4d8', fontSize: 13, fontWeight: '600' }}>${avgCost.toFixed(2)}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+              <Text style={{ color: '#71717a', fontSize: 13 }}>Total Invested</Text>
+              <Text style={{ color: '#d4d4d8', fontSize: 13 }}>${d.totalCost.toFixed(2)}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+              <Text style={{ color: '#71717a', fontSize: 13 }}>Current Value</Text>
+              <Text style={{ color: '#d4d4d8', fontSize: 13 }}>${d.totalValue.toFixed(2)}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Text style={{ color: '#71717a', fontSize: 13 }}>Gain/Loss</Text>
+              <Text style={{ color: gain >= 0 ? '#22c55e' : '#ef4444', fontSize: 13, fontWeight: '600' }}>{gain >= 0 ? '+' : ''}${gain.toFixed(2)}</Text>
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+function PreviewSpeculation({ data }) {
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+      <Text style={{ color: '#C9A84C', fontSize: 18, fontWeight: '700', marginBottom: 8 }}>What If...</Text>
+      <Text style={{ color: '#71717a', fontSize: 14, textAlign: 'center' }}>Open the Speculation Tool from Analytics for scenario modeling.</Text>
+    </View>
+  );
+}
+
+function PreviewPurchasingPower({ data }) {
+  if (!data) return <Text style={{ color: '#52525b', padding: 24 }}>No purchasing power data available</Text>;
+
+  const PPRow = ({ icon, label, value, sub }) => (
+    <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: 'rgba(255,255,255,0.06)' }}>
+      <Text style={{ fontSize: 18, width: 30, textAlign: 'center' }}>{icon}</Text>
+      <View style={{ flex: 1, marginLeft: 10 }}>
+        <Text style={{ color: '#d4d4d8', fontSize: 14 }}>{label}</Text>
+        {sub && <Text style={{ color: '#52525b', fontSize: 11, marginTop: 1 }}>{sub}</Text>}
+      </View>
+      <Text style={{ color: '#C9A84C', fontSize: 16, fontWeight: '700' }}>{value}</Text>
+    </View>
+  );
+
+  return (
+    <View style={{ padding: 16 }}>
+      {/* Section 1: Your Stack Buys */}
+      <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700', marginBottom: 4 }}>Your Stack Buys</Text>
+      <Text style={{ color: '#71717a', fontSize: 13, marginBottom: 12 }}>What your stack can actually purchase today</Text>
+      <View style={{ backgroundColor: '#1a1a1a', borderRadius: 12, paddingHorizontal: 14, marginBottom: 20 }}>
+        <PPRow icon="🛢" label="Barrels of crude oil" value={data.stackBarrelsOfOil?.toFixed(1)} sub="@ ~$85/barrel" />
+        <PPRow icon="🏠" label="Months of median rent" value={data.stackMonthsOfRent?.toFixed(1)} sub="@ ~$1,850/month US median" />
+        <PPRow icon="⏱" label="Hours of median labor" value={data.stackHoursOfLabor?.toLocaleString()} sub="@ ~$29/hour US median" />
+      </View>
+
+      {/* Section 2: Per Ounce of Gold */}
+      <Text style={{ color: '#D4A843', fontSize: 15, fontWeight: '700', marginBottom: 8 }}>Per Ounce of Gold</Text>
+      <View style={{ backgroundColor: '#1a1a1a', borderRadius: 12, paddingHorizontal: 14, marginBottom: 20 }}>
+        <PPRow icon="🛢" label="Barrels of crude oil" value={data.goldPerBarrelOfOil?.toFixed(1)} />
+        <PPRow icon="🏠" label="Months of median rent" value={data.goldPerMedianRent?.toFixed(1)} />
+        <PPRow icon="👔" label="Quality men's suits" value="~1" sub="Same as 1900 — gold holds value" />
+      </View>
+
+      {/* Section 3: Per Ounce of Silver */}
+      <Text style={{ color: '#C0C0C0', fontSize: 15, fontWeight: '700', marginBottom: 8 }}>Per Ounce of Silver</Text>
+      <View style={{ backgroundColor: '#1a1a1a', borderRadius: 12, paddingHorizontal: 14, marginBottom: 20 }}>
+        <PPRow icon="⛽" label="Gallons of gasoline" value={data.silverPerGallonOfGas?.toFixed(1)} />
+        <PPRow icon="⏱" label="Hours of median labor" value={data.silverPerHoursOfLabor?.toFixed(1)} />
+      </View>
+
+      {/* Section 4: vs 1971 */}
+      <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700', marginBottom: 8 }}>vs. 1971 (Nixon Shock)</Text>
+      <View style={{ backgroundColor: '#1a1a1a', borderRadius: 12, padding: 14 }}>
+        <View style={{ marginBottom: 12 }}>
+          <Text style={{ color: '#D4A843', fontSize: 13, fontWeight: '600', marginBottom: 4 }}>Gold vs. Oil</Text>
+          <Text style={{ color: '#a1a1aa', fontSize: 13, lineHeight: 18 }}>
+            1971: 1 oz gold bought ~{data.goldOilRatio1971} barrels of oil.{'\n'}
+            Today: 1 oz gold buys <Text style={{ color: '#C9A84C', fontWeight: '700' }}>{data.goldPerBarrelOfOil?.toFixed(1)}</Text> barrels.
+          </Text>
+        </View>
+        <View style={{ marginBottom: 12 }}>
+          <Text style={{ color: '#C0C0C0', fontSize: 13, fontWeight: '600', marginBottom: 4 }}>Silver vs. Gasoline</Text>
+          <Text style={{ color: '#a1a1aa', fontSize: 13, lineHeight: 18 }}>
+            1971: 1 oz silver bought ~{data.silverGasRatio1971} gallons of gas.{'\n'}
+            Today: 1 oz silver buys <Text style={{ color: '#C9A84C', fontWeight: '700' }}>{data.silverPerGallonOfGas?.toFixed(1)}</Text> gallons.
+          </Text>
+        </View>
+        <Text style={{ color: '#52525b', fontSize: 12, fontStyle: 'italic' }}>Gold and silver didn't just keep up — they outperformed real goods over 50+ years.</Text>
+      </View>
+    </View>
+  );
+}
+
+// ============================================
+// INLINE RICH CONTENT CARDS (inside Troy's message bubble)
+// ============================================
+
+const INLINE_CARD_STYLE = {
+  backgroundColor: 'rgba(255,255,255,0.05)',
+  borderRadius: 8,
+  borderWidth: 0.5,
+  borderColor: 'rgba(255,255,255,0.1)',
+  padding: 12,
+  marginTop: 8,
+};
+
+function InlinePortfolioCard({ data }) {
+  if (!data) return null;
+  const { totalValue, totalGain, totalGainPercent, metalTotals } = data;
+  const isPositive = totalGain >= 0;
+  const metalEntries = metalTotals ? Object.entries(metalTotals).filter(([_, v]) => v.oz > 0) : [];
+
+  return (
+    <View style={INLINE_CARD_STYLE}>
+      <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, marginBottom: 2 }}>Total Stack Value</Text>
+      <Text style={{ color: '#DAA520', fontSize: 22, fontWeight: '700' }}>
+        ${totalValue?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'}
+      </Text>
+      <Text style={{ color: isPositive ? '#4ADE80' : '#EF4444', fontSize: 13, fontWeight: '600', marginBottom: 8 }}>
+        {isPositive ? '+' : ''}${totalGain?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0.00'} ({isPositive ? '+' : ''}{parseFloat(totalGainPercent || 0)}%) {isPositive ? '▲' : '▼'}
+      </Text>
+      {metalEntries.map(([metal, vals]) => {
+        const price = data[`${metal}Price`] || 0;
+        const value = vals.oz * price;
+        const gain = value - vals.cost;
+        const gainPct = vals.cost > 0 ? ((gain / vals.cost) * 100) : 0;
+        const color = PREVIEW_METAL_COLORS[metal] || '#C0C0C0';
+        return (
+          <View key={metal} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 3 }}>
+            <Text style={{ color, fontSize: 12, fontWeight: '600', width: 50 }}>{metal.charAt(0).toUpperCase() + metal.slice(1)}</Text>
+            <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, flex: 1 }}>{vals.oz.toFixed(vals.oz >= 100 ? 0 : 2)} oz</Text>
+            <Text style={{ color: '#d4d4d8', fontSize: 12, fontWeight: '600', marginRight: 8 }}>${value >= 1000 ? (value / 1000).toFixed(0) + 'k' : value.toFixed(0)}</Text>
+            <Text style={{ color: gain >= 0 ? '#4ADE80' : '#EF4444', fontSize: 11 }}>{gain >= 0 ? '+' : ''}{gainPct.toFixed(1)}%</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+function InlinePriceCard({ data }) {
+  if (!data) return null;
+  const metals = [
+    { key: 'gold', label: 'Gold', price: data.goldPrice, color: PREVIEW_METAL_COLORS.gold },
+    { key: 'silver', label: 'Silver', price: data.silverPrice, color: PREVIEW_METAL_COLORS.silver },
+  ].filter(m => m.price);
+
+  return (
+    <View style={INLINE_CARD_STYLE}>
+      {metals.map((m, i) => {
+        const chg = data.change?.[m.key];
+        const pct = chg?.percent;
+        const isUp = pct >= 0;
+        return (
+          <View key={m.key} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: i > 0 ? 4 : 0, marginTop: i > 0 ? 4 : 0, borderTopWidth: i > 0 ? 0.5 : 0, borderTopColor: 'rgba(255,255,255,0.06)' }}>
+            <Text style={{ color: m.color, fontSize: 13, fontWeight: '600' }}>{m.label}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Text style={{ color: '#DAA520', fontSize: 14, fontWeight: '700' }}>${m.price?.toFixed(2)}</Text>
+              {pct != null && (
+                <Text style={{ color: isUp ? '#4ADE80' : '#EF4444', fontSize: 12, fontWeight: '600' }}>
+                  {isUp ? '▲' : '▼'} {Math.abs(pct).toFixed(1)}%
+                </Text>
+              )}
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+function InlineRatioCard({ data }) {
+  if (!data) return null;
+  const ratio = data.ratio || 'N/A';
+  return (
+    <View style={INLINE_CARD_STYLE}>
+      <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, marginBottom: 2 }}>Gold/Silver Ratio</Text>
+      <Text style={{ color: '#DAA520', fontSize: 28, fontWeight: '700', marginBottom: 4 }}>{ratio}</Text>
+      <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, lineHeight: 15 }}>
+        {data.interpretation || 'Historically, ratios above 80 have preceded significant silver rallies.'}
+      </Text>
+    </View>
+  );
+}
+
+function InlineCostBasisCard({ data }) {
+  if (!data?.holdings?.length) return null;
+  const { holdings, totalCost, totalValue } = data;
+
+  const byMetal = {};
+  for (const h of holdings) {
+    if (!byMetal[h.metal]) byMetal[h.metal] = { totalOz: 0, totalCost: 0, totalValue: 0 };
+    byMetal[h.metal].totalOz += parseFloat(h.totalOz);
+    byMetal[h.metal].totalCost += parseFloat(h.totalCost);
+    byMetal[h.metal].totalValue += parseFloat(h.currentValue);
+  }
+
+  return (
+    <View style={INLINE_CARD_STYLE}>
+      <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, marginBottom: 6 }}>Cost Basis</Text>
+      {Object.entries(byMetal).map(([metal, d]) => {
+        const avgCost = d.totalOz > 0 ? d.totalCost / d.totalOz : 0;
+        const spotPrice = d.totalOz > 0 ? d.totalValue / d.totalOz : 0;
+        const color = PREVIEW_METAL_COLORS[metal] || '#C0C0C0';
+        return (
+          <View key={metal} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 2 }}>
+            <Text style={{ color, fontSize: 12, fontWeight: '600', width: 55 }}>{metal.charAt(0).toUpperCase() + metal.slice(1)}</Text>
+            <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, flex: 1 }}>Avg ${avgCost.toFixed(0)}/oz</Text>
+            <Text style={{ color: '#DAA520', fontSize: 12 }}>→ Now ${spotPrice.toFixed(0)}</Text>
+          </View>
+        );
+      })}
+      <View style={{ borderTopWidth: 0.5, borderTopColor: 'rgba(255,255,255,0.06)', marginTop: 6, paddingTop: 6, flexDirection: 'row', justifyContent: 'space-between' }}>
+        <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>Invested: ${totalCost?.toLocaleString(undefined, { maximumFractionDigits: 0 })}</Text>
+        <Text style={{ color: '#DAA520', fontSize: 11, fontWeight: '600' }}>Value: ${totalValue?.toLocaleString(undefined, { maximumFractionDigits: 0 })}</Text>
+      </View>
+    </View>
+  );
+}
+
+function InlinePurchasingPowerCard({ data, onExpand }) {
+  if (!data) return null;
+  return (
+    <View style={INLINE_CARD_STYLE}>
+      <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, marginBottom: 6 }}>Your Stack Buys</Text>
+      {data.stackBarrelsOfOil != null && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 2 }}>
+          <Text style={{ fontSize: 13, width: 24 }}>🛢</Text>
+          <Text style={{ color: '#DAA520', fontSize: 13, fontWeight: '700', marginRight: 4 }}>{Math.round(data.stackBarrelsOfOil).toLocaleString()}</Text>
+          <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>barrels of oil</Text>
+        </View>
+      )}
+      {data.stackMonthsOfRent != null && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 2 }}>
+          <Text style={{ fontSize: 13, width: 24 }}>🏠</Text>
+          <Text style={{ color: '#DAA520', fontSize: 13, fontWeight: '700', marginRight: 4 }}>{Math.round(data.stackMonthsOfRent).toLocaleString()}</Text>
+          <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>months of rent</Text>
+        </View>
+      )}
+      {data.silverPerGallonOfGas != null && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 2 }}>
+          <Text style={{ fontSize: 13, width: 24 }}>⛽</Text>
+          <Text style={{ color: '#DAA520', fontSize: 13, fontWeight: '700', marginRight: 4 }}>{Math.round(data.stackHoursOfLabor || 0).toLocaleString()}</Text>
+          <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>hours of labor</Text>
+        </View>
+      )}
+      {data.goldOilRatio1971 != null && (
+        <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, marginTop: 6, lineHeight: 14 }}>
+          vs 1971: 1 oz gold bought {data.goldOilRatio1971} barrels. Today: {data.goldPerBarrelOfOil?.toFixed(1)} barrels.
+        </Text>
+      )}
+      {onExpand && (
+        <TouchableOpacity onPress={onExpand} style={{ marginTop: 6 }}>
+          <Text style={{ color: '#DAA520', fontSize: 12, fontWeight: '600' }}>See full breakdown →</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
+
+function InlineDealerCard({ data }) {
+  if (!data) return null;
+  return (
+    <TouchableOpacity
+      onPress={() => Linking.openURL(data.url)}
+      style={{
+        ...INLINE_CARD_STYLE,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+      }}
+    >
+      <View>
+        <Text style={{ color: '#DAA520', fontSize: 14, fontWeight: '600' }}>{data.product}</Text>
+        <Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12 }}>Shop on {data.dealer}</Text>
+      </View>
+      <Text style={{ color: '#DAA520', fontSize: 16 }}>→</Text>
+    </TouchableOpacity>
+  );
+}
+
+function renderInlineCard(preview, openPreview) {
+  if (!preview) return null;
+  switch (preview.type) {
+    case 'portfolio':
+      return <InlinePortfolioCard data={preview.data} />;
+    case 'purchasing_power':
+      return <InlinePurchasingPowerCard data={preview.data} onExpand={() => openPreview(preview)} />;
+    case 'cost_basis':
+      return <InlineCostBasisCard data={preview.data} />;
+    case 'dealer_link':
+      return <InlineDealerCard data={preview.data} />;
+    case 'chart':
+      if (preview.chartType === 'spot_price') return <InlinePriceCard data={preview.data} />;
+      if (preview.chartType === 'ratio') return <InlineRatioCard data={preview.data} />;
+      return null;
+    default:
+      return null;
+  }
+}
+
+function shouldShowPreviewButton(preview) {
+  if (!preview) return false;
+  const bottomSheetTypes = ['signal_article', 'daily_brief', 'dealer_comparison', 'speculation'];
+  if (preview.type === 'chart' && preview.data?.chartData) return true;
+  return bottomSheetTypes.includes(preview.type);
+}
+
+function getPreviewLabel(preview) {
+  if (!preview) return 'View Details';
+  switch (preview.type) {
+    case 'portfolio': return 'View Portfolio';
+    case 'chart':
+      if (preview.chartType === 'ratio') return 'View Ratio';
+      return 'View Chart';
+    case 'cost_basis': return 'View Cost Basis';
+    case 'daily_brief': return 'View Daily Brief';
+    case 'signal_article': return 'View Article';
+    case 'dealer_comparison': return 'View Dealers';
+    case 'dealer_link': return `Shop ${preview.data?.product || 'Dealer'}`;
+    case 'speculation': return 'View Analysis';
+    case 'purchasing_power': return 'View Purchasing Power';
+    default: return 'View Details';
+  }
+}
+
+function renderPreviewContent(content) {
+  if (!content) return null;
+  switch (content.type) {
+    case 'chart': return <PreviewChart data={content.data} chartType={content.chartType} />;
+    case 'signal_article': return <PreviewArticle article={content.data} />;
+    case 'portfolio': return <PreviewPortfolio data={content.data} />;
+    case 'daily_brief': return <PreviewDailyBrief data={content.data} />;
+    case 'dealer_comparison': return <PreviewDealerComparison data={content.data} />;
+    case 'cost_basis': return <PreviewCostBasis data={content.data} />;
+    case 'speculation': return <PreviewSpeculation data={content.data} />;
+    case 'purchasing_power': return <PreviewPurchasingPower data={content.data} />;
+    default: return <Text style={{ color: '#fff', padding: 24 }}>Unknown content type: {content.type}</Text>;
+  }
+}
+
+// Preview title based on content type
+function getPreviewTitle(content) {
+  if (!content) return 'Preview';
+  switch (content.type) {
+    case 'chart': return content.chartType === 'portfolio_performance' ? 'Portfolio Performance' : content.chartType === 'spot_price' ? 'Spot Price' : 'Chart';
+    case 'signal_article': return content.data?.title || 'Stack Signal';
+    case 'portfolio': return 'Portfolio Summary';
+    case 'daily_brief': return "Troy's Daily Brief";
+    case 'dealer_comparison': return 'Dealer Comparison';
+    case 'cost_basis': return 'Cost Basis';
+    case 'speculation': return 'What If...';
+    case 'purchasing_power': return 'Purchasing Power';
+    default: return 'Preview';
+  }
+}
+
+// Full-screen bottom sheet for previewing content
+const SCREEN_HEIGHT = Dimensions.get('window').height;
+
+function PreviewBottomSheet() {
+  const { previewContent, previewVisible, closePreview, handleOpenFull } = usePreview();
+  const insets = useSafeAreaInsets();
+  const translateY = useSharedValue(SCREEN_HEIGHT);
+  const overlayOpacity = useSharedValue(0);
+
+  useEffect(() => {
+    if (previewVisible) {
+      translateY.value = withSpring(0, { damping: 30, stiffness: 300, overshootClamping: true });
+      overlayOpacity.value = withTiming(1, { duration: 200 });
+    } else {
+      translateY.value = withTiming(SCREEN_HEIGHT, { duration: 250 });
+      overlayOpacity.value = withTiming(0, { duration: 200 });
+    }
+  }, [previewVisible]);
+
+  const startY = useSharedValue(0);
+  const panGesture = Gesture.Pan()
+    .onStart(() => { startY.value = translateY.value; })
+    .onUpdate((event) => {
+      translateY.value = Math.max(0, startY.value + event.translationY);
+    })
+    .onEnd((event) => {
+      if (event.translationY > 100 || event.velocityY > 500) {
+        translateY.value = withTiming(SCREEN_HEIGHT, { duration: 250 });
+        overlayOpacity.value = withTiming(0, { duration: 200 });
+        runOnJS(closePreview)();
+      } else {
+        translateY.value = withSpring(0, { damping: 30, stiffness: 300, overshootClamping: true });
+      }
+    });
+
+  const sheetStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+  }));
+
+  const overlayStyle = useAnimatedStyle(() => ({
+    opacity: overlayOpacity.value,
+    pointerEvents: overlayOpacity.value > 0.01 ? 'auto' : 'none',
+  }));
+
+  if (!previewContent && !previewVisible) return null;
+
+  const title = getPreviewTitle(previewContent);
+
+  return (
+    <>
+      {/* Dark overlay */}
+      <Reanimated.View style={[{
+        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+        backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9990,
+      }, overlayStyle]}>
+        <TouchableWithoutFeedback onPress={closePreview}>
+          <View style={{ flex: 1 }} />
+        </TouchableWithoutFeedback>
+      </Reanimated.View>
+
+      {/* Bottom sheet */}
+      <GestureDetector gesture={panGesture}>
+        <Reanimated.View style={[{
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: '#0F0F13', zIndex: 9991,
+          borderTopLeftRadius: 16, borderTopRightRadius: 16,
+          paddingTop: insets.top,
+        }, sheetStyle]}>
+          {/* Drag handle */}
+          <View style={{ alignItems: 'center', paddingTop: 8, paddingBottom: 4 }}>
+            <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.3)' }} />
+          </View>
+
+          {/* Header */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 0.5, borderBottomColor: 'rgba(255,255,255,0.1)' }}>
+            <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700', flex: 1 }} numberOfLines={1}>{title}</Text>
+            <TouchableOpacity onPress={handleOpenFull} style={{ marginRight: 16 }}>
+              <Text style={{ color: '#C9A84C', fontSize: 14, fontWeight: '600' }}>Open full</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={closePreview} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Text style={{ color: '#71717a', fontSize: 22, fontWeight: '300' }}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Content */}
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 20) }}>
+            {renderPreviewContent(previewContent)}
+          </ScrollView>
+        </Reanimated.View>
+      </GestureDetector>
+    </>
+  );
+}
+
+// Small component to capture drawer navigation ref inside the screen
+function DrawerNavCapture({ onCapture }) {
+  const nav = useNavigation();
+  const captured = useRef(false);
+  useEffect(() => {
+    if (nav && !captured.current) {
+      captured.current = true;
+      onCapture(nav);
+    }
+  }, [nav]);
+  return null;
+}
 import GoldPaywall from './src/components/GoldPaywall';
 import Tutorial from './src/components/Tutorial';
 import TroyCoinIcon from './src/components/TroyCoinIcon';
@@ -1487,6 +2174,27 @@ function AppContent() {
   // Safe area insets for proper spacing around system UI (navigation bar, notch, etc.)
   const insets = useSafeAreaInsets();
 
+  // Preview system
+  const { openPreview, setOnOpenFull } = usePreview();
+
+  // Register "Open full" handler — navigates from preview to the relevant screen
+  useEffect(() => {
+    setOnOpenFull((content) => {
+      if (!content) return;
+      switch (content.type) {
+        case 'portfolio': setCurrentScreen('MyStack'); break;
+        case 'chart': setCurrentScreen('Analytics'); break;
+        case 'cost_basis': setCurrentScreen('Analytics'); break;
+        case 'daily_brief': setCurrentScreen('Dashboard'); break;
+        case 'signal_article': setCurrentScreen('StackSignal'); break;
+        case 'dealer_comparison': setShowDealerPrices(true); break;
+        case 'speculation': setCurrentScreen('Analytics'); break;
+        case 'purchasing_power': setCurrentScreen('Analytics'); break;
+        default: break;
+      }
+    });
+  }, [setOnOpenFull]);
+
   // Supabase Auth
   const { user: supabaseUser, session, loading: authLoading, signOut: supabaseSignOut, linkedProviders, linkWithGoogle, linkWithApple } = useAuth();
   const [guestMode, setGuestMode] = useState(null); // null = loading, true = guest, false = require auth
@@ -1528,8 +2236,8 @@ function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [tab, setTab] = useState('today');
-  const [previousTab, setPreviousTab] = useState('today');
+  const [currentScreen, setCurrentScreen] = useState('TroyChat');
+  const [previousScreen, setPreviousScreen] = useState('TroyChat');
   const [metalTab, setMetalTab] = useState('both'); // Changed from 'silver' to 'both'
 
   // Spot Prices - Updated defaults for Dec 2025
@@ -1604,15 +2312,13 @@ function AppContent() {
   const [troyConversations, setTroyConversations] = useState([]);
   const [activeConversationId, setActiveConversationId] = useState(null);
   const [troyMessages, setTroyMessages] = useState([]);
-  const [troySidebarVisible, setTroySidebarVisible] = useState(false);
   const [troyLoading, setTroyLoading] = useState(false);
   const [troyInputText, setTroyInputText] = useState('');
   const [advisorQuestionsToday, setAdvisorQuestionsToday] = useState(0);
+  const [playingMessageId, setPlayingMessageId] = useState(null);
+  const currentAudioRef = useRef(null);
   const troyFlatListRef = useRef(null);
-  const [showTroyChat, setShowTroyChat] = useState(false);
-
   // Swipe-back gesture responders for full-screen pages
-  const troySwipe = useRef(useSwipeBack(() => { setShowTroyChat(false); setTroySidebarVisible(false); })).current;
   const accountSwipe = useRef(useSwipeBack(() => setShowAccountScreen(false))).current;
   const benefitsSwipe = useRef(useSwipeBack(() => setShowBenefitsScreen(false))).current;
   const addModalSwipe = useRef(useSwipeBack(() => { resetForm(); setShowAddModal(false); })).current;
@@ -1745,14 +2451,9 @@ function AppContent() {
   // Notification Preferences
   const [notifPrefs, setNotifPrefs] = useState({ daily_brief: true, price_alerts: true, comex_alerts: true });
 
-  // Side Drawer
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [expandedDrawerTab, setExpandedDrawerTab] = useState(null);
-  const drawerAnim = useRef(new Animated.Value(-300)).current;
-  const drawerOverlayAnim = useRef(new Animated.Value(0)).current;
+  // Navigation (React Navigation drawer)
+  const [drawerNavigation, setDrawerNavigation] = useState(null);
   const sectionOffsets = useRef({});
-  const drawerOpenRef = useRef(false);
-  const openDrawerRef = useRef(null);
 
   // Today Tab - Intelligence Feed
   const [intelligenceBriefs, setIntelligenceBriefs] = useState([]);
@@ -1972,8 +2673,6 @@ function AppContent() {
     setTroyConversations([]);
     setActiveConversationId(null);
     setAdvisorQuestionsToday(0);
-    setShowTroyChat(false);
-    setTroySidebarVisible(false);
     setDailyBrief(null);
     setBriefExpanded(false);
     setPortfolioIntel(null);
@@ -1993,11 +2692,10 @@ function AppContent() {
     setSparklineData(null);
     sparklineFetchedRef.current = false;
     setNotifPrefs({ daily_brief: true, price_alerts: true, breaking_news: true, comex_alerts: true, comex_gold: true, comex_silver: true, comex_platinum: true, comex_palladium: true });
-    setTab('today');
+    setCurrentScreen('Dashboard');
     setSettingsSubPage(null);
     setShowAccountScreen(false);
     setShowBenefitsScreen(false);
-    setDrawerOpen(false);
     setHasSyncedOnce(false);
 
     // Only reset app-level preferences on full reset (clearAllData from settings)
@@ -2696,7 +3394,6 @@ function AppContent() {
 
   // Troy daily question limits
   const TROY_FREE_LIMIT = 3;
-  const TROY_GOLD_LIMIT = 30;
 
   // Save holdings to iCloud
   const syncToCloud = async (silver = silverItems, gold = goldItems, platinum = platinumItems, palladium = palladiumItems) => {
@@ -3375,7 +4072,25 @@ function AppContent() {
   // Deep link handler for password reset
   useEffect(() => {
     const handleDeepLink = async (url) => {
-      if (!url || !url.includes('auth/reset-password')) return;
+      if (!url) return;
+
+      // Handle troystack:// deep links (from widgets)
+      if (url.includes('troystack://chat')) {
+        setCurrentScreen('TroyChat');
+        return;
+      }
+      if (url.includes('troystack://voice')) {
+        setCurrentScreen('TroyChat');
+        return;
+      }
+      if (url.includes('troystack://scan')) {
+        setCurrentScreen('MyStack');
+        // Small delay to let screen mount before triggering scan
+        setTimeout(() => performScan('camera'), 500);
+        return;
+      }
+
+      if (!url.includes('auth/reset-password')) return;
 
       try {
         // Supabase appends tokens as hash fragments: #access_token=...&refresh_token=...
@@ -3597,13 +4312,13 @@ function AppContent() {
     }
   };
 
-  // v2.2 Tutorial slides
+  // v2.3 Tutorial slides
   const v20TutorialSlides = [
     { emoji: '', emojiComponent: <View style={{ marginBottom: 20 }}><Image source={TROY_AVATAR} style={{ width: 72, height: 72, borderRadius: 36 }} /></View>, title: 'TroyStack Rebrand', description: 'New name, new icon, new identity. Same powerful stack tracker you love.' },
     { emoji: '🔔', title: 'Cleaner Notifications', description: 'Streamlined notification settings. Less noise, more signal.' },
     { emoji: '☀️', title: "Troy's Daily Brief", description: 'One personalized morning briefing from Troy. Market moves, stack insights, and what it means for you.' },
     { emoji: '', emojiComponent: <View style={{ marginBottom: 20 }}><GlobeIcon size={72} color="#D4A843" /></View>, title: 'troystack.com Is Live', description: 'Access your stack on the web at troystack.com. Plus troystack.ai is coming soon.' },
-    { emoji: '✅', title: "You're All Set!", description: 'Enjoy TroyStack v2.2. Built for stackers, by stackers.', highlight: 'Stack on! 🪙' },
+    { emoji: '✅', title: "You're All Set!", description: 'Enjoy TroyStack v2.3. Built for stackers, by stackers.', highlight: 'Stack on! 🪙' },
   ];
 
   // Troy — persistent conversation API helpers
@@ -3797,7 +4512,6 @@ function AppContent() {
   };
 
   const openTroyChat = async () => {
-    setShowTroyChat(true);
     setTroyLoading(true);
     try {
       const result = await troyAPI.listConversations();
@@ -3833,7 +4547,6 @@ function AppContent() {
   const startNewConversation = () => {
     setActiveConversationId(null);
     setTroyMessages([]);
-    setTroySidebarVisible(false);
   };
 
   const deleteConversation = async (conversationId) => {
@@ -3849,21 +4562,80 @@ function AppContent() {
     }
   };
 
-  const sendTroyMessage = async (messageText) => {
-    const text = (messageText || troyInputText).trim();
-    if (!text || troyLoading) return;
-
-    // Daily limit check — Gold gets 30/day, Free gets 3/day
-    const dailyLimit = hasGoldAccess ? TROY_GOLD_LIMIT : TROY_FREE_LIMIT;
-    if (advisorQuestionsToday >= dailyLimit) {
-      if (!hasGoldAccess) {
-        setShowTroyChat(false);
-        setShowPaywallModal(true);
-        return;
-      } else {
-        Alert.alert('Daily Limit', "You've reached your daily limit. Check back tomorrow!");
-        return;
+  const playTroyVoice = async (text, messageId) => {
+    // Stop if already playing this message
+    if (playingMessageId === messageId) {
+      if (currentAudioRef.current) {
+        await currentAudioRef.current.stopAsync();
+        await currentAudioRef.current.unloadAsync();
       }
+      setPlayingMessageId(null);
+      currentAudioRef.current = null;
+      return;
+    }
+
+    try {
+      // Stop any current playback first
+      if (currentAudioRef.current) {
+        await currentAudioRef.current.stopAsync();
+        await currentAudioRef.current.unloadAsync();
+        currentAudioRef.current = null;
+      }
+
+      setPlayingMessageId(messageId);
+
+      const truncatedText = text.substring(0, 2000);
+      const response = await fetch(`${API_BASE_URL}/v1/troy/speak`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: truncatedText, userId: revenueCatUserId || 'anonymous' }),
+      });
+
+      if (!response.ok) throw new Error('TTS failed');
+
+      // Convert response to a local file URI for expo-av
+      const blob = await response.blob();
+      const reader = new FileReader();
+      const base64 = await new Promise((resolve, reject) => {
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+
+      const fileUri = FileSystem.cacheDirectory + `troy-voice-${messageId}.mp3`;
+      await FileSystem.writeAsStringAsync(fileUri, base64.split(',')[1], { encoding: FileSystem.EncodingType.Base64 });
+
+      const { sound } = await Audio.Sound.createAsync({ uri: fileUri });
+      currentAudioRef.current = sound;
+
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.didJustFinish) {
+          setPlayingMessageId(null);
+          currentAudioRef.current = null;
+          sound.unloadAsync();
+        }
+      });
+
+      await sound.playAsync();
+    } catch (error) {
+      console.error('🎙️ TTS error:', error.message);
+      setPlayingMessageId(null);
+      currentAudioRef.current = null;
+    }
+  };
+
+  const sendTroyMessage = async (messageText) => {
+    if (__DEV__) console.log('💬 [Troy] sendTroyMessage called, messageText:', messageText ? messageText.substring(0, 50) : '(from input)', 'troyLoading:', troyLoading, 'activeConversationId:', activeConversationId);
+    const text = (messageText || troyInputText).trim();
+    if (!text || troyLoading) {
+      if (__DEV__) console.log('💬 [Troy] Early exit: text empty?', !text, 'troyLoading?', troyLoading);
+      return;
+    }
+
+    // Daily limit check — Free gets 3/day, Gold/Lifetime unlimited
+    if (!hasGoldAccess && advisorQuestionsToday >= TROY_FREE_LIMIT) {
+      setShowPaywallModal(true);
+      return;
     }
 
     if (!messageText) setTroyInputText('');
@@ -3872,16 +4644,20 @@ function AppContent() {
 
     // If no active conversation, create one first
     if (!convId) {
+      if (__DEV__) console.log('💬 [Troy] No active conversation, creating one...');
       try {
         const newConv = await troyAPI.createConversation();
+        if (__DEV__) console.log('💬 [Troy] Created conversation:', newConv?.id, 'error:', newConv?.error);
         convId = newConv.id;
         setActiveConversationId(convId);
         setTroyConversations(prev => [newConv, ...prev]);
       } catch (e) {
-        console.error('Failed to create conversation:', e);
+        console.error('💬 [Troy] Failed to create conversation:', e);
         return;
       }
     }
+
+    if (__DEV__) console.log('💬 [Troy] Sending to convId:', convId, 'API:', `${API_BASE_URL}/v1/troy/conversations/${convId}/messages`);
 
     // Optimistically add user message to the UI
     const tempUserMsg = { id: 'temp-' + Date.now(), role: 'user', content: text, created_at: new Date().toISOString() };
@@ -3890,20 +4666,28 @@ function AppContent() {
     // Show typing indicator
     setTroyLoading(true);
 
-    // Update daily count
+    // Update daily count (Gold/Lifetime: soft cap at 200 for logging only)
     const newCount = advisorQuestionsToday + 1;
     setAdvisorQuestionsToday(newCount);
+    if (hasGoldAccess && newCount >= 200) {
+      console.log(`⚠️ [Troy] Gold user hit soft cap: ${newCount} messages today`);
+    }
     AsyncStorage.setItem('stack_advisor_count', JSON.stringify({ date: new Date().toDateString(), count: newCount }));
 
     try {
       const response = await troyAPI.sendMessage(convId, text);
+      if (__DEV__) console.log('🧠 [Troy] Response keys:', Object.keys(response), 'preview:', response.preview, 'message?.id:', response.message?.id, 'error:', response.error);
 
-      // Replace temp message with real one and add Troy's response
+      // Replace temp message with real one and add Troy's response (with preview if available)
+      const assistantMsg = {
+        ...(response.message || { id: 'fallback-' + Date.now(), role: 'assistant', content: response.response || 'No response', created_at: new Date().toISOString() }),
+        preview: response.preview || null,
+      };
       setTroyMessages(prev => {
         const withoutTemp = prev.filter(m => m.id !== tempUserMsg.id);
         return [...withoutTemp,
           { id: 'user-' + Date.now(), role: 'user', content: text, created_at: tempUserMsg.created_at },
-          response.message
+          assistantMsg
         ];
       });
 
@@ -3922,10 +4706,7 @@ function AppContent() {
     setTroyLoading(false);
   };
 
-  const closeTroyChat = () => {
-    setShowTroyChat(false);
-    setTroySidebarVisible(false);
-  };
+  // closeTroyChat removed — Troy is always available as home screen
 
   // Server-side scan tracking functions
   const fetchScanStatus = async () => {
@@ -4981,7 +5762,7 @@ function AppContent() {
   // This effect triggers when: user navigates to Analytics tab, OR RevenueCat values become available while on Analytics
   useEffect(() => {
     // Early exit if not on analytics tab
-    if (tab !== 'analytics') return;
+    if (currentScreen !== 'Analytics') return;
 
     // Need subscription access (but NOT revenueCatUserId - we can calculate locally without it)
     if (!hasGold && !hasLifetimeAccess) {
@@ -5013,29 +5794,29 @@ function AppContent() {
         analyticsAbortRef.current.abort();
       }
     };
-  }, [tab, revenueCatUserId, hasGold, hasLifetimeAccess]); // revenueCatUserId still triggers re-run when it becomes available
+  }, [currentScreen, revenueCatUserId, hasGold, hasLifetimeAccess]); // revenueCatUserId still triggers re-run when it becomes available
 
   // Apply filter when range changes (instant, no API call)
   useEffect(() => {
     const cache = snapshotsCacheRef.current;
-    if (tab === 'analytics' && cache.fetched && cache.primaryData) {
+    if (currentScreen === 'Analytics' && cache.fetched && cache.primaryData) {
       applyRangeFilter(analyticsRange);
     }
   }, [analyticsRange]);
 
   // Fetch spot price history for all metals when analytics tab becomes active or ranges change
   useEffect(() => {
-    if (tab === 'analytics' && hasGoldAccess) {
+    if (currentScreen === 'Analytics' && hasGoldAccess) {
       ['gold', 'silver', 'platinum', 'palladium'].forEach(metal => {
         fetchSpotPriceHistoryForMetal(metal, spotHistoryMetal[metal].range);
       });
     }
-  }, [tab, hasGoldAccess, spotHistoryMetal.gold.range, spotHistoryMetal.silver.range, spotHistoryMetal.platinum.range, spotHistoryMetal.palladium.range]);
+  }, [currentScreen, hasGoldAccess, spotHistoryMetal.gold.range, spotHistoryMetal.silver.range, spotHistoryMetal.platinum.range, spotHistoryMetal.palladium.range]);
 
   // Fetch sparkline data when Today tab loads
   useEffect(() => {
-    if (tab === 'today') fetchSparklineData();
-  }, [tab]);
+    if (currentScreen === 'Dashboard') fetchSparklineData();
+  }, [currentScreen]);
 
 
   // ============================================
@@ -5549,32 +6330,32 @@ function AppContent() {
 
   // Fetch intelligence + vault data when switching to Today tab
   useEffect(() => {
-    if (tab === 'today') {
+    if (currentScreen === 'Dashboard') {
       if (!intelligenceLastFetched) fetchIntelligenceBriefs();
       if (!vaultLastFetched) fetchVaultData();
     }
-  }, [tab]);
+  }, [currentScreen]);
 
   // Fetch daily brief when tab or user changes
   useEffect(() => {
-    if (tab === 'today' && supabaseUser && (!dailyBrief || !dailyBrief.is_current)) {
+    if (currentScreen === 'Dashboard' && supabaseUser && (!dailyBrief || !dailyBrief.is_current)) {
       fetchDailyBrief();
     }
-  }, [tab, supabaseUser]);
+  }, [currentScreen, supabaseUser]);
 
   // Fetch Stack Signal daily synthesis for Today tab teaser
   useEffect(() => {
-    if (tab === 'today' && !stackSignalDaily) {
+    if (currentScreen === 'Dashboard' && !stackSignalDaily) {
       stackSignalAPI.fetchDaily().then(res => {
         const daily = res?.signal || (res?.id ? res : null);
         if (daily) setStackSignalDaily(daily);
       }).catch(() => {});
     }
-  }, [tab]);
+  }, [currentScreen]);
 
   // Fetch Stack Signal data when switching to Signal tab
   useEffect(() => {
-    if (tab === 'signal') {
+    if (currentScreen === 'StackSignal') {
       if (!stackSignalDaily) {
         stackSignalAPI.fetchDaily().then(res => {
           const daily = res?.signal || (res?.id ? res : null);
@@ -5585,17 +6366,60 @@ function AppContent() {
         fetchStackSignalData();
       }
     }
-  }, [tab]);
+  }, [currentScreen]);
 
   // Load Troy Chat conversations when Troy tab opens
   useEffect(() => {
-    if (tab === 'troy' && supabaseUser) {
+    if (currentScreen === 'TroyChat' && supabaseUser) {
       troyAPI.listConversations().then(result => {
         const convos = result?.conversations || (Array.isArray(result) ? result : []);
         setTroyConversations(convos);
       }).catch(() => {});
     }
-  }, [tab]);
+  }, [currentScreen]);
+
+  // Fetch and display daily brief when user taps the suggestion chip
+  const fetchAndShowDailyBrief = async () => {
+    if (!supabaseUser) return;
+    setTroyLoading(true);
+    try {
+      const todayEST = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+      const res = await fetch(`${API_BASE_URL}/v1/daily-brief?userId=${supabaseUser.id}&date=${todayEST}`);
+      const data = await res.json();
+
+      if (data.brief && data.brief.brief_text) {
+        const brief = data.brief;
+        const goldDir = spotChange?.gold?.percent >= 0 ? 'up' : 'down';
+        const goldPct = Math.abs(spotChange?.gold?.percent || 0).toFixed(1);
+        const greeting = `Good morning. **Gold at $${goldSpot?.toLocaleString()}**, ${goldDir} ${goldPct}%. **Silver at $${silverSpot?.toFixed(2)}**.\n\n${brief.brief_text}`;
+
+        const briefMessage = {
+          id: `brief-${Date.now()}`,
+          role: 'assistant',
+          content: greeting,
+          created_at: new Date().toISOString(),
+          preview: { type: 'daily_brief', data: brief },
+        };
+        setTroyMessages(prev => [...prev, briefMessage]);
+      } else {
+        setTroyMessages(prev => [...prev, {
+          id: `brief-empty-${Date.now()}`,
+          role: 'assistant',
+          content: "No daily brief available yet. Markets may be closed, or the brief hasn't been generated. Check back later.",
+          created_at: new Date().toISOString(),
+        }]);
+      }
+    } catch (e) {
+      if (__DEV__) console.log('Daily brief fetch failed:', e.message);
+      setTroyMessages(prev => [...prev, {
+        id: `brief-err-${Date.now()}`,
+        role: 'assistant',
+        content: "Couldn't load today's brief right now. Try again in a moment.",
+        created_at: new Date().toISOString(),
+      }]);
+    }
+    setTroyLoading(false);
+  };
 
   const onRefreshToday = async () => {
     setIsRefreshing(true);
@@ -6446,7 +7270,7 @@ function AppContent() {
           setScannedItems([]);
           setScannedMetadata({ purchaseDate: '', purchaseTime: '', dealer: '' });
           setMetalTab('both');
-          setTab('portfolio');
+          setCurrentScreen('MyStack');
         }}]
       );
     } catch (error) {
@@ -6490,7 +7314,7 @@ function AppContent() {
       Alert.alert('All Items Added', 'All scanned items have been added to your holdings!', [
         { text: 'View Holdings', onPress: () => {
           setShowScannedItemsPreview(false);
-          setTab('portfolio');
+          setCurrentScreen('MyStack');
         }}
       ]);
     }
@@ -6979,6 +7803,242 @@ function AppContent() {
   };
 
   // Show reset password screen when opened via deep link
+  // ============================================
+  // DRAWER SIDEBAR
+  // ============================================
+
+  // Sidebar nav items with custom icon components
+  const sidebarNavItems = [
+    { key: 'TroyChat', label: 'Troy', subtitle: 'Home', iconType: 'troy' },
+    { key: 'Dashboard', label: 'Dashboard', iconType: 'today' },
+    { key: 'MyStack', label: 'My Stack', iconType: 'holdings' },
+    { key: 'Analytics', label: 'Analytics', iconType: 'analytics' },
+    { key: 'StackSignal', label: 'Stack Signal', iconType: 'signal' },
+    { key: 'VaultWatch', label: 'Vault Watch', iconType: 'trending' },
+    { key: 'CompareDealers', label: 'Compare Dealers', iconType: 'calculator' },
+  ];
+
+  // Helper: navigate to a screen from the sidebar
+  const sidebarNavigate = (screenKey) => {
+    if (screenKey === 'VaultWatch') {
+      // Vault Watch is a section within Dashboard — navigate there and scroll
+      setCurrentScreen('Dashboard');
+      drawerNavigation?.dispatch(DrawerActions.closeDrawer());
+      setTimeout(() => {
+        const y = sectionOffsets.current['vaultWatch'];
+        if (y !== undefined) scrollRef.current?.scrollTo({ y: Math.max(0, y - 10), animated: true });
+      }, 200);
+      return;
+    }
+    if (screenKey === 'CompareDealers') {
+      setShowDealerPrices(true);
+      drawerNavigation?.dispatch(DrawerActions.closeDrawer());
+      return;
+    }
+    setCurrentScreen(screenKey);
+    drawerNavigation?.dispatch(DrawerActions.closeDrawer());
+    setTimeout(() => scrollRef.current?.scrollTo({ y: 0, animated: false }), 50);
+  };
+
+  // Group conversations by date
+  const groupConversationsByDate = (convos) => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
+    const weekAgo = new Date(today); weekAgo.setDate(today.getDate() - 7);
+    const groups = [];
+    const todayItems = [], yesterdayItems = [], weekItems = [], earlierItems = [];
+    for (const c of convos) {
+      const d = new Date(c.updated_at || c.created_at);
+      if (d >= today) todayItems.push(c);
+      else if (d >= yesterday) yesterdayItems.push(c);
+      else if (d >= weekAgo) weekItems.push(c);
+      else earlierItems.push(c);
+    }
+    if (todayItems.length) groups.push({ label: 'Today', items: todayItems });
+    if (yesterdayItems.length) groups.push({ label: 'Yesterday', items: yesterdayItems });
+    if (weekItems.length) groups.push({ label: 'This Week', items: weekItems });
+    if (earlierItems.length) groups.push({ label: 'Earlier', items: earlierItems });
+    return groups;
+  };
+
+  // CustomSidebar — rendered by React Navigation drawer
+  const renderCustomSidebar = useCallback((drawerProps) => {
+    // Store drawer navigation for use in header ☰ button
+    if (drawerProps.navigation && !drawerNavigation) {
+      setDrawerNavigation(drawerProps.navigation);
+    }
+
+    const conversationGroups = groupConversationsByDate(troyConversations);
+    const isGoldUser = hasGoldAccess;
+
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#0A0A0E' }}>
+        {/* Section A — New Chat */}
+        <View style={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 12 }}>
+          <TouchableOpacity
+            onPress={() => {
+              startNewConversation();
+              setCurrentScreen('TroyChat');
+              drawerProps.navigation.closeDrawer();
+            }}
+            style={{ backgroundColor: '#C9A84C', borderRadius: 10, paddingVertical: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}
+          >
+            <Text style={{ color: '#000', fontSize: 18, fontWeight: '700' }}>+</Text>
+            <Text style={{ color: '#000', fontWeight: '700', fontSize: 15 }}>New Chat</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={{ height: 0.5, backgroundColor: 'rgba(255,255,255,0.1)', marginHorizontal: 16 }} />
+
+        {/* Section B — Navigation */}
+        <View style={{ paddingVertical: 8 }}>
+          {sidebarNavItems.map((item) => {
+            const isActive = currentScreen === item.key || (item.key === 'VaultWatch' && currentScreen === 'Dashboard');
+            const iconColor = isActive ? '#C9A84C' : '#9ca3af';
+            const renderIcon = () => {
+              switch (item.iconType) {
+                case 'troy': return <Image source={TROY_AVATAR} style={{ width: 22, height: 22, borderRadius: 11, opacity: isActive ? 1 : 0.7 }} />;
+                case 'today': return <TodayIcon size={20} color={iconColor} />;
+                case 'holdings': return <HoldingsIcon size={20} color={iconColor} />;
+                case 'analytics': return <DashboardIcon size={20} color={iconColor} />;
+                case 'signal': return <StackSignalIcon size={16} color={iconColor} />;
+                case 'trending': return <TrendingUpIcon size={20} color={iconColor} />;
+                case 'calculator': return <CalculatorIcon size={20} color={iconColor} />;
+                default: return <View style={{ width: 20 }} />;
+              }
+            };
+            return (
+              <TouchableOpacity
+                key={item.key}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  sidebarNavigate(item.key);
+                }}
+                style={{
+                  flexDirection: 'row', alignItems: 'center', gap: 12,
+                  paddingHorizontal: 16, height: 44,
+                  backgroundColor: isActive ? 'rgba(201,168,76,0.1)' : 'transparent',
+                }}
+              >
+                <View style={{ width: 24, alignItems: 'center' }}>{renderIcon()}</View>
+                <View>
+                  <Text style={{ color: isActive ? '#C9A84C' : '#d4d4d8', fontSize: 15, fontWeight: isActive ? '600' : '400' }}>{item.label}</Text>
+                  {item.subtitle && <Text style={{ color: isActive ? 'rgba(201,168,76,0.6)' : '#52525b', fontSize: 11 }}>{item.subtitle}</Text>}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <View style={{ height: 0.5, backgroundColor: 'rgba(255,255,255,0.1)', marginHorizontal: 16 }} />
+
+        {/* Section C — Recent Conversations */}
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: '#71717a', fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 }}>Recents</Text>
+          <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+            {troyConversations.length === 0 ? (
+              <Text style={{ color: '#52525b', fontSize: 13, textAlign: 'center', marginTop: 20, paddingHorizontal: 16 }}>No conversations yet. Tap + to start.</Text>
+            ) : isGoldUser ? (
+              conversationGroups.map((group) => (
+                <View key={group.label}>
+                  <Text style={{ color: '#52525b', fontSize: 11, fontWeight: '600', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4 }}>{group.label}</Text>
+                  {group.items.map((conv) => (
+                    <TouchableOpacity
+                      key={conv.id}
+                      onPress={() => {
+                        loadConversation(conv.id);
+                        setCurrentScreen('TroyChat');
+                        drawerProps.navigation.closeDrawer();
+                      }}
+                      onLongPress={() => {
+                        Alert.alert('Delete Conversation', 'Are you sure?', [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Delete', style: 'destructive', onPress: () => deleteConversation(conv.id) },
+                        ]);
+                      }}
+                      style={{
+                        flexDirection: 'row', alignItems: 'center', gap: 10,
+                        paddingHorizontal: 16, paddingVertical: 10,
+                        backgroundColor: conv.id === activeConversationId ? 'rgba(201,168,76,0.08)' : 'transparent',
+                      }}
+                    >
+                      <Image source={TROY_AVATAR} style={{ width: 20, height: 20, borderRadius: 10 }} />
+                      <Text style={{ color: conv.id === activeConversationId ? '#C9A84C' : '#a1a1aa', fontSize: 14, flex: 1 }} numberOfLines={1}>
+                        {conv.title || 'New conversation'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ))
+            ) : (
+              // Free users: show last 3, then upgrade CTA
+              <>
+                {troyConversations.slice(0, 3).map((conv) => (
+                  <TouchableOpacity
+                    key={conv.id}
+                    onPress={() => {
+                      loadConversation(conv.id);
+                      setCurrentScreen('TroyChat');
+                      drawerProps.navigation.closeDrawer();
+                    }}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 10, opacity: 0.6 }}
+                  >
+                    <Image source={TROY_AVATAR} style={{ width: 20, height: 20, borderRadius: 10 }} />
+                    <Text style={{ color: '#a1a1aa', fontSize: 14, flex: 1 }} numberOfLines={1}>{conv.title || 'New conversation'}</Text>
+                  </TouchableOpacity>
+                ))}
+                {troyConversations.length > 3 && (
+                  <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
+                    <Text style={{ color: '#71717a', fontSize: 13, lineHeight: 18 }}>
+                      You had {troyConversations.length} conversations with Troy. Upgrade to Gold to save and resume them.
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => { drawerProps.navigation.closeDrawer(); setShowPaywallModal(true); }}
+                      style={{ marginTop: 8, backgroundColor: '#C9A84C', borderRadius: 8, paddingVertical: 10, alignItems: 'center' }}
+                    >
+                      <Text style={{ color: '#000', fontWeight: '700', fontSize: 14 }}>Upgrade — $4.99/mo</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </>
+            )}
+          </ScrollView>
+        </View>
+
+        {/* Section D — Bottom */}
+        <View style={{ borderTopWidth: 0.5, borderTopColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 16, paddingVertical: 12 }}>
+          <TouchableOpacity
+            onPress={() => sidebarNavigate('Settings')}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 }}
+          >
+            <SettingsIcon size={18} color="#71717a" />
+            <Text style={{ color: '#a1a1aa', fontSize: 14 }}>Settings</Text>
+          </TouchableOpacity>
+
+          {/* Subscription badge */}
+          <View style={{
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+          }}>
+            <View style={{
+              borderWidth: 1,
+              borderColor: hasGoldAccess ? '#C9A84C' : '#52525b',
+              borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4,
+            }}>
+              <Text style={{ color: hasGoldAccess ? '#C9A84C' : '#71717a', fontSize: 12, fontWeight: '600' }}>
+                {hasLifetimeAccess ? 'Lifetime' : hasGold ? 'Gold' : 'Free'}
+              </Text>
+            </View>
+            {!hasGoldAccess && (
+              <TouchableOpacity onPress={() => { drawerProps.navigation.closeDrawer(); setShowPaywallModal(true); }}>
+                <Text style={{ color: '#C9A84C', fontSize: 13, fontWeight: '600' }}>Upgrade</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }, [currentScreen, troyConversations, activeConversationId, hasGoldAccess, hasGold, hasLifetimeAccess, drawerNavigation]);
   if (showResetPasswordScreen) {
     return (
       <View style={[styles.container, { backgroundColor: '#09090b' }]}>
@@ -7050,162 +8110,58 @@ function AppContent() {
   const metalSpotMap = { silver: silverSpot, gold: goldSpot, platinum: platinumSpot, palladium: palladiumSpot };
   const spot = metalSpotMap[metalTab] || goldSpot;
 
-  // ============================================
-  // SIDE DRAWER
-  // ============================================
-
-  const drawerSections = [
-    { key: 'today', label: 'Today', items: [
-      { key: 'morningBrief', label: 'Daily Brief' },
-      { key: 'portfolioPulse', label: 'Stack Pulse' },
-      { key: 'metalMovers', label: 'Live Spot' },
-      { key: 'whatChanged', label: 'Metal Movers' },
-      { key: 'vaultWatch', label: 'Vault Watch' },
-      { key: 'stackSignalTeaser', label: 'Stack Signal' },
-    ]},
-    { key: 'portfolio', label: 'Stack', items: [
-      { key: 'portfolioSummary', label: 'Summary' },
-      { key: 'holdings', label: 'Holdings' },
-    ]},
-    { key: 'analytics', label: 'Analytics', items: [
-      { key: 'portfolioIntelligence', label: 'Stack Intelligence' },
-      { key: 'portfolioValueChart', label: 'Stack Value Chart' },
-      { key: 'spotPriceHistory', label: 'Spot Price History' },
-      { key: 'holdingsBreakdown', label: 'Holdings Breakdown' },
-      { key: 'purchaseStatistics', label: 'Purchase Statistics' },
-      { key: 'breakEvenAnalysis', label: 'Break-Even Analysis' },
-      { key: 'priceAlerts', label: 'Price Alerts' },
-      { key: 'speculationTool', label: 'Speculation Tool' },
-      { key: 'junkSilver', label: 'Junk Silver Calculator' },
-      { key: 'stackMilestones', label: 'Stack Milestones' },
-      { key: 'shareMyStack', label: 'Share My Stack' },
-    ]},
-    { key: 'troy', label: 'Troy', items: [
-      { key: 'troy', label: 'Troy Chat' },
-    ]},
-    { key: 'signal', label: 'Signal', items: [
-      { key: 'stackSignal', label: 'The Stack Signal' },
-    ]},
-    { key: 'settings', label: 'Settings', items: [
-      ...(Platform.OS !== 'ios' ? [{ key: 'webApp', label: 'Web App' }] : []),
-      { key: 'account', label: 'Account' },
-      { key: 'notifications', label: 'Notifications' },
-      { key: 'whatsNew', label: "What's New in v2.2" },
-      { key: 'about', label: 'About' },
-    ]},
-  ];
-
-  const openDrawer = () => {
-    drawerOpenRef.current = true;
-    setDrawerOpen(true);
-    Animated.parallel([
-      Animated.timing(drawerAnim, { toValue: 0, duration: 250, useNativeDriver: true }),
-      Animated.timing(drawerOverlayAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
-    ]).start();
-  };
-  openDrawerRef.current = openDrawer;
-
-  const closeDrawer = () => {
-    Animated.parallel([
-      Animated.timing(drawerAnim, { toValue: -300, duration: 200, useNativeDriver: true }),
-      Animated.timing(drawerOverlayAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
-    ]).start(() => {
-      drawerOpenRef.current = false;
-      setDrawerOpen(false);
-    });
-  };
-
-  const navigateToSection = (tabKey, sectionKey) => {
-    // Special case: Troy Chat navigates to Troy tab
-    if (sectionKey === 'troy') {
-      closeDrawer();
-      setTab('troy');
-      return;
-    }
-    // Special case: Stack Signal navigates to Signal tab
-    if (sectionKey === 'stackSignal') {
-      closeDrawer();
-      setTab('signal');
-      return;
-    }
-    closeDrawer();
-    // Special case: Web App opens URL directly
-    if (sectionKey === 'webApp') {
-      Linking.openURL('https://app.troystack.com');
-      return;
-    }
-    // Settings sub-pages: open directly
-    if (tabKey === 'settings' && sectionKey === 'notifications') {
-      setTab('settings');
-      setSettingsSubPage('notifications');
-      setTimeout(() => { scrollRef.current?.scrollTo({ y: 0, animated: false }); }, 100);
-      return;
-    }
-    if (tab !== tabKey) {
-      setTab(tabKey);
-    }
-    // Reset settings sub-page when navigating to main settings sections
-    if (tabKey === 'settings') {
-      setSettingsSubPage(null);
-    }
-    setTimeout(() => {
-      const y = sectionOffsets.current[sectionKey];
-      if (y !== undefined) {
-        scrollRef.current?.scrollTo({ y: Math.max(0, y - 10), animated: true });
-      }
-    }, 100);
-  };
 
   // ============================================
   // MAIN RENDER
   // ============================================
 
   return (
+    <Drawer.Navigator
+      screenOptions={{
+        headerShown: false,
+        drawerType: 'front',
+        drawerStyle: { width: '75%', backgroundColor: '#0A0A0E' },
+        overlayColor: 'rgba(0,0,0,0.5)',
+        swipeEnabled: true,
+        swipeEdgeWidth: 50,
+      }}
+      drawerContent={renderCustomSidebar}
+    >
+      <Drawer.Screen name="MainScreen">
+        {() => (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <DrawerNavCapture onCapture={(nav) => { if (nav && !drawerNavigation) setDrawerNavigation(nav); }} />
       <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
 
       {/* Header */}
-      <View style={[styles.header, { backgroundColor: tab === 'troy' ? '#000' : (isDarkMode ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.8)'), borderBottomColor: tab === 'troy' ? '#1a1a1a' : colors.border }]}>
+      <View style={[styles.header, { backgroundColor: currentScreen === 'TroyChat' ? '#000' : (isDarkMode ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.8)'), borderBottomColor: currentScreen === 'TroyChat' ? '#1a1a1a' : colors.border }]}>
         <View style={styles.headerContent}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-          <TouchableOpacity onPress={tab === 'troy' ? () => setTroySidebarVisible(true) : openDrawer} activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={{ paddingRight: 6 }}>
-            <Text style={{ color: '#D4A843', fontSize: 22, fontWeight: '300' }}>{tab === 'troy' ? '\u2630' : '☰'}</Text>
-          </TouchableOpacity>
-          {tab === 'troy' ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <Image source={TROY_AVATAR} style={{ width: 32, height: 32, borderRadius: 16 }} />
-              <View style={{ marginLeft: 10 }}>
-                <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700' }}>Troy</Text>
-                <Text style={{ color: '#999', fontSize: 12 }}>Your Stack Analyst</Text>
-              </View>
-            </View>
-          ) : (
-          <TouchableOpacity onPress={openDrawer} activeOpacity={0.7} style={styles.logo}>
-            <Image source={require('./assets/icon.png')} style={{ width: 40, height: 40, borderRadius: 8 }} />
-            <Text style={[styles.logoTitle, { color: colors.text }]}>TroyStack</Text>
-            {/* Sync Status Indicator */}
-            {isSyncing && (
-              <View style={{ marginLeft: 8, flexDirection: 'row', alignItems: 'center' }}>
-                <ActivityIndicator size="small" color={colors.gold} />
-              </View>
-            )}
-            {syncError && !isSyncing && (
-              <TouchableOpacity
-                style={{ marginLeft: 8 }}
-                onPress={() => Alert.alert('Sync Error', syncError, [{ text: 'OK', onPress: () => setSyncError(null) }])}
-              >
-                <Text style={{ color: colors.error, fontSize: scaledFonts.medium }}>!</Text>
+          {currentScreen === 'TroyChat' ? (
+            <>
+              <TouchableOpacity onPress={() => drawerNavigation?.dispatch(DrawerActions.openDrawer())} activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={{ paddingRight: 6 }}>
+                <Text style={{ color: '#D4A843', fontSize: 22, fontWeight: '300' }}>{'\u2630'}</Text>
               </TouchableOpacity>
-            )}
-          </TouchableOpacity>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Image source={TROY_AVATAR} style={{ width: 32, height: 32, borderRadius: 16 }} />
+                <View style={{ marginLeft: 10 }}>
+                  <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700' }}>Troy</Text>
+                  <Text style={{ color: '#999', fontSize: 12 }}>Your Stack Analyst</Text>
+                </View>
+              </View>
+            </>
+          ) : (
+            <>
+              <TouchableOpacity onPress={() => setCurrentScreen('TroyChat')} activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} style={{ paddingRight: 6 }}>
+                <Text style={{ color: '#D4A843', fontSize: 22, fontWeight: '300' }}>{'\u2039'}</Text>
+              </TouchableOpacity>
+              <Text style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>
+                {currentScreen === 'Dashboard' ? 'Dashboard' : currentScreen === 'MyStack' ? 'My Stack' : currentScreen === 'Analytics' ? 'Analytics' : currentScreen === 'StackSignal' ? 'Stack Signal' : currentScreen === 'Settings' ? 'Settings' : currentScreen}
+              </Text>
+            </>
           )}
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            {tab === 'troy' && (
-              <TouchableOpacity onPress={startNewConversation} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Text style={{ color: '#C9A84C', fontSize: 20 }}>{'\u270E'}</Text>
-              </TouchableOpacity>
-            )}
             {supabaseUser ? (
               // Signed in - show profile icon that goes to account
               <TouchableOpacity
@@ -7220,8 +8176,8 @@ function AppContent() {
                   borderColor: isDarkMode ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)',
                 }}
                 onPress={() => {
-                  setPreviousTab(tab);
-                  setTab('settings');
+                  setPreviousScreen(currentScreen);
+                  setCurrentScreen('Settings');
                 }}
               >
                 <ProfileIcon size={20} color={colors.gold} />
@@ -7268,20 +8224,20 @@ function AppContent() {
       )}
 
       {/* Main Content — ScrollView excluded on Troy tab (Troy uses FlatList) */}
-      {tab !== 'troy' && (
+      {currentScreen !== 'TroyChat' && (
       <ScrollView
         ref={scrollRef}
         style={styles.content}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         refreshControl={
-          (tab === 'portfolio' || tab === 'analytics' || tab === 'today' || tab === 'signal') ? (
+          (currentScreen === 'MyStack' || currentScreen === 'Analytics' || currentScreen === 'Dashboard' || currentScreen === 'StackSignal') ? (
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={
-                tab === 'portfolio' ? onRefreshDashboard :
-                tab === 'today' ? onRefreshToday :
-                tab === 'signal' ? onRefreshSignal :
+                currentScreen === 'MyStack' ? onRefreshDashboard :
+                currentScreen === 'Dashboard' ? onRefreshToday :
+                currentScreen === 'StackSignal' ? onRefreshSignal :
                 onRefreshAnalytics
               }
               tintColor={colors.gold}
@@ -7292,7 +8248,7 @@ function AppContent() {
       >
 
         {/* TODAY TAB */}
-        {tab === 'today' && (() => {
+        {currentScreen === 'Dashboard' && (() => {
           const todayDate = new Date();
           const dateStr = todayDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
@@ -8042,7 +8998,7 @@ function AppContent() {
 
               {/* ===== STACK SIGNAL TEASER ===== */}
               <TouchableOpacity
-                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setTab('signal'); setTimeout(() => { scrollRef.current?.scrollTo({ y: 0, animated: false }); }, 100); }}
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setCurrentScreen('StackSignal'); setTimeout(() => { scrollRef.current?.scrollTo({ y: 0, animated: false }); }, 100); }}
                 activeOpacity={0.7}
                 style={{
                   backgroundColor: todayCardBg,
@@ -8087,7 +9043,7 @@ function AppContent() {
 
 
         {/* PORTFOLIO TAB */}
-        {tab === 'portfolio' && (() => {
+        {currentScreen === 'MyStack' && (() => {
           // Compile all items with metal tag
           const allItemsRaw = [
             ...silverItems.map(i => ({ ...i, metal: 'silver' })),
@@ -8625,7 +9581,7 @@ function AppContent() {
         })()}
 
         {/* ANALYTICS TAB */}
-        {tab === 'analytics' && (() => {
+        {currentScreen === 'Analytics' && (() => {
           const effPortfolioIntel = demoData ? demoData.portfolioIntel : portfolioIntel;
           const effAnalyticsSnapshots = demoData ? demoData.analyticsSnapshots : analyticsSnapshots;
           const effHasGoldAccess = demoData ? true : hasGoldAccess;
@@ -9412,7 +10368,7 @@ function AppContent() {
         })()}
 
         {/* SETTINGS TAB */}
-        {tab === 'settings' && (() => {
+        {currentScreen === 'Settings' && (() => {
           // iOS Settings style colors
           const settingsBg = isDarkMode ? '#000000' : '#f2f2f7';
           const groupBg = isDarkMode ? '#1c1c1e' : '#ffffff';
@@ -9506,7 +10462,7 @@ function AppContent() {
               {/* Done button header */}
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4, marginTop: 12, marginBottom: 8 }}>
                 <Text style={{ color: colors.text, fontSize: scaledFonts.xlarge, fontWeight: '700' }}>Settings</Text>
-                <TouchableOpacity onPress={() => setTab(previousTab)}>
+                <TouchableOpacity onPress={() => setCurrentScreen(previousScreen)}>
                   <Text style={{ color: colors.gold, fontSize: scaledFonts.medium, fontWeight: '600' }}>Done</Text>
                 </TouchableOpacity>
               </View>
@@ -9661,7 +10617,7 @@ function AppContent() {
                 />
                 <RowSeparator />
                 <SettingsRow
-                  label="What's New in v2.2"
+                  label="What's New in v2.3"
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     AsyncStorage.removeItem('has_seen_v2_0_tutorial');
@@ -9790,13 +10746,12 @@ function AppContent() {
         })()}
 
         {/* SIGNAL TAB */}
-        {tab === 'signal' && (() => {
+        {currentScreen === 'StackSignal' && (() => {
           const effHasPaidAccess = demoData ? true : hasPaidAccess;
           const signalCardBg = isDarkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)';
           const signalCardBorder = isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)';
           const digestArticles = stackSignalDaily ? [stackSignalDaily] : [];
           const feedArticles = stackSignalArticles.filter(a => !a.is_stack_signal);
-          const digestCardWidth = SCREEN_WIDTH * 0.85;
 
           const getDigestType = (title) => {
             if (!title) return 'The Stack Signal';
@@ -9822,7 +10777,7 @@ function AppContent() {
                 </View>
 
                 {digestArticles.length > 0 ? (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 4 }}>
+                  <View style={{ paddingHorizontal: 16, gap: 12 }}>
                     {digestArticles.map((digest) => {
                       const isExpanded = expandedArticleId === digest.id;
                       const digestType = getDigestType(digest.title);
@@ -9855,27 +10810,27 @@ function AppContent() {
                               }
                             }
                           }}
-                          style={{ width: digestCardWidth, marginRight: 12, borderRadius: 12, backgroundColor: isDarkMode ? '#111' : '#f5f5f5', overflow: 'hidden', borderWidth: 1, borderColor: isDarkMode ? '#1a1a1a' : '#e0e0e0' }}
+                          style={{ backgroundColor: signalCardBg, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: isDarkMode ? '#222' : 'rgba(0,0,0,0.08)' }}
                         >
                           {digest.image_url ? (
-                            <Image source={{ uri: digest.image_url, cache: 'force-cache' }} style={{ width: '100%', height: 160, borderTopLeftRadius: 12, borderTopRightRadius: 12 }} resizeMode="cover" />
-                          ) : (
-                            <View style={{ width: '100%', height: 160, borderTopLeftRadius: 12, borderTopRightRadius: 12, backgroundColor: isDarkMode ? '#1a1a1a' : '#e8e8e8', alignItems: 'center', justifyContent: 'center' }}>
-                              <StackSignalIcon size={40} color="rgba(201,168,76,0.3)" />
+                            <View style={{ backgroundColor: '#1a1a1a', borderTopLeftRadius: 12, borderTopRightRadius: 12 }}>
+                              <Image source={{ uri: digest.image_url, cache: 'force-cache' }} style={{ width: '100%', height: 200 }} resizeMode="cover" />
                             </View>
-                          )}
+                          ) : null}
                           <View style={{ padding: 14 }}>
-                            <View style={{ backgroundColor: 'rgba(201,168,76,0.15)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, alignSelf: 'flex-start', marginBottom: 8 }}>
-                              <Text style={{ color: '#C9A84C', fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>{digestType}</Text>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                              <View style={{ backgroundColor: 'rgba(201,168,76,0.15)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4 }}>
+                                <Text style={{ color: '#C9A84C', fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>{digestType}</Text>
+                              </View>
+                              <Text style={{ color: colors.muted, fontSize: 11 }}>
+                                {digest.published_at
+                                  ? new Date(digest.published_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                                  : 'Today'}
+                              </Text>
                             </View>
-                            <Text style={{ color: colors.muted, fontSize: 11, marginBottom: 6 }}>
-                              {digest.published_at
-                                ? new Date(digest.published_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-                                : new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                            </Text>
-                            <Text style={{ color: colors.text, fontSize: 17, fontWeight: '700', marginBottom: 6 }}>{digest.title}</Text>
+                            <Text style={{ color: colors.text, fontSize: 16, fontWeight: '700', marginBottom: 6 }}>{digest.title}</Text>
                             {digest.troy_one_liner ? (
-                              <Text style={{ color: '#C9A84C', fontSize: 13, fontStyle: 'italic', lineHeight: 18 }} numberOfLines={2}>{digest.troy_one_liner}</Text>
+                              <Text style={{ color: '#C9A84C', fontSize: 13, fontStyle: 'italic', lineHeight: 18 }} numberOfLines={isExpanded ? undefined : 2}>{digest.troy_one_liner}</Text>
                             ) : null}
 
                             {isExpanded && (
@@ -9909,9 +10864,6 @@ function AppContent() {
                                           <Text style={{ color: '#4A90D9', fontSize: 13 }}>{src.name || src.url}</Text>
                                         </TouchableOpacity>
                                       ))}
-                                      {unique.length > 5 && (
-                                        <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>and {unique.length - 5} more sources</Text>
-                                      )}
                                     </View>
                                   );
                                 })() : null}
@@ -9932,7 +10884,7 @@ function AppContent() {
                         </TouchableOpacity>
                       );
                     })}
-                  </ScrollView>
+                  </View>
                 ) : stackSignalArticles.length === 0 ? (
                   <View style={{ alignItems: 'center', justifyContent: 'center', padding: 40 }}>
                     <Image source={TROY_AVATAR} style={{ width: 48, height: 48, borderRadius: 24 }} />
@@ -10090,13 +11042,13 @@ function AppContent() {
           );
         })()}
 
-        <View style={{ height: (tab === 'settings' || tab === 'analytics' || tab === 'signal') ? 300 : 100 }} />
+        <View style={{ height: (currentScreen === 'Settings' || currentScreen === 'Analytics' || currentScreen === 'StackSignal') ? 300 : 100 }} />
 
       </ScrollView>
       )}
 
       {/* Troy Tab — Inline Chat (rendered outside ScrollView) */}
-      {tab === 'troy' && (
+      {currentScreen === 'TroyChat' && (
         <View style={{ flex: 1, backgroundColor: '#000' }}>
           <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? (insets.top + 68) : 0}>
             {/* Message List */}
@@ -10121,12 +11073,12 @@ function AppContent() {
                     </Text>
                     <View style={{ marginTop: 24, gap: 10, alignSelf: 'stretch', paddingHorizontal: 16 }}>
                       {[
-                        'How is my stack performing?',
-                        'Should I buy more silver or gold?',
-                        'Analyze my gold-to-silver ratio',
-                        'What if silver hits $100?',
-                        "What's my best and worst purchase?",
-                      ].map((q, i) => (
+                        { label: "Today's Brief", emoji: '📋', action: 'brief' },
+                        { label: "How's my stack?", emoji: '📊', action: 'send', text: "How's my stack performing?" },
+                        { label: 'Gold/Silver Ratio', emoji: '🔄', action: 'send', text: 'Analyze my gold-to-silver ratio' },
+                        { label: 'Purchasing Power', emoji: '💰', action: 'send', text: "What can my stack buy in real terms? Show me purchasing power." },
+                        { label: 'Scan a receipt', emoji: '📸', action: 'scan' },
+                      ].map((chip, i) => (
                         <TouchableOpacity
                           key={i}
                           style={{
@@ -10137,13 +11089,23 @@ function AppContent() {
                             borderWidth: 1,
                             borderColor: 'rgba(212,168,67,0.2)',
                             alignSelf: 'flex-start',
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: 6,
                           }}
                           onPress={() => {
                             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                            sendTroyMessage(q);
+                            if (chip.action === 'brief') {
+                              fetchAndShowDailyBrief();
+                            } else if (chip.action === 'scan') {
+                              performScan('camera');
+                            } else {
+                              sendTroyMessage(chip.text);
+                            }
                           }}
                         >
-                          <Text style={{ color: '#D4A843', fontSize: 13 }}>{q}</Text>
+                          <Text style={{ fontSize: 14 }}>{chip.emoji}</Text>
+                          <Text style={{ color: '#D4A843', fontSize: 13 }}>{chip.label}</Text>
                         </TouchableOpacity>
                       ))}
                     </View>
@@ -10183,7 +11145,43 @@ function AppContent() {
                         list_item: { marginTop: 1, marginBottom: 1 },
                       }}>{item.content}</Markdown>
                     )}
+                    {/* Inline rich content card — renders inside the bubble */}
+                    {item.role === 'assistant' && item.preview && renderInlineCard(item.preview, openPreview)}
                   </View>
+                  {/* Preview button — only for types that need the bottom sheet */}
+                  {item.role === 'assistant' && item.preview && shouldShowPreviewButton(item.preview) && (
+                    <TouchableOpacity
+                      onPress={() => openPreview(item.preview)}
+                      style={{
+                        flexDirection: 'row', alignItems: 'center',
+                        marginTop: 8, paddingVertical: 6, paddingHorizontal: 12,
+                        backgroundColor: 'rgba(218, 165, 32, 0.1)',
+                        borderRadius: 8, alignSelf: 'flex-start',
+                      }}
+                    >
+                      <Text style={{ color: '#DAA520', fontSize: 14, fontWeight: '600' }}>
+                        {getPreviewLabel(item.preview)}
+                      </Text>
+                      <Text style={{ color: '#DAA520', fontSize: 14, marginLeft: 6 }}>→</Text>
+                    </TouchableOpacity>
+                  )}
+                  {/* Troy Voice — play button on assistant messages */}
+                  {item.role === 'assistant' && (
+                    hasGoldAccess ? (
+                      <TouchableOpacity
+                        onPress={() => playTroyVoice(item.content, item.id)}
+                        style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, paddingVertical: 4, paddingHorizontal: 8 }}
+                      >
+                        {playingMessageId === item.id ? (
+                          <Text style={{ color: '#DAA520', fontSize: 13 }}>■ Stop</Text>
+                        ) : (
+                          <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>▶ Listen</Text>
+                        )}
+                      </TouchableOpacity>
+                    ) : (
+                      <Text style={{ color: 'rgba(255,255,255,0.25)', fontSize: 11, marginTop: 6, paddingHorizontal: 8 }}>🔒 Upgrade to hear Troy</Text>
+                    )
+                  )}
                 </View>
               )}
             />
@@ -10198,13 +11196,42 @@ function AppContent() {
               </View>
             )}
 
+            {/* Suggestion Chips — compact horizontal pills above input */}
+            {troyMessages.length === 0 && !troyLoading && (
+              <View style={{ height: 44, borderTopWidth: 1, borderTopColor: '#1a1a1a', backgroundColor: '#000' }}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center', paddingHorizontal: 12, gap: 8, height: 44 }}>
+                  {[
+                    { label: "Today's Brief", emoji: '📋', action: 'brief' },
+                    { label: "My stack", emoji: '📊', action: 'send', text: "How's my stack performing?" },
+                    { label: 'Ratio', emoji: '🔄', action: 'send', text: 'Analyze my gold-to-silver ratio' },
+                    { label: 'Buying power', emoji: '💰', action: 'send', text: "What can my stack buy in real terms? Show me purchasing power." },
+                    { label: 'Scan receipt', emoji: '📸', action: 'scan' },
+                  ].map((chip, i) => (
+                    <TouchableOpacity
+                      key={i}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        if (chip.action === 'brief') fetchAndShowDailyBrief();
+                        else if (chip.action === 'scan') performScan('camera');
+                        else sendTroyMessage(chip.text);
+                      }}
+                      style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#1a1a1a', borderRadius: 14, height: 30, paddingHorizontal: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' }}
+                    >
+                      <Text style={{ fontSize: 12 }}>{chip.emoji}</Text>
+                      <Text style={{ color: '#d4d4d8', fontSize: 12 }}>{chip.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
             {/* Input Bar */}
             <View style={{
               flexDirection: 'row',
               alignItems: 'flex-end',
               paddingHorizontal: 12,
               paddingVertical: 8,
-              borderTopWidth: 1,
+              borderTopWidth: troyMessages.length === 0 && !troyLoading ? 0 : 1,
               borderTopColor: '#1a1a1a',
               backgroundColor: '#000',
             }}>
@@ -10250,367 +11277,9 @@ function AppContent() {
             </View>
           </KeyboardAvoidingView>
 
-          {/* Sidebar Overlay for conversation history */}
-          {troySidebarVisible && (
-            <TouchableOpacity
-              activeOpacity={1}
-              onPress={() => setTroySidebarVisible(false)}
-              style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 10000 }}
-            >
-              <TouchableOpacity activeOpacity={1} onPress={() => {}} style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                bottom: 0,
-                width: 280,
-                backgroundColor: '#111',
-                zIndex: 10001,
-                paddingTop: 60,
-              }}>
-                <View style={{ paddingHorizontal: 16, marginBottom: 20 }}>
-                  <TouchableOpacity
-                    onPress={startNewConversation}
-                    style={{
-                      backgroundColor: '#C9A84C',
-                      borderRadius: 8,
-                      paddingVertical: 12,
-                      alignItems: 'center',
-                    }}
-                  >
-                    <Text style={{ color: '#000', fontWeight: '700', fontSize: 15 }}>New Conversation</Text>
-                  </TouchableOpacity>
-                </View>
-
-                <FlatList
-                  data={troyConversations}
-                  keyExtractor={(item) => item.id}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      onPress={() => {
-                        loadConversation(item.id);
-                        setTroySidebarVisible(false);
-                      }}
-                      onLongPress={() => {
-                        Alert.alert(
-                          'Delete Conversation',
-                          'Are you sure you want to delete this conversation?',
-                          [
-                            { text: 'Cancel', style: 'cancel' },
-                            { text: 'Delete', style: 'destructive', onPress: () => deleteConversation(item.id) }
-                          ]
-                        );
-                      }}
-                      style={{
-                        paddingHorizontal: 16,
-                        paddingVertical: 14,
-                        backgroundColor: item.id === activeConversationId ? '#1a1a1a' : 'transparent',
-                        borderLeftWidth: item.id === activeConversationId ? 3 : 0,
-                        borderLeftColor: '#C9A84C',
-                      }}
-                    >
-                      <Text style={{ color: '#fff', fontSize: 14, fontWeight: item.id === activeConversationId ? '600' : '400' }} numberOfLines={1}>
-                        {item.title || 'New conversation'}
-                      </Text>
-                      <Text style={{ color: '#666', fontSize: 11, marginTop: 4 }}>
-                        {new Date(item.updated_at || item.created_at).toLocaleDateString()}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                  ListEmptyComponent={
-                    <Text style={{ color: '#666', textAlign: 'center', marginTop: 40, fontSize: 14 }}>No conversations yet</Text>
-                  }
-                />
-              </TouchableOpacity>
-            </TouchableOpacity>
-          )}
+          {/* Troy conversation sidebar removed — now in drawer sidebar */}
         </View>
       )}
-
-      {/* Troy Chat — Full Screen */}
-      {showTroyChat && (
-        <View {...troySwipe.panHandlers} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000', zIndex: 9999 }}>
-          <SafeAreaView style={{ flex: 1, backgroundColor: '#000' }}>
-
-            {/* Header */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1a1a1a' }}>
-              <TouchableOpacity onPress={() => setTroySidebarVisible(true)} style={{ marginRight: 12 }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Text style={{ color: '#C9A84C', fontSize: 22, fontWeight: '300' }}>{'\u2630'}</Text>
-              </TouchableOpacity>
-              <Image source={TROY_AVATAR} style={{ width: 32, height: 32, borderRadius: 16 }} />
-              <View style={{ marginLeft: 10, flex: 1 }}>
-                <Text style={{ color: '#fff', fontSize: 17, fontWeight: '700' }}>Troy</Text>
-                <Text style={{ color: '#999', fontSize: 12 }}>Your Stack Analyst</Text>
-              </View>
-              <TouchableOpacity onPress={startNewConversation} style={{ marginRight: 16 }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Text style={{ color: '#C9A84C', fontSize: 20 }}>{'\u270E'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={closeTroyChat} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Text style={{ color: '#C9A84C', fontSize: 16, fontWeight: '600' }}>Done</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Message List */}
-            <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}>
-              <FlatList
-                ref={troyFlatListRef}
-                data={troyMessages}
-                keyExtractor={(item, index) => item.id || `msg-${index}`}
-                style={{ flex: 1 }}
-                contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 16, flexGrow: 1 }}
-                keyboardShouldPersistTaps="handled"
-                keyboardDismissMode="interactive"
-                onContentSizeChange={() => {
-                  troyFlatListRef.current?.scrollToEnd({ animated: true });
-                }}
-                ListEmptyComponent={
-                  !troyLoading ? (
-                    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 60 }}>
-                      <Image source={TROY_AVATAR} style={{ width: 64, height: 64, borderRadius: 32 }} />
-                      <Text style={{ color: '#fff', fontSize: 18, fontWeight: '600', marginTop: 16 }}>Ask Troy anything</Text>
-                      <Text style={{ color: '#999', fontSize: 14, marginTop: 8, textAlign: 'center', lineHeight: 20 }}>
-                        Your personal stack analyst. I know your stack{'\n'}and can help you make smarter decisions.
-                      </Text>
-                      <View style={{ marginTop: 24, gap: 10, alignSelf: 'stretch', paddingHorizontal: 16 }}>
-                        {[
-                          'How is my stack performing?',
-                          'Should I buy more silver or gold?',
-                          'Analyze my gold-to-silver ratio',
-                          'What if silver hits $100?',
-                          "What's my best and worst purchase?",
-                        ].map((q, i) => (
-                          <TouchableOpacity
-                            key={i}
-                            style={{
-                              backgroundColor: 'rgba(212,168,67,0.08)',
-                              borderRadius: 16,
-                              paddingVertical: 10,
-                              paddingHorizontal: 14,
-                              borderWidth: 1,
-                              borderColor: 'rgba(212,168,67,0.2)',
-                              alignSelf: 'flex-start',
-                            }}
-                            onPress={() => {
-                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                              sendTroyMessage(q);
-                            }}
-                          >
-                            <Text style={{ color: '#D4A843', fontSize: 13 }}>{q}</Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    </View>
-                  ) : null
-                }
-                renderItem={({ item }) => (
-                  <View style={{
-                    alignSelf: item.role === 'user' ? 'flex-end' : 'flex-start',
-                    maxWidth: '85%',
-                    marginBottom: 12,
-                  }}>
-                    {item.role === 'assistant' && (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-                        <Image source={TROY_AVATAR} style={{ width: 20, height: 20, borderRadius: 10 }} />
-                        <Text style={{ color: '#C9A84C', fontSize: 12, fontWeight: '600', marginLeft: 6 }}>Troy</Text>
-                      </View>
-                    )}
-                    <View style={{
-                      backgroundColor: item.role === 'user' ? '#C9A84C' : '#1a1a1a',
-                      borderRadius: 16,
-                      paddingHorizontal: 14,
-                      paddingVertical: 10,
-                      borderTopRightRadius: item.role === 'user' ? 4 : 16,
-                      borderTopLeftRadius: item.role === 'assistant' ? 4 : 16,
-                    }}>
-                      {item.role === 'user' ? (
-                        <Text style={{ color: '#000', fontSize: 15, lineHeight: 22 }}>{item.content}</Text>
-                      ) : (
-                        <Markdown style={{
-                          body: { color: '#f5f5f5', fontSize: 15, lineHeight: 22 },
-                          paragraph: { marginTop: 0, marginBottom: 4 },
-                          strong: { fontWeight: '700' },
-                          em: { fontStyle: 'italic' },
-                          bullet_list: { marginTop: 2, marginBottom: 2 },
-                          ordered_list: { marginTop: 2, marginBottom: 2 },
-                          list_item: { marginTop: 1, marginBottom: 1 },
-                        }}>{item.content}</Markdown>
-                      )}
-                    </View>
-                  </View>
-                )}
-              />
-
-              {/* Typing Indicator */}
-              {troyLoading && troyMessages.length > 0 && (
-                <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Image source={TROY_AVATAR} style={{ width: 20, height: 20, borderRadius: 10 }} />
-                    <Text style={{ color: '#999', fontSize: 13, marginLeft: 6, fontStyle: 'italic' }}>Troy is thinking...</Text>
-                  </View>
-                </View>
-              )}
-
-              {/* Input Bar */}
-              <View style={{
-                flexDirection: 'row',
-                alignItems: 'flex-end',
-                paddingHorizontal: 12,
-                paddingVertical: 8,
-                borderTopWidth: 1,
-                borderTopColor: '#1a1a1a',
-                backgroundColor: '#000',
-              }}>
-                <TextInput
-                  style={{
-                    flex: 1,
-                    backgroundColor: '#1a1a1a',
-                    borderRadius: 20,
-                    paddingHorizontal: 16,
-                    paddingTop: 10,
-                    paddingBottom: 10,
-                    color: '#fff',
-                    fontSize: 15,
-                    maxHeight: 100,
-                  }}
-                  placeholder="Ask Troy..."
-                  placeholderTextColor="#666"
-                  value={troyInputText}
-                  onChangeText={setTroyInputText}
-                  multiline={true}
-                  textAlignVertical="top"
-                  returnKeyType="default"
-                  blurOnSubmit={false}
-                  autoCorrect={true}
-                  spellCheck={true}
-                  autoCapitalize="sentences"
-                />
-                <TouchableOpacity
-                  onPress={() => sendTroyMessage()}
-                  disabled={!troyInputText.trim() || troyLoading}
-                  style={{
-                    marginLeft: 8,
-                    width: 36,
-                    height: 36,
-                    borderRadius: 18,
-                    backgroundColor: troyInputText.trim() && !troyLoading ? '#C9A84C' : '#333',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                  }}
-                >
-                  <Text style={{ color: troyInputText.trim() && !troyLoading ? '#000' : '#666', fontSize: 16, fontWeight: '700' }}>{'\u2191'}</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={{ paddingBottom: Math.max(insets.bottom, 8), backgroundColor: '#000' }} />
-            </KeyboardAvoidingView>
-
-          </SafeAreaView>
-
-          {/* Sidebar Overlay */}
-          {troySidebarVisible && (
-            <TouchableOpacity
-              activeOpacity={1}
-              onPress={() => setTroySidebarVisible(false)}
-              style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 10000 }}
-            >
-              <TouchableOpacity activeOpacity={1} onPress={() => {}} style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                bottom: 0,
-                width: 280,
-                backgroundColor: '#111',
-                zIndex: 10001,
-                paddingTop: 60,
-              }}>
-                <View style={{ paddingHorizontal: 16, marginBottom: 20 }}>
-                  <TouchableOpacity
-                    onPress={startNewConversation}
-                    style={{
-                      backgroundColor: '#C9A84C',
-                      borderRadius: 8,
-                      paddingVertical: 12,
-                      alignItems: 'center',
-                    }}
-                  >
-                    <Text style={{ color: '#000', fontWeight: '700', fontSize: 15 }}>New Conversation</Text>
-                  </TouchableOpacity>
-                </View>
-
-                <FlatList
-                  data={troyConversations}
-                  keyExtractor={(item) => item.id}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      onPress={() => {
-                        loadConversation(item.id);
-                        setTroySidebarVisible(false);
-                      }}
-                      onLongPress={() => {
-                        Alert.alert(
-                          'Delete Conversation',
-                          'Are you sure you want to delete this conversation?',
-                          [
-                            { text: 'Cancel', style: 'cancel' },
-                            { text: 'Delete', style: 'destructive', onPress: () => deleteConversation(item.id) }
-                          ]
-                        );
-                      }}
-                      style={{
-                        paddingHorizontal: 16,
-                        paddingVertical: 14,
-                        backgroundColor: item.id === activeConversationId ? '#1a1a1a' : 'transparent',
-                        borderLeftWidth: item.id === activeConversationId ? 3 : 0,
-                        borderLeftColor: '#C9A84C',
-                      }}
-                    >
-                      <Text style={{ color: '#fff', fontSize: 14, fontWeight: item.id === activeConversationId ? '600' : '400' }} numberOfLines={1}>
-                        {item.title || 'New conversation'}
-                      </Text>
-                      <Text style={{ color: '#666', fontSize: 11, marginTop: 4 }}>
-                        {new Date(item.updated_at || item.created_at).toLocaleDateString()}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                  ListEmptyComponent={
-                    <Text style={{ color: '#666', textAlign: 'center', marginTop: 40, fontSize: 14 }}>No conversations yet</Text>
-                  }
-                />
-              </TouchableOpacity>
-            </TouchableOpacity>
-          )}
-
-        </View>
-      )}
-
-      {/* Bottom Tabs */}
-      <View style={[styles.bottomTabs, { backgroundColor: isDarkMode ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.95)', borderTopColor: tab === 'troy' ? '#1a1a1a' : colors.border, paddingBottom: Math.max(insets.bottom, 10) }]}>
-        {[
-          { key: 'today', label: 'Today', Icon: TodayIcon },
-          { key: 'portfolio', label: 'Stack', Icon: HoldingsIcon },
-          { key: 'analytics', label: 'Analytics', Icon: DashboardIcon },
-          { key: 'signal', label: 'Signal', Icon: StackSignalIcon },
-          { key: 'troy', label: 'Troy', Icon: ({ size, color }) => (
-            <View style={{ opacity: color === colors.gold ? 1 : 0.4 }}>
-              <Image source={TROY_AVATAR} style={{ width: size, height: size, borderRadius: size / 2 }} />
-            </View>
-          )},
-        ].map(t => (
-          <TouchableOpacity key={t.key} style={styles.bottomTab} onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            if (tab === t.key && t.key !== 'troy') {
-              scrollRef.current?.scrollTo({ y: 0, animated: true });
-            } else if (tab !== t.key) {
-              setTab(t.key);
-              if (t.key !== 'troy') {
-                setTimeout(() => scrollRef.current?.scrollTo({ y: 0, animated: false }), 0);
-              }
-            }
-          }}>
-            <t.Icon size={22} color={tab === t.key ? colors.gold : colors.muted} />
-            <Text style={{ color: tab === t.key ? colors.gold : colors.muted, fontSize: scaledFonts.tiny, fontWeight: tab === t.key ? '600' : '400', marginTop: 4 }}>{t.label}</Text>
-            {tab === t.key && <View style={{ position: 'absolute', bottom: -4, left: 8, right: 8, height: 2, backgroundColor: colors.gold, borderRadius: 1 }} />}
-          </TouchableOpacity>
-        ))}
-      </View>
 
       {/* ===== NOTIFICATIONS SETTINGS SUB-PAGE ===== */}
       {settingsSubPage === 'notifications' && (
@@ -11368,7 +12037,7 @@ function AppContent() {
               {[
                 { icon: '🧠', label: 'Market Intelligence' },
                 { icon: '🏦', label: 'COMEX Vault Watch' },
-                { icon: 'troy', label: 'Troy — 30 questions/day' },
+                { icon: 'troy', label: 'Troy — Unlimited messages' },
                 { icon: '📊', label: 'Advanced Analytics & Cost Basis' },
                 { icon: '📸', label: 'Unlimited receipt scans' },
                 { icon: '☁️', label: 'Cloud sync across devices' },
@@ -12774,16 +13443,41 @@ function AppContent() {
 
                   {/* Error / coming soon state */}
                   {!dealerLoading && (dealerError || !dealerData?.products?.length) && (
-                    <View style={{ alignItems: 'center', paddingTop: 60, paddingHorizontal: 20 }}>
-                      <Svg width={48} height={48} viewBox="0 0 24 24" fill="none" style={{ marginBottom: 16 }}>
-                        <Path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" stroke="rgba(212,168,67,0.4)" strokeWidth={1.5} strokeLinecap="round" />
-                        <Path d="M9 5a2 2 0 012-2h2a2 2 0 012 2v0a2 2 0 01-2 2h-2a2 2 0 01-2-2v0z" stroke="rgba(212,168,67,0.4)" strokeWidth={1.5} />
-                        <Path d="M9 12h6M9 16h4" stroke="rgba(212,168,67,0.4)" strokeWidth={1.5} strokeLinecap="round" />
-                      </Svg>
-                      <Text style={{ color: colors.text, fontSize: scaledFonts.large, fontWeight: '700', marginBottom: 8, textAlign: 'center' }}>Coming Soon</Text>
-                      <Text style={{ color: colors.muted, fontSize: scaledFonts.normal, textAlign: 'center', lineHeight: scaledFonts.normal * 1.5 }}>
-                        Live dealer price comparison is being built. You'll be able to compare prices across APMEX, JM Bullion, SD Bullion, and more — sorted by lowest premium.
+                    <View style={{ paddingTop: 20, paddingHorizontal: 4 }}>
+                      {/* APMEX Quick Links */}
+                      <Text style={{ color: colors.text, fontSize: scaledFonts.large, fontWeight: '700', marginBottom: 4 }}>Shop APMEX</Text>
+                      <Text style={{ color: colors.muted, fontSize: scaledFonts.small, marginBottom: 16, lineHeight: scaledFonts.small * 1.5 }}>
+                        Browse products on one of the largest online bullion dealers.
                       </Text>
+                      {[
+                        { label: 'Best Sellers', sub: 'Most popular products', url: 'https://track.flexlinkspro.com/g.ashx?foid=156074.13444.1055574&trid=1546671.246173&foc=16&fot=9999&fos=6' },
+                        { label: 'Silver Eagles', sub: 'American Silver Eagle coins', url: 'https://track.flexlinkspro.com/g.ashx?foid=156074.13444.1055589&trid=1546671.246173&foc=16&fot=9999&fos=6' },
+                        { label: 'Gold Eagles', sub: 'American Gold Eagle coins', url: 'https://track.flexlinkspro.com/g.ashx?foid=156074.13444.1055590&trid=1546671.246173&foc=16&fot=9999&fos=6' },
+                        { label: 'Browse All', sub: 'Full APMEX catalog', url: 'https://track.flexlinkspro.com/g.ashx?foid=156074.13444.1099573&trid=1546671.246173&foc=16&fot=9999&fos=6' },
+                      ].map((link, i) => (
+                        <TouchableOpacity
+                          key={i}
+                          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); Linking.openURL(link.url); }}
+                          style={{
+                            backgroundColor: colors.cardBg, borderRadius: 12, padding: 14, marginBottom: 10,
+                            borderWidth: 1, borderColor: colors.border,
+                            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                          }}
+                        >
+                          <View>
+                            <Text style={{ color: colors.text, fontSize: scaledFonts.normal, fontWeight: '600' }}>{link.label}</Text>
+                            <Text style={{ color: colors.muted, fontSize: scaledFonts.small, marginTop: 2 }}>{link.sub}</Text>
+                          </View>
+                          <Text style={{ color: colors.gold, fontSize: 18 }}>→</Text>
+                        </TouchableOpacity>
+                      ))}
+
+                      {/* Coming soon notice */}
+                      <View style={{ alignItems: 'center', paddingTop: 30, paddingHorizontal: 20 }}>
+                        <Text style={{ color: colors.muted, fontSize: scaledFonts.small, textAlign: 'center', lineHeight: scaledFonts.small * 1.5 }}>
+                          Live price comparison across multiple dealers coming soon.
+                        </Text>
+                      </View>
                     </View>
                   )}
 
@@ -13053,78 +13747,7 @@ function AppContent() {
         slides={v20TutorialSlides}
       />
 
-      {/* Side Drawer */}
-      {drawerOpen && (
-        <>
-          <Animated.View
-            style={{
-              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-              backgroundColor: 'rgba(0,0,0,0.5)',
-              opacity: drawerOverlayAnim,
-              zIndex: 998,
-            }}
-          >
-            <TouchableWithoutFeedback onPress={closeDrawer}>
-              <View style={{ flex: 1 }} />
-            </TouchableWithoutFeedback>
-          </Animated.View>
-
-          <Animated.View
-            style={{
-              position: 'absolute', top: 0, left: 0, bottom: 0,
-              width: 300,
-              backgroundColor: '#1a1a1a',
-              transform: [{ translateX: drawerAnim }],
-              zIndex: 999,
-              paddingTop: insets.top,
-            }}
-          >
-            {/* Drawer Header */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(212,168,67,0.15)' }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Image source={require('./assets/icon.png')} style={{ width: 32, height: 32, borderRadius: 6 }} />
-                <Text style={{ color: '#fff', fontSize: scaledFonts.medium, fontWeight: '700', marginLeft: 10 }}>TroyStack</Text>
-              </View>
-              <TouchableOpacity onPress={closeDrawer} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-                <Text style={{ color: '#71717a', fontSize: 22, fontWeight: '300' }}>✕</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Drawer Body */}
-            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-              {drawerSections.map((section) => (
-                <View key={section.key}>
-                  <TouchableOpacity
-                    onPress={() => {
-                      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                      setExpandedDrawerTab(expandedDrawerTab === section.key ? null : section.key);
-                    }}
-                    style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' }}
-                  >
-                    <Text style={{ color: tab === section.key ? '#D4A843' : '#fff', fontSize: scaledFonts.medium, fontWeight: '600' }}>{section.label}</Text>
-                    <Text style={{ color: '#71717a', fontSize: scaledFonts.normal }}>{expandedDrawerTab === section.key ? '▾' : '▸'}</Text>
-                  </TouchableOpacity>
-                  {expandedDrawerTab === section.key && section.items.map((item) => (
-                    <TouchableOpacity
-                      key={item.key}
-                      onPress={() => navigateToSection(section.key, item.key)}
-                      style={{ paddingLeft: 32, paddingRight: 16, paddingVertical: 11, flexDirection: 'row', alignItems: 'center', gap: 8 }}
-                    >
-                      {item.key === 'troy' && <Image source={TROY_AVATAR} style={{ width: 18, height: 18, borderRadius: 9 }} />}
-                      <Text style={{ color: item.key === 'troy' ? '#D4A843' : '#9ca3af', fontSize: scaledFonts.normal }}>{item.label}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              ))}
-            </ScrollView>
-
-            {/* Drawer Footer */}
-            <View style={{ paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.05)' }}>
-              <Text style={{ color: '#71717a', fontSize: scaledFonts.small }}>v2.0.0</Text>
-            </View>
-          </Animated.View>
-        </>
-      )}
+      {/* Old custom drawer removed — replaced by React Navigation drawer */}
 
       {forceUpdate && (
         <Modal
@@ -13194,17 +13817,25 @@ function AppContent() {
         </Modal>
       )}
     </SafeAreaView>
+        )}
+      </Drawer.Screen>
+    </Drawer.Navigator>
   );
 }
 
-// Export App wrapped with SafeAreaProvider, ErrorBoundary, and AuthProvider
+// Export App wrapped with SafeAreaProvider, ErrorBoundary, AuthProvider, and NavigationContainer
 export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <ErrorBoundary>
           <AuthProvider>
-            <AppContent />
+            <PreviewProvider>
+              <NavigationContainer>
+                <AppContent />
+                <PreviewBottomSheet />
+              </NavigationContainer>
+            </PreviewProvider>
           </AuthProvider>
         </ErrorBoundary>
       </SafeAreaProvider>

@@ -6,7 +6,47 @@ import SwiftUI
 struct StackTrackerWidgetBundle: WidgetBundle {
     var body: some Widget {
         StackTrackerWidget()
+        TroyActionWidget()
     }
+}
+
+/// Troy Quick Action Widget — tap to open Troy chat
+struct TroyActionWidget: Widget {
+    let kind: String = "TroyActionWidget"
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: TroyActionProvider()) { entry in
+            TroyActionWidgetView()
+                .widgetBackground(Color(hex: "#0A0A0E"))
+                .widgetURL(URL(string: "troystack://chat"))
+        }
+        .configurationDisplayName("Ask Troy")
+        .description("Quick launch Troy AI chat.")
+        .supportedFamilies([.systemSmall])
+        .contentMarginsDisabledIfAvailable()
+    }
+}
+
+/// Simple static provider for Troy action widget
+struct TroyActionProvider: TimelineProvider {
+    func placeholder(in context: Context) -> TroyActionEntry {
+        TroyActionEntry(date: Date())
+    }
+
+    func getSnapshot(in context: Context, completion: @escaping (TroyActionEntry) -> Void) {
+        completion(TroyActionEntry(date: Date()))
+    }
+
+    func getTimeline(in context: Context, completion: @escaping (Timeline<TroyActionEntry>) -> Void) {
+        // Static widget — refresh once a day
+        let entry = TroyActionEntry(date: Date())
+        let nextRefresh = Calendar.current.date(byAdding: .hour, value: 24, to: Date())!
+        completion(Timeline(entries: [entry], policy: .after(nextRefresh)))
+    }
+}
+
+struct TroyActionEntry: TimelineEntry {
+    let date: Date
 }
 
 /// Stack Tracker Portfolio Widget
@@ -16,7 +56,7 @@ struct StackTrackerWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: Provider()) { entry in
             StackTrackerWidgetEntryView(entry: entry)
-                .widgetBackground(Color.black)
+                .widgetBackground(Color(hex: "#0A0A0E"))
         }
         .configurationDisplayName("Stack Tracker Gold")
         .description("View your precious metals portfolio value and live spot prices.")

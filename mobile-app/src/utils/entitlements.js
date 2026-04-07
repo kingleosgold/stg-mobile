@@ -23,6 +23,7 @@ export const hasGoldEntitlement = async () => {
 
 /**
  * Check if user has Silver entitlement
+ * Silver subscribers are grandfathered to Gold — this is kept for backward compatibility.
  * @returns {Promise<boolean>} True if user has active Silver entitlement
  */
 export const hasSilverEntitlement = async () => {

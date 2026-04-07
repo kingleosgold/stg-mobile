@@ -1,6 +1,7 @@
 /**
  * Stack Tracker Pro - Subscription Paywall Component
- * Two-tier Silver/Gold paywall with RevenueCat integration
+ * Single Gold tier paywall with RevenueCat integration
+ * Silver subscribers are grandfathered to Gold — no Silver tier shown.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -24,36 +25,25 @@ import TroyCoinIcon from './TroyCoinIcon';
 const PRIVACY_URL = 'https://api.stacktrackergold.com/privacy';
 const TERMS_URL = 'https://api.stacktrackergold.com/terms';
 
-const SILVER_COLOR = '#A8B5C8';
 const GOLD_COLOR = '#fbbf24';
 
-const SILVER_FEATURES = [
-  { icon: 'troy', text: 'Your Daily Brief' },
-  { icon: 'troy', text: 'Troy — 10 questions/day' },
-  { icon: '📈', text: 'Spot Price History' },
-  { icon: '📊', text: 'Holdings Breakdown & Break-Even' },
-  { icon: '📰', text: 'The Stack Signal' },
-  { icon: '📸', text: '10 receipt scans/month' },
-];
-
 const GOLD_FEATURES = [
-  { icon: '🧠', text: 'AI Intelligence Feed' },
+  { icon: 'troy', text: 'Unlimited Troy AI Chat' },
+  { icon: 'troy', text: 'Troy Remembers (conversation history)' },
+  { icon: '📰', text: 'Daily Market Brief' },
+  { icon: '🧠', text: 'Portfolio Intelligence' },
+  { icon: '📸', text: 'Unlimited Receipt Scanning' },
+  { icon: '🔍', text: 'Dealer Price Comparison' },
+  { icon: '📊', text: 'Advanced Analytics' },
   { icon: '🏦', text: 'COMEX Vault Watch' },
-  { icon: 'troy', text: 'Troy — 30 questions/day' },
-  { icon: '📊', text: 'Advanced Analytics & Cost Basis' },
-  { icon: '📸', text: 'Unlimited receipt scans' },
-  { icon: '☁️', text: 'Cloud sync across devices' },
-  { icon: '🔍', text: 'AI Deal Finder (coming soon)' },
 ];
 
 const GoldPaywall = ({ visible, onClose, onPurchaseSuccess, userTier = 'free' }) => {
-  const [allOfferings, setAllOfferings] = useState(null);
+  const [offering, setOffering] = useState(null);
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(null);
   const [restoring, setRestoring] = useState(false);
   const [billingCycle, setBillingCycle] = useState('yearly'); // 'monthly' or 'yearly'
-
-  const isSilverUser = userTier === 'silver';
 
   useEffect(() => {
     if (visible) {
@@ -66,28 +56,15 @@ const GoldPaywall = ({ visible, onClose, onPurchaseSuccess, userTier = 'free' })
       setLoading(true);
       const offerings = await Purchases.getOfferings();
 
-      // Get all available offerings (Silver + Gold)
-      const result = {};
-
-      // Gold offering (default/current)
       if (offerings.current) {
-        result.gold = offerings.current;
-      }
-
-      // Silver offering — look for it by identifier
-      if (offerings.all && offerings.all['Silver']) {
-        result.silver = offerings.all['Silver'];
-      }
-
-      if (Object.keys(result).length > 0) {
-        setAllOfferings(result);
+        setOffering(offerings.current);
       } else {
         if (__DEV__) console.log('No offerings available');
-        setAllOfferings(null);
+        setOffering(null);
       }
     } catch (error) {
       if (__DEV__) console.log('Error loading offerings:', error);
-      setAllOfferings(null);
+      setOffering(null);
     } finally {
       setLoading(false);
     }
@@ -101,21 +78,11 @@ const GoldPaywall = ({ visible, onClose, onPurchaseSuccess, userTier = 'free' })
       const { customerInfo } = await Purchases.purchasePackage(packageToPurchase);
 
       const activeEntitlements = customerInfo?.entitlements?.active || {};
-      if (activeEntitlements['Gold'] || activeEntitlements['Lifetime']) {
+      if (activeEntitlements['Gold'] || activeEntitlements['Lifetime'] || activeEntitlements['Silver']) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Alert.alert(
           'Welcome to Gold!',
           'Your subscription is now active. Enjoy the full Stack Tracker experience!',
-          [{ text: 'Start Stacking', onPress: () => {
-            onPurchaseSuccess?.();
-            onClose();
-          }}]
-        );
-      } else if (activeEntitlements['Silver']) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert(
-          'Welcome to Silver!',
-          'Your subscription is now active. Enjoy enhanced analytics and more!',
           [{ text: 'Start Stacking', onPress: () => {
             onPurchaseSuccess?.();
             onClose();
@@ -141,9 +108,7 @@ const GoldPaywall = ({ visible, onClose, onPurchaseSuccess, userTier = 'free' })
       if (restored.hasGold || restored.hasSilver) {
         Alert.alert(
           'Purchases Restored!',
-          restored.hasGold
-            ? 'Your Gold subscription has been restored.'
-            : 'Your Silver subscription has been restored.',
+          'Your subscription has been restored.',
           [{ text: 'Continue', onPress: () => {
             onPurchaseSuccess?.();
             onClose();
@@ -160,36 +125,28 @@ const GoldPaywall = ({ visible, onClose, onPurchaseSuccess, userTier = 'free' })
     }
   };
 
-  const getPackage = (tier, cycle) => {
-    if (!allOfferings) return null;
-    const offering = allOfferings[tier];
+  const getPackage = (cycle) => {
     if (!offering) return null;
     if (cycle === 'lifetime') return offering.lifetime || null;
     return cycle === 'yearly' ? (offering.annual || null) : (offering.monthly || null);
   };
 
-  const renderTierCard = (tier, tierColor, tierLabel, tierIcon, features, badge = null) => {
-    const pkg = getPackage(tier, billingCycle);
+  const renderSubscriptionCard = () => {
+    const pkg = getPackage(billingCycle);
     if (!pkg) return null;
 
     const isPurchasing = purchasing === pkg.identifier;
-    const isHighlighted = tier === 'gold';
 
     return (
-      <View style={[
-        styles.tierCard,
-        isHighlighted && { borderColor: tierColor, borderWidth: 2 },
-      ]}>
-        {badge && (
-          <View style={[styles.tierBadge, { backgroundColor: tierColor }]}>
-            <Text style={styles.tierBadgeText}>{badge}</Text>
-          </View>
-        )}
+      <View style={[styles.tierCard, { borderColor: GOLD_COLOR, borderWidth: 2 }]}>
+        <View style={[styles.tierBadge, { backgroundColor: GOLD_COLOR }]}>
+          <Text style={styles.tierBadgeText}>MOST POPULAR</Text>
+        </View>
 
-        {/* Tier Header */}
+        {/* Header */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-          <Text style={{ fontSize: 24 }}>{tierIcon}</Text>
-          <Text style={[styles.tierLabel, { color: tierColor }]}>{tierLabel}</Text>
+          <Text style={{ fontSize: 24 }}>👑</Text>
+          <Text style={[styles.tierLabel, { color: GOLD_COLOR }]}>Gold</Text>
         </View>
 
         {/* Price */}
@@ -198,7 +155,7 @@ const GoldPaywall = ({ visible, onClose, onPurchaseSuccess, userTier = 'free' })
           <Text style={{ color: '#71717a', fontSize: 14 }}>/{billingCycle === 'yearly' ? 'yr' : 'mo'}</Text>
         </View>
 
-        {billingCycle === 'yearly' && tier !== 'lifetime' && (
+        {billingCycle === 'yearly' && (
           <Text style={{ color: '#71717a', fontSize: 12, marginBottom: 8 }}>
             That's {(pkg.product.price / 12).toFixed(2)}/mo
           </Text>
@@ -206,10 +163,7 @@ const GoldPaywall = ({ visible, onClose, onPurchaseSuccess, userTier = 'free' })
 
         {/* Features */}
         <View style={{ marginTop: 8, marginBottom: 12 }}>
-          {tier === 'gold' && (
-            <Text style={{ color: '#a1a1aa', fontSize: 12, fontWeight: '600', marginBottom: 6 }}>Everything in Silver, plus:</Text>
-          )}
-          {features.map((f, i) => (
+          {GOLD_FEATURES.map((f, i) => (
             <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 5 }}>
               {f.icon === 'troy' ? (
                 <View style={{ width: 18 }}><TroyCoinIcon size={16} /></View>
@@ -223,16 +177,14 @@ const GoldPaywall = ({ visible, onClose, onPurchaseSuccess, userTier = 'free' })
 
         {/* CTA Button */}
         {isPurchasing ? (
-          <ActivityIndicator color={tierColor} style={{ marginTop: 8, marginBottom: 8 }} />
+          <ActivityIndicator color={GOLD_COLOR} style={{ marginTop: 8, marginBottom: 8 }} />
         ) : (
           <TouchableOpacity
-            style={[styles.tierCTA, { backgroundColor: tierColor }]}
+            style={[styles.tierCTA, { backgroundColor: GOLD_COLOR }]}
             onPress={() => handlePurchase(pkg)}
             disabled={loading}
           >
-            <Text style={[styles.tierCTAText, tier === 'silver' && { color: '#1a1a2e' }]}>
-              {tier === 'gold' ? 'Try Gold Free for 7 Days' : 'Try Silver Free for 7 Days'}
-            </Text>
+            <Text style={styles.tierCTAText}>Try Gold Free for 7 Days</Text>
           </TouchableOpacity>
         )}
         <Text style={{ color: '#71717a', fontSize: 11, textAlign: 'center', marginTop: 6 }}>
@@ -243,7 +195,7 @@ const GoldPaywall = ({ visible, onClose, onPurchaseSuccess, userTier = 'free' })
   };
 
   const renderLifetimeCard = () => {
-    const pkg = getPackage('gold', 'lifetime');
+    const pkg = getPackage('lifetime');
     if (!pkg) return null;
 
     const isPurchasing = purchasing === pkg.identifier;
@@ -294,13 +246,9 @@ const GoldPaywall = ({ visible, onClose, onPurchaseSuccess, userTier = 'free' })
         <View style={styles.container}>
           {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.title}>
-              {isSilverUser ? 'Upgrade to Gold' : 'Choose Your Plan'}
-            </Text>
+            <Text style={styles.title}>Upgrade to Gold</Text>
             <Text style={styles.subtitle}>
-              {isSilverUser
-                ? 'Unlock the full Stack Tracker experience'
-                : 'AI-powered intelligence for serious stackers'}
+              AI-powered intelligence for serious stackers
             </Text>
             <TouchableOpacity
               onPress={onClose}
@@ -338,21 +286,10 @@ const GoldPaywall = ({ visible, onClose, onPurchaseSuccess, userTier = 'free' })
           >
             {loading ? (
               <ActivityIndicator size="large" color={GOLD_COLOR} style={{ marginTop: 40 }} />
-            ) : allOfferings ? (
+            ) : offering ? (
               <>
-                {/* If Silver user, only show Gold upgrade */}
-                {isSilverUser ? (
-                  <>
-                    {renderTierCard('gold', GOLD_COLOR, 'Gold', '👑', GOLD_FEATURES, 'MOST POPULAR')}
-                    {renderLifetimeCard()}
-                  </>
-                ) : (
-                  <>
-                    {renderTierCard('silver', SILVER_COLOR, 'Silver', '🥈', SILVER_FEATURES)}
-                    {renderTierCard('gold', GOLD_COLOR, 'Gold', '👑', GOLD_FEATURES, 'MOST POPULAR')}
-                    {renderLifetimeCard()}
-                  </>
-                )}
+                {renderSubscriptionCard()}
+                {renderLifetimeCard()}
               </>
             ) : (
               <View style={styles.errorContainer}>

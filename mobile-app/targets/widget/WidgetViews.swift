@@ -3,24 +3,19 @@ import WidgetKit
 
 // MARK: - Design Constants
 
-let wBgColor = Color.black
-let wGold = Color(hex: "#D4A843")
-let wGreen = Color(hex: "#4CAF50")
-let wRed = Color(hex: "#F44336")
+let wBgColor = Color(hex: "#0A0A0E")
+let wGold = Color(hex: "#DAA520")
+let wGreen = Color(hex: "#4ADE80")
+let wRed = Color(hex: "#EF4444")
 let wMuted = Color(hex: "#71717a")
-let wSilver = Color(hex: "#9ca3af")
-let wPlatinum = Color(hex: "#7BB3D4")
-let wPalladium = Color(hex: "#6BBF8A")
+let wSilver = Color(hex: "#C0C0C0")
+let wPlatinum = Color(hex: "#7DD3FC")
+let wPalladium = Color(hex: "#4ADE80")
 
-// MARK: - Pure formatting functions (no SwiftUI)
+// MARK: - Pure formatting functions
 
 func wChangeColor(_ val: Double) -> Color {
     return val >= 0 ? wGreen : wRed
-}
-
-func wSparklineColor(_ data: [Double]) -> Color {
-    guard data.count >= 2 else { return wMuted }
-    return data.last! >= data.first! ? wGreen : wRed
 }
 
 func wFormatCurrency(_ val: Double) -> String {
@@ -55,145 +50,180 @@ func wPrivacy(_ text: String, _ hide: Bool) -> String {
     return hide ? "••••••" : text
 }
 
-// MARK: - Path builders (pure functions, no view code)
+/// Format today's date as "Mon, Apr 7"
+func wFormattedDate() -> String {
+    let f = DateFormatter()
+    f.dateFormat = "EEE, MMM d"
+    return f.string(from: Date())
+}
 
-func buildSparklinePath(points: [CGPoint]) -> Path {
+// MARK: - Sparkline Data Compression
+
+/// Compress sparkline data to ~14 evenly spaced points.
+/// If data has more than 14 points, sample every Nth to get 14.
+func compressSparkline(_ data: [Double], targetCount: Int = 14) -> [Double] {
+    guard data.count > targetCount else { return data }
+    let step = Double(data.count - 1) / Double(targetCount - 1)
+    return (0..<targetCount).map { i in
+        let idx = Int(round(Double(i) * step))
+        return data[min(idx, data.count - 1)]
+    }
+}
+
+// MARK: - Catmull-Rom Smooth Sparkline Path Building
+
+/// Normalize raw data points into CGPoints scaled to the given rect.
+/// Uses tight 5% padding so small price moves look dramatic.
+func normalizeSparklinePoints(data: [Double], width: CGFloat, height: CGFloat) -> [CGPoint] {
+    guard data.count >= 2 else { return [] }
+    let dataMin = data.min() ?? 0
+    let dataMax = data.max() ?? 1
+    let range = dataMax - dataMin
+    let safeRange = range > 0 ? range : 1.0
+    // 5% padding above and below — tight Y-axis
+    let lo = dataMin - safeRange * 0.05
+    let hi = dataMax + safeRange * 0.05
+    let totalRange = hi - lo
+    return data.enumerated().map { i, val in
+        let x = width * CGFloat(i) / CGFloat(data.count - 1)
+        let y = height * (1 - CGFloat((val - lo) / totalRange))
+        return CGPoint(x: x, y: y)
+    }
+}
+
+/// Y position of the opening price (first data point) for the reference line
+func openingPriceY(data: [Double], height: CGFloat) -> CGFloat? {
+    guard data.count >= 2 else { return nil }
+    let dataMin = data.min() ?? 0
+    let dataMax = data.max() ?? 1
+    let range = dataMax - dataMin
+    let safeRange = range > 0 ? range : 1.0
+    let lo = dataMin - safeRange * 0.05
+    let hi = dataMax + safeRange * 0.05
+    let totalRange = hi - lo
+    return height * (1 - CGFloat((data[0] - lo) / totalRange))
+}
+
+/// Add a Catmull-Rom spline through the given points to a Path
+func addSmoothCurve(to path: inout Path, points: [CGPoint]) {
+    guard points.count > 1 else { return }
+
+    if points.count == 2 {
+        path.addLine(to: points[1])
+        return
+    }
+
+    for i in 1..<points.count {
+        let p0 = points[max(i - 2, 0)]
+        let p1 = points[i - 1]
+        let p2 = points[i]
+        let p3 = points[min(i + 1, points.count - 1)]
+
+        let tension: CGFloat = 0.3
+
+        let cp1 = CGPoint(
+            x: p1.x + (p2.x - p0.x) * tension,
+            y: p1.y + (p2.y - p0.y) * tension
+        )
+        let cp2 = CGPoint(
+            x: p2.x - (p3.x - p1.x) * tension,
+            y: p2.y - (p3.y - p1.y) * tension
+        )
+
+        path.addCurve(to: p2, control1: cp1, control2: cp2)
+    }
+}
+
+/// Build a smooth sparkline stroke path
+func buildSmoothSparklinePath(points: [CGPoint]) -> Path {
     var p = Path()
     guard points.count >= 2 else { return p }
     p.move(to: points[0])
-    for i in 1..<points.count {
-        p.addLine(to: points[i])
-    }
+    addSmoothCurve(to: &p, points: points)
     return p
 }
 
-func buildSparklineFill(points: [CGPoint], height: CGFloat) -> Path {
+/// Build a smooth sparkline fill path (closed at bottom)
+func buildSmoothSparklineFill(points: [CGPoint], height: CGFloat) -> Path {
     var p = Path()
     guard points.count >= 2 else { return p }
     p.move(to: CGPoint(x: points[0].x, y: height))
-    for pt in points {
-        p.addLine(to: pt)
-    }
+    p.addLine(to: points[0])
+    addSmoothCurve(to: &p, points: points)
     p.addLine(to: CGPoint(x: points[points.count - 1].x, y: height))
     p.closeSubpath()
     return p
 }
 
-func normalizeSparklinePoints(data: [Double], width: CGFloat, height: CGFloat) -> [CGPoint] {
-    guard data.count >= 2 else { return [] }
-    let lo = data.min() ?? 0
-    let hi = data.max() ?? 1
-    let span = hi - lo
-    let safe = span > 0 ? span : 1.0
-    let pad: CGFloat = 2
-    let dh = height - pad * 2
-    return data.enumerated().map { i, val in
-        let x = width * CGFloat(i) / CGFloat(data.count - 1)
-        let y = pad + dh * (1 - CGFloat((val - lo) / safe))
-        return CGPoint(x: x, y: y)
-    }
-}
+// MARK: - SmoothSparkline View
 
-// MARK: - SparklineStroke
-
-struct SparklineStroke: View {
-    let points: [CGPoint]
-    let color: Color
-    let lineWidth: CGFloat
-
-    var body: some View {
-        buildSparklinePath(points: points)
-            .stroke(color, lineWidth: lineWidth)
-    }
-}
-
-// MARK: - SparklineFill
-
-struct SparklineFillView: View {
-    let points: [CGPoint]
-    let height: CGFloat
-    let color: Color
-
-    var body: some View {
-        buildSparklineFill(points: points, height: height)
-            .fill(fillGradient)
-    }
-
-    private var fillGradient: LinearGradient {
-        LinearGradient(
-            colors: [color.opacity(0.3), color.opacity(0.0)],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-    }
-}
-
-// MARK: - SparklineView
-
-struct SparklineView: View {
+struct SmoothSparkline: View {
     let data: [Double]
     let color: Color
     let lineWidth: CGFloat
-    let showFill: Bool
+    let showGradient: Bool
+    let showReferenceLine: Bool
 
-    init(data: [Double], color: Color, lineWidth: CGFloat = 1.5, showFill: Bool = false) {
-        self.data = data
+    init(data: [Double], color: Color, lineWidth: CGFloat = 1.5, showGradient: Bool = false, showReferenceLine: Bool = true) {
+        self.data = compressSparkline(data)
         self.color = color
         self.lineWidth = lineWidth
-        self.showFill = showFill
+        self.showGradient = showGradient
+        self.showReferenceLine = showReferenceLine
     }
 
     var body: some View {
         GeometryReader { geo in
-            SparklineCanvas(
-                data: data,
-                color: color,
-                lineWidth: lineWidth,
-                showFill: showFill,
-                width: geo.size.width,
-                height: geo.size.height
-            )
+            let w = geo.size.width
+            let h = geo.size.height
+            let points = normalizeSparklinePoints(data: data, width: w, height: h)
+
+            if points.count >= 2 {
+                ZStack {
+                    // Dotted reference line at opening price
+                    if showReferenceLine, let refY = openingPriceY(data: data, height: h) {
+                        Path { path in
+                            path.move(to: CGPoint(x: 0, y: refY))
+                            path.addLine(to: CGPoint(x: w, y: refY))
+                        }
+                        .stroke(
+                            Color.white.opacity(0.2),
+                            style: StrokeStyle(lineWidth: 0.5, dash: [2, 4])
+                        )
+                    }
+
+                    // Gradient fill below the line
+                    if showGradient {
+                        buildSmoothSparklineFill(points: points, height: h)
+                            .fill(
+                                LinearGradient(
+                                    gradient: Gradient(colors: [color.opacity(0.3), color.opacity(0.0)]),
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                    }
+
+                    // The smooth line
+                    buildSmoothSparklinePath(points: points)
+                        .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
+                }
+            }
         }
     }
 }
 
-// MARK: - SparklineCanvas (sized)
+// MARK: - Date Label
 
-struct SparklineCanvas: View {
-    let data: [Double]
-    let color: Color
-    let lineWidth: CGFloat
-    let showFill: Bool
-    let width: CGFloat
-    let height: CGFloat
-
+struct WidgetDateLabel: View {
     var body: some View {
-        ZStack {
-            strokeLayer
-            fillLayer
-        }
-    }
-
-    private var points: [CGPoint] {
-        normalizeSparklinePoints(data: data, width: width, height: height)
-    }
-
-    @ViewBuilder
-    private var strokeLayer: some View {
-        if points.count >= 2 {
-            SparklineStroke(points: points, color: color, lineWidth: lineWidth)
-        }
-    }
-
-    @ViewBuilder
-    private var fillLayer: some View {
-        if showFill && points.count >= 2 {
-            SparklineFillView(points: points, height: height, color: color)
-        }
+        Text(wFormattedDate())
+            .font(.system(size: 11, weight: .medium))
+            .foregroundColor(.white.opacity(0.5))
     }
 }
 
-// MARK: - Atomic Text Views
+// MARK: - Reusable Text Components
 
 struct WBoldCurrencyText: View {
     let text: String
@@ -205,108 +235,6 @@ struct WBoldCurrencyText: View {
             .foregroundColor(.white)
             .minimumScaleFactor(0.5)
             .lineLimit(1)
-    }
-}
-
-struct WSpotPriceText: View {
-    let text: String
-    let size: CGFloat
-
-    var body: some View {
-        Text(text)
-            .font(.system(size: size, weight: .bold))
-            .foregroundColor(.white)
-            .minimumScaleFactor(0.6)
-            .lineLimit(1)
-    }
-}
-
-struct WPercentBadge: View {
-    let text: String
-    let color: Color
-    let size: CGFloat
-
-    var body: some View {
-        Text(text)
-            .font(.system(size: size, weight: .medium))
-            .foregroundColor(color)
-    }
-}
-
-struct WSymbolDot: View {
-    let color: Color
-    let size: CGFloat
-
-    var body: some View {
-        Circle()
-            .fill(color)
-            .frame(width: size, height: size)
-    }
-}
-
-struct WSymbolLabel: View {
-    let text: String
-    let color: Color
-    let size: CGFloat
-
-    var body: some View {
-        Text(text)
-            .font(.system(size: size, weight: .semibold))
-            .foregroundColor(color)
-    }
-}
-
-// MARK: - GoldAccentBar
-
-struct GoldAccentBar: View {
-    var body: some View {
-        Rectangle()
-            .fill(wGold)
-            .frame(height: 2)
-    }
-}
-
-// MARK: - GoldDivider
-
-struct GoldDivider: View {
-    var body: some View {
-        Rectangle()
-            .fill(wGold.opacity(0.15))
-            .frame(height: 1)
-    }
-}
-
-// MARK: - AppIconImage
-
-struct AppIconImage: View {
-    let size: CGFloat
-
-    var body: some View {
-        Image("AppIcon")
-            .resizable()
-            .frame(width: size, height: size)
-            .cornerRadius(4)
-    }
-}
-
-// MARK: - PortfolioLabel
-
-struct PortfolioLabel: View {
-    let iconSize: CGFloat
-    let fontSize: CGFloat
-
-    var body: some View {
-        HStack(spacing: 6) {
-            AppIconImage(size: iconSize)
-            labelText
-        }
-    }
-
-    private var labelText: some View {
-        Text("STACK")
-            .font(.system(size: fontSize, weight: .semibold))
-            .foregroundColor(wMuted)
-            .kerning(1.2)
     }
 }
 
@@ -329,58 +257,47 @@ struct DailyChangeRow: View {
                 .lineLimit(1)
         } else {
             HStack(spacing: 3) {
-                arrowText
-                changeText
-                percentText
+                Text(amount >= 0 ? "▲" : "▼")
+                    .font(.system(size: arrowSize, weight: .bold))
+                    .foregroundColor(wChangeColor(amount))
+                Text(wPrivacy(wFormatChange(amount), hideValues))
+                    .font(.system(size: amountSize, weight: .semibold))
+                    .foregroundColor(wChangeColor(amount))
+                Text("(" + wFormatPct(percent) + ")")
+                    .font(.system(size: pctSize))
+                    .foregroundColor(wChangeColor(amount))
             }
             .lineLimit(1)
             .minimumScaleFactor(0.7)
         }
     }
+}
 
-    private var arrowText: some View {
-        Text(amount >= 0 ? "▲" : "▼")
-            .font(.system(size: arrowSize, weight: .bold))
-            .foregroundColor(wChangeColor(amount))
-    }
+// MARK: - Separator
 
-    private var changeText: some View {
-        Text(wPrivacy(wFormatChange(amount), hideValues))
-            .font(.system(size: amountSize, weight: .semibold))
-            .foregroundColor(wChangeColor(amount))
-    }
-
-    private var percentText: some View {
-        let s = "(" + wFormatPct(percent) + ")"
-        return Text(s)
-            .font(.system(size: pctSize))
-            .foregroundColor(wChangeColor(amount))
+struct WidgetDivider: View {
+    var body: some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.1))
+            .frame(height: 0.5)
     }
 }
 
-// MARK: - LockedView
+// MARK: - LockedViews
 
 struct LockedSmallView: View {
     var body: some View {
         VStack(spacing: 4) {
             Spacer()
-            lockTitle
-            lockSubtitle
+            Text("Upgrade to Gold")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(wGold)
+            Text("for widget access")
+                .font(.system(size: 11))
+                .foregroundColor(wMuted)
             Spacer()
         }
         .frame(maxWidth: .infinity)
-    }
-
-    private var lockTitle: some View {
-        Text("Upgrade to Gold")
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundColor(wGold)
-    }
-
-    private var lockSubtitle: some View {
-        Text("for widget access")
-            .font(.system(size: 11))
-            .foregroundColor(wMuted)
     }
 }
 
@@ -390,168 +307,120 @@ struct LockedLargeView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            lockIcon
+            Image(systemName: "lock.fill")
+                .font(.system(size: 32))
+                .foregroundColor(wMuted)
             Spacer()
-            lockTitle
-            lockSubtitle
+            Text("Upgrade to Gold")
+                .font(.system(size: titleSize, weight: .semibold))
+                .foregroundColor(wGold)
+            Text("Get stack widgets on your home screen")
+                .font(.system(size: subtitleSize))
+                .foregroundColor(wMuted)
+                .multilineTextAlignment(.center)
             Spacer()
         }
         .frame(maxWidth: .infinity)
         .padding()
     }
-
-    private var lockIcon: some View {
-        Image(systemName: "lock.fill")
-            .font(.system(size: 32))
-            .foregroundColor(wMuted)
-    }
-
-    private var lockTitle: some View {
-        Text("Upgrade to Gold")
-            .font(.system(size: titleSize, weight: .semibold))
-            .foregroundColor(wGold)
-    }
-
-    private var lockSubtitle: some View {
-        Text("Get stack widgets on your home screen")
-            .font(.system(size: subtitleSize))
-            .foregroundColor(wMuted)
-            .multilineTextAlignment(.center)
-    }
 }
 
-// MARK: - MetalRowMedium
+// MARK: - Metal Row (Stocks-style: label | sparkline | gap | price + change)
+// Fixed-width columns so all rows align vertically.
 
-struct MetalRowMedium: View {
+struct MetalStocksRow: View {
     let symbol: String
+    let fullName: String
     let price: Double
     let changePct: Double
     let changeAmt: Double
     let sparkline: [Double]
-    let color: Color
+    let dotColor: Color
+    var marketsClosed: Bool = false
+    var rowHeight: CGFloat = 36
 
     var body: some View {
-        HStack(spacing: 6) {
-            MetalRowInfo(symbol: symbol, price: price, changePct: changePct, changeAmt: changeAmt, color: color)
+        GeometryReader { geo in
+            let totalW = geo.size.width
+            let labelW: CGFloat = 100
+            let priceW: CGFloat = 110
+            let gap: CGFloat = 12
+            let sparkW = max(totalW - labelW - priceW - gap, 40)
+
+            HStack(spacing: 0) {
+                // Left: colored dot + full name (symbol)
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(dotColor)
+                        .frame(width: 6, height: 6)
+                    Text("\(fullName) (\(symbol))")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.white.opacity(0.7))
+                        .lineLimit(1)
+                }
+                .frame(width: labelW, alignment: .leading)
+
+                // Center: sparkline (fixed width)
+                if sparkline.count >= 2 {
+                    SmoothSparkline(
+                        data: sparkline,
+                        color: marketsClosed ? wMuted : wChangeColor(changeAmt),
+                        lineWidth: 1.0,
+                        showGradient: false
+                    )
+                    .frame(width: sparkW, height: 20)
+                } else {
+                    Spacer()
+                        .frame(width: sparkW)
+                }
+
+                // Gap
+                Spacer()
+                    .frame(width: gap)
+
+                // Right: price + change (fixed width, right-aligned)
+                HStack(spacing: 4) {
+                    Text(wFormatSpot(price))
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+
+                    if marketsClosed {
+                        Text("Closed")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(wMuted)
+                    } else {
+                        Text(wFormatPct(changePct))
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(wChangeColor(changeAmt))
+                    }
+                }
+                .frame(width: priceW, alignment: .trailing)
+            }
+            .frame(height: geo.size.height)
+        }
+        .frame(height: rowHeight)
+    }
+}
+
+// MARK: - Troy Action Widget View (Ask Troy)
+
+struct TroyActionWidgetView: View {
+    var body: some View {
+        VStack(spacing: 10) {
             Spacer()
-            inlineSparkline
-        }
-    }
-
-    @ViewBuilder
-    private var inlineSparkline: some View {
-        if sparkline.count >= 2 {
-            SparklineView(data: sparkline, color: wChangeColor(changeAmt), lineWidth: 1.0, showFill: true)
-                .frame(width: 48, height: 22)
-        }
-    }
-}
-
-struct MetalRowInfo: View {
-    let symbol: String
-    let price: Double
-    let changePct: Double
-    let changeAmt: Double
-    let color: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            symbolRow
-            priceText
-            pctText
-        }
-    }
-
-    private var symbolRow: some View {
-        HStack(spacing: 4) {
-            WSymbolDot(color: color, size: 6)
-            WSymbolLabel(text: symbol, color: color, size: 10)
-        }
-    }
-
-    private var priceText: some View {
-        WSpotPriceText(text: wFormatSpot(price), size: 14)
-    }
-
-    private var pctText: some View {
-        WPercentBadge(text: wFormatPct(changePct), color: wChangeColor(changeAmt), size: 9)
-    }
-}
-
-// MARK: - SpotCardLarge
-
-struct SpotCardLarge: View {
-    let symbol: String
-    let price: Double
-    let changePct: Double
-    let changeAmt: Double
-    let sparkline: [Double]
-    let color: Color
-    var marketsClosed: Bool = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            SpotCardInfo(symbol: symbol, price: price, changePct: changePct, changeAmt: changeAmt, color: color, marketsClosed: marketsClosed)
-            cardSparkline
-        }
-        .padding(10)
-        .background(Color.white.opacity(0.04))
-        .cornerRadius(8)
-    }
-
-    @ViewBuilder
-    private var cardSparkline: some View {
-        if sparkline.count >= 2 {
-            SparklineView(data: sparkline, color: marketsClosed ? color : wChangeColor(changeAmt), lineWidth: 1.0, showFill: true)
-                .frame(height: 20)
-                .padding(.top, 4)
-        }
-    }
-}
-
-struct SpotCardInfo: View {
-    let symbol: String
-    let price: Double
-    let changePct: Double
-    let changeAmt: Double
-    let color: Color
-    var marketsClosed: Bool = false
-
-    var body: some View {
-        HStack {
-            infoColumn
+            Image("TroyIcon")
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 56, height: 56)
+                .clipShape(Circle())
+            Text("Ask Troy")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.white)
             Spacer()
         }
-    }
-
-    private var infoColumn: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            symbolRow
-            priceText
-            pctText
-        }
-    }
-
-    private var symbolRow: some View {
-        HStack(spacing: 4) {
-            WSymbolDot(color: color, size: 6)
-            WSymbolLabel(text: symbol, color: color, size: 11)
-        }
-    }
-
-    private var priceText: some View {
-        WSpotPriceText(text: wFormatSpot(price), size: 15)
-    }
-
-    @ViewBuilder
-    private var pctText: some View {
-        if marketsClosed {
-            Text("Closed")
-                .font(.system(size: 9, weight: .medium))
-                .foregroundColor(wMuted)
-        } else {
-            WPercentBadge(text: wFormatPct(changePct), color: wChangeColor(changeAmt), size: 9)
-        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -562,11 +431,6 @@ struct StackTrackerWidgetEntryView: View {
     var entry: WidgetEntry
 
     var body: some View {
-        widgetContent
-    }
-
-    @ViewBuilder
-    private var widgetContent: some View {
         switch family {
         case .systemSmall:
             SmallWidgetView(data: entry.data)
@@ -580,418 +444,271 @@ struct StackTrackerWidgetEntryView: View {
     }
 }
 
-// MARK: - Small Widget
+// MARK: - Small Widget (2x2)
+// Date + stack total + daily change + sparkline.
 
 struct SmallWidgetView: View {
     let data: WidgetData
 
     var body: some View {
         if data.hasSubscription {
-            SmallSubscribed(data: data)
+            SmallSubscribedView(data: data)
         } else {
             LockedSmallView()
         }
     }
 }
 
-struct SmallSubscribed: View {
+struct SmallSubscribedView: View {
     let data: WidgetData
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            SmallInner(data: data)
-        }
-    }
-}
+            // Date
+            WidgetDateLabel()
+                .padding(.top, 20)
+                .padding(.bottom, 2)
 
-struct SmallInner: View {
-    let data: WidgetData
+            // Stack value
+            WBoldCurrencyText(
+                text: wPrivacy(wFormatCurrency(data.portfolioValue), data.hideValues),
+                size: 32
+            )
+            .padding(.bottom, 2)
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            header
-            valueText
-            changeRow
+            // Daily change
+            DailyChangeRow(
+                amount: data.dailyChangeAmount,
+                percent: data.dailyChangePercent,
+                hideValues: data.hideValues,
+                arrowSize: 10, amountSize: 13, pctSize: 11,
+                marketsClosed: data.marketsClosed
+            )
+
             Spacer(minLength: 4)
-            SmallBottom(data: data)
+
+            // Sparkline — bottom third, edge to edge, gradient fill
+            let pts = data.portfolioSparkline()
+            if pts.count >= 2 {
+                SmoothSparkline(
+                    data: pts,
+                    color: data.marketsClosed ? wMuted : wChangeColor(data.dailyChangeAmount),
+                    lineWidth: 1.5,
+                    showGradient: true
+                )
+                .frame(maxHeight: 46)
+            } else {
+                Spacer(minLength: 16)
+            }
         }
         .padding(.horizontal, 12)
-    }
-
-    private var header: some View {
-        PortfolioLabel(iconSize: 18, fontSize: 9)
-            .padding(.top, 8)
-            .padding(.bottom, 4)
-    }
-
-    private var valueText: some View {
-        WBoldCurrencyText(
-            text: wPrivacy(wFormatCurrency(data.portfolioValue), data.hideValues),
-            size: 26
-        )
-        .padding(.bottom, 2)
-    }
-
-    private var changeRow: some View {
-        DailyChangeRow(
-            amount: data.dailyChangeAmount,
-            percent: data.dailyChangePercent,
-            hideValues: data.hideValues,
-            arrowSize: 9, amountSize: 11, pctSize: 9,
-            marketsClosed: data.marketsClosed
-        )
+        .padding(.bottom, 8)
     }
 }
 
-struct SmallBottom: View {
-    let data: WidgetData
-
-    var body: some View {
-        if hasSparkline {
-            sparklineView
-        } else {
-            SmallMetalDots(data: data)
-        }
-    }
-
-    private var hasSparkline: Bool {
-        data.portfolioSparkline().count >= 2
-    }
-
-    private var sparklineView: some View {
-        SparklineView(
-            data: data.portfolioSparkline(),
-            color: data.marketsClosed ? wMuted : wChangeColor(data.dailyChangeAmount),
-            lineWidth: 1.5,
-            showFill: true
-        )
-        .frame(maxHeight: 56)
-        .padding(.bottom, 4)
-    }
-}
-
-struct SmallMetalDots: View {
-    let data: WidgetData
-
-    var body: some View {
-        HStack(spacing: 6) {
-            dot(data.goldValue, wGold)
-            dot(data.silverValue, wSilver)
-            dot(data.platinumValue, wPlatinum)
-            dot(data.palladiumValue, wPalladium)
-        }
-        .padding(.bottom, 6)
-    }
-
-    @ViewBuilder
-    private func dot(_ val: Double, _ c: Color) -> some View {
-        if val > 0 {
-            WSymbolDot(color: c, size: 8)
-        }
-    }
-}
-
-// MARK: - Medium Widget
+// MARK: - Medium Widget (4x2)
+// Date + stack value hero + Au and Ag rows in Stocks-style layout.
 
 struct MediumWidgetView: View {
     let data: WidgetData
 
     var body: some View {
         if data.hasSubscription {
-            MediumSubscribed(data: data)
+            MediumSubscribedView(data: data)
         } else {
             LockedLargeView(titleSize: 16, subtitleSize: 12)
         }
     }
 }
 
-struct MediumSubscribed: View {
+struct MediumSubscribedView: View {
     let data: WidgetData
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            MediumHeader(data: data)
-            MediumSparkline(data: data)
-            GoldDivider().padding(.vertical, 4)
-            Text("LIVE SPOT")
-                .font(.system(size: 8, weight: .semibold))
-                .foregroundColor(wMuted)
-                .kerning(1.2)
-                .padding(.bottom, 4)
-            MediumMetalRows(data: data)
+            // Date
+            WidgetDateLabel()
+                .padding(.top, 20)
+                .padding(.bottom, 2)
+
+            // Top row: stack value + daily change
+            HStack(alignment: .firstTextBaseline) {
+                WBoldCurrencyText(
+                    text: wPrivacy(wFormatCurrency(data.portfolioValue), data.hideValues),
+                    size: 28
+                )
+                Spacer(minLength: 8)
+                DailyChangeRow(
+                    amount: data.dailyChangeAmount,
+                    percent: data.dailyChangePercent,
+                    hideValues: data.hideValues,
+                    arrowSize: 10, amountSize: 13, pctSize: 11,
+                    marketsClosed: data.marketsClosed
+                )
+            }
+
+            WidgetDivider()
+                .padding(.vertical, 6)
+
+            // Au row
+            MetalStocksRow(
+                symbol: "Au", fullName: "Gold",
+                price: data.goldSpot,
+                changePct: data.goldChangePercent,
+                changeAmt: data.goldChangeAmount,
+                sparkline: data.goldSparkline,
+                dotColor: wGold,
+                marketsClosed: data.marketsClosed
+            )
+
+            WidgetDivider()
+
+            // Ag row
+            MetalStocksRow(
+                symbol: "Ag", fullName: "Silver",
+                price: data.silverSpot,
+                changePct: data.silverChangePercent,
+                changeAmt: data.silverChangeAmount,
+                sparkline: data.silverSparkline,
+                dotColor: wSilver,
+                marketsClosed: data.marketsClosed
+            )
+
             Spacer(minLength: 2)
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 12)
         .padding(.bottom, 6)
     }
 }
 
-struct MediumHeader: View {
-    let data: WidgetData
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            header
-            HStack(alignment: .firstTextBaseline, spacing: 0) {
-                valueText
-                Spacer(minLength: 8)
-                changeRow
-            }
-        }
-    }
-
-    private var header: some View {
-        PortfolioLabel(iconSize: 16, fontSize: 8)
-            .padding(.top, 8)
-            .padding(.bottom, 4)
-    }
-
-    private var valueText: some View {
-        WBoldCurrencyText(
-            text: wPrivacy(wFormatCurrency(data.portfolioValue), data.hideValues),
-            size: 28
-        )
-    }
-
-    private var changeRow: some View {
-        DailyChangeRow(
-            amount: data.dailyChangeAmount,
-            percent: data.dailyChangePercent,
-            hideValues: data.hideValues,
-            arrowSize: 10, amountSize: 13, pctSize: 11,
-            marketsClosed: data.marketsClosed
-        )
-    }
-}
-
-struct MediumSparkline: View {
-    let data: WidgetData
-
-    var body: some View {
-        let pts = data.portfolioSparkline()
-        if pts.count >= 2 {
-            SparklineView(data: pts, color: data.marketsClosed ? wMuted : wChangeColor(data.dailyChangeAmount), lineWidth: 1.5, showFill: true)
-                .frame(height: 32)
-                .padding(.top, 2)
-        }
-    }
-}
-
-struct MediumMetalRows: View {
-    let data: WidgetData
-
-    var body: some View {
-        HStack(spacing: 12) {
-            MediumMetalRow(
-                symbol: "Au", price: data.goldSpot,
-                changePct: data.goldChangePercent,
-                changeAmt: data.goldChangeAmount,
-                sparkline: data.goldSparkline, color: wGold,
-                marketsClosed: data.marketsClosed
-            )
-            MediumMetalRow(
-                symbol: "Ag", price: data.silverSpot,
-                changePct: data.silverChangePercent,
-                changeAmt: data.silverChangeAmount,
-                sparkline: data.silverSparkline, color: wSilver,
-                marketsClosed: data.marketsClosed
-            )
-        }
-    }
-}
-
-struct MediumMetalRow: View {
-    let symbol: String
-    let price: Double
-    let changePct: Double
-    let changeAmt: Double
-    let sparkline: [Double]
-    let color: Color
-    var marketsClosed: Bool = false
-
-    var body: some View {
-        HStack(spacing: 6) {
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 4) {
-                    WSymbolDot(color: color, size: 6)
-                    WSymbolLabel(text: symbol, color: color, size: 10)
-                }
-                HStack(spacing: 4) {
-                    WSpotPriceText(text: wFormatSpot(price), size: 13)
-                    if marketsClosed {
-                        Text("Closed")
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundColor(wMuted)
-                    } else {
-                        WPercentBadge(text: wFormatPct(changePct), color: wChangeColor(changeAmt), size: 9)
-                    }
-                }
-            }
-            Spacer(minLength: 4)
-            if sparkline.count >= 2 {
-                SparklineView(data: sparkline, color: marketsClosed ? color : wChangeColor(changeAmt), lineWidth: 1.0, showFill: true)
-                    .frame(width: 56, height: 22)
-            }
-        }
-        .frame(maxWidth: .infinity)
-    }
-}
-
-// MARK: - Large Widget
+// MARK: - Large Widget (4x4)
+// Date + stack hero with sparkline + all 4 metals in Stocks rows + Au/Ag ratio.
 
 struct LargeWidgetView: View {
     let data: WidgetData
 
     var body: some View {
         if data.hasSubscription {
-            LargeSubscribed(data: data)
+            LargeSubscribedView(data: data)
         } else {
             LockedLargeView(titleSize: 18, subtitleSize: 13)
         }
     }
 }
 
-struct LargeSubscribed: View {
+struct LargeSubscribedView: View {
     let data: WidgetData
+    private let metalRowHeight: CGFloat = 46
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            LargeMain(data: data)
-        }
-    }
-}
+            Spacer(minLength: 4)
 
-struct LargeMain: View {
-    let data: WidgetData
+            // Date
+            WidgetDateLabel()
+                .padding(.bottom, 4)
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            LargeHeader(data: data)
-            LargeSparkline(data: data)
-            GoldDivider().padding(.vertical, 8)
-            LargeSpotSection(data: data)
+            // Hero section: stack value + change on same line
+            HStack(alignment: .firstTextBaseline) {
+                WBoldCurrencyText(
+                    text: wPrivacy(wFormatCurrency(data.portfolioValue), data.hideValues),
+                    size: 38
+                )
+                Spacer(minLength: 8)
+                DailyChangeRow(
+                    amount: data.dailyChangeAmount,
+                    percent: data.dailyChangePercent,
+                    hideValues: data.hideValues,
+                    arrowSize: 10, amountSize: 13, pctSize: 11,
+                    marketsClosed: data.marketsClosed
+                )
+            }
+
+            // Portfolio sparkline — full width with gradient
+            let pts = data.portfolioSparkline()
+            if pts.count >= 2 {
+                SmoothSparkline(
+                    data: pts,
+                    color: data.marketsClosed ? wMuted : wChangeColor(data.dailyChangeAmount),
+                    lineWidth: 1.5,
+                    showGradient: true
+                )
+                .frame(height: 50)
+                .padding(.top, 10)
+            }
+
+            WidgetDivider()
+                .padding(.top, 12)
+                .padding(.bottom, 6)
+
+            // Four metal rows — Stocks-style with dividers between
+            MetalStocksRow(
+                symbol: "Au", fullName: "Gold",
+                price: data.goldSpot,
+                changePct: data.goldChangePercent,
+                changeAmt: data.goldChangeAmount,
+                sparkline: data.goldSparkline,
+                dotColor: wGold,
+                marketsClosed: data.marketsClosed,
+                rowHeight: metalRowHeight
+            )
+            WidgetDivider()
+            MetalStocksRow(
+                symbol: "Ag", fullName: "Silver",
+                price: data.silverSpot,
+                changePct: data.silverChangePercent,
+                changeAmt: data.silverChangeAmount,
+                sparkline: data.silverSparkline,
+                dotColor: wSilver,
+                marketsClosed: data.marketsClosed,
+                rowHeight: metalRowHeight
+            )
+            WidgetDivider()
+            MetalStocksRow(
+                symbol: "Pt", fullName: "Platinum",
+                price: data.platinumSpot,
+                changePct: data.platinumChangePercent,
+                changeAmt: data.platinumChangeAmount,
+                sparkline: data.platinumSparkline,
+                dotColor: wPlatinum,
+                marketsClosed: data.marketsClosed,
+                rowHeight: metalRowHeight
+            )
+            WidgetDivider()
+            MetalStocksRow(
+                symbol: "Pd", fullName: "Palladium",
+                price: data.palladiumSpot,
+                changePct: data.palladiumChangePercent,
+                changeAmt: data.palladiumChangeAmount,
+                sparkline: data.palladiumSparkline,
+                dotColor: wPalladium,
+                marketsClosed: data.marketsClosed,
+                rowHeight: metalRowHeight
+            )
+
+            WidgetDivider()
+                .padding(.top, 6)
+                .padding(.bottom, 10)
+
+            // Au/Ag ratio
+            HStack {
+                Text("Au/Ag Ratio:")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(wMuted)
+                if data.silverSpot > 0 {
+                    Text(String(format: "%.1f", data.goldSpot / data.silverSpot))
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.white)
+                }
+            }
+
             Spacer(minLength: 4)
         }
-        .padding(.horizontal, 14)
-        .padding(.bottom, 8)
+        .padding(.horizontal, 12)
+        .padding(.top, 20)
+        .padding(.bottom, 12)
     }
 }
-
-struct LargeHeader: View {
-    let data: WidgetData
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            portfolioLabel
-            titleRow
-            changeRow
-        }
-    }
-
-    private var portfolioLabel: some View {
-        PortfolioLabel(iconSize: 18, fontSize: 9)
-            .padding(.top, 10)
-            .padding(.bottom, 4)
-    }
-
-    private var titleRow: some View {
-        WBoldCurrencyText(
-            text: wPrivacy(wFormatCurrency(data.portfolioValue), data.hideValues),
-            size: 48
-        )
-    }
-
-    private var changeRow: some View {
-        DailyChangeRow(
-            amount: data.dailyChangeAmount,
-            percent: data.dailyChangePercent,
-            hideValues: data.hideValues,
-            arrowSize: 13, amountSize: 15, pctSize: 13,
-            marketsClosed: data.marketsClosed
-        )
-        .padding(.top, 2)
-    }
-}
-
-struct LargeSparkline: View {
-    let data: WidgetData
-
-    var body: some View {
-        if hasSparkline {
-            sparklineView
-        }
-    }
-
-    private var hasSparkline: Bool {
-        data.portfolioSparkline().count >= 2
-    }
-
-    private var sparklineView: some View {
-        SparklineView(
-            data: data.portfolioSparkline(),
-            color: data.marketsClosed ? wMuted : wChangeColor(data.dailyChangeAmount),
-            lineWidth: 1.5,
-            showFill: true
-        )
-        .frame(height: 40)
-        .padding(.top, 6)
-    }
-}
-
-struct LargeSpotSection: View {
-    let data: WidgetData
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            sectionLabel
-            LargeSpotGrid(data: data)
-        }
-    }
-
-    private var sectionLabel: some View {
-        Text("LIVE SPOT")
-            .font(.system(size: 9, weight: .semibold))
-            .foregroundColor(wMuted)
-            .kerning(1.2)
-            .padding(.bottom, 6)
-    }
-}
-
-struct LargeSpotGrid: View {
-    let data: WidgetData
-
-    private let cols = [
-        GridItem(.flexible(), spacing: 8),
-        GridItem(.flexible(), spacing: 8),
-    ]
-
-    var body: some View {
-        LazyVGrid(columns: cols, spacing: 8) {
-            goldCard
-            silverCard
-            platinumCard
-            palladiumCard
-        }
-    }
-
-    private var goldCard: some View {
-        SpotCardLarge(symbol: "Au", price: data.goldSpot, changePct: data.goldChangePercent, changeAmt: data.goldChangeAmount, sparkline: data.goldSparkline, color: wGold, marketsClosed: data.marketsClosed)
-    }
-
-    private var silverCard: some View {
-        SpotCardLarge(symbol: "Ag", price: data.silverSpot, changePct: data.silverChangePercent, changeAmt: data.silverChangeAmount, sparkline: data.silverSparkline, color: wSilver, marketsClosed: data.marketsClosed)
-    }
-
-    private var platinumCard: some View {
-        SpotCardLarge(symbol: "Pt", price: data.platinumSpot, changePct: data.platinumChangePercent, changeAmt: data.platinumChangeAmount, sparkline: data.platinumSparkline, color: wPlatinum, marketsClosed: data.marketsClosed)
-    }
-
-    private var palladiumCard: some View {
-        SpotCardLarge(symbol: "Pd", price: data.palladiumSpot, changePct: data.palladiumChangePercent, changeAmt: data.palladiumChangeAmount, sparkline: data.palladiumSparkline, color: wPalladium, marketsClosed: data.marketsClosed)
-    }
-}
-
-// MARK: - Color Extension
 
 // MARK: - iOS 17 Availability Extensions
 

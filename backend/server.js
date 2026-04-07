@@ -5671,6 +5671,30 @@ function detectPreviewContent(troyResponse, contextData) {
     };
   }
 
+  // APMEX affiliate dealer links — Silver Eagles
+  if (r.includes('silver eagle') || r.includes('american silver eagle') || r.includes('ase ')) {
+    return {
+      type: 'dealer_link',
+      data: {
+        dealer: 'APMEX',
+        product: 'Silver Eagles',
+        url: 'https://track.flexlinkspro.com/g.ashx?foid=156074.13444.1055589&trid=1546671.246173&foc=16&fot=9999&fos=6'
+      }
+    };
+  }
+
+  // APMEX affiliate dealer links — Gold Eagles
+  if (r.includes('gold eagle') || r.includes('american gold eagle')) {
+    return {
+      type: 'dealer_link',
+      data: {
+        dealer: 'APMEX',
+        product: 'Gold Eagles',
+        url: 'https://track.flexlinkspro.com/g.ashx?foid=156074.13444.1055590&trid=1546671.246173&foc=16&fot=9999&fos=6'
+      }
+    };
+  }
+
   return null;
 }
 
@@ -5933,6 +5957,62 @@ app.post('/v1/troy/conversations/:id/messages', async (req, res) => {
   } catch (error) {
     console.error('❌ [Troy] Send message error:', error.message);
     return res.status(500).json({ error: 'Failed to get response from Troy' });
+  }
+});
+
+// ============================================
+// TROY VOICE — ElevenLabs Text-to-Speech
+// ============================================
+
+app.post('/v1/troy/speak', async (req, res) => {
+  try {
+    const { text, userId } = req.body;
+
+    if (!text || !userId) {
+      return res.status(400).json({ error: 'Missing text or userId' });
+    }
+
+    const apiKey = process.env.ELEVENLABS_API_KEY;
+    const voiceId = process.env.ELEVENLABS_VOICE_ID || 'pNInz6obpgDQGcFmaJgB'; // placeholder default
+
+    if (!apiKey) {
+      return res.status(503).json({ error: 'TTS service not configured' });
+    }
+
+    // Truncate to 2000 chars to control costs
+    const truncatedText = text.substring(0, 2000);
+
+    console.log(`🎙️ [TTS] Request from ${userId.substring(0, 8)}... (${truncatedText.length} chars)`);
+
+    const ttsResponse = await axios({
+      method: 'post',
+      url: `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+      headers: {
+        'xi-api-key': apiKey,
+        'Content-Type': 'application/json',
+        'Accept': 'audio/mpeg',
+      },
+      data: {
+        text: truncatedText,
+        model_id: 'eleven_turbo_v2_5',
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.75,
+        },
+      },
+      responseType: 'stream',
+      timeout: 30000,
+    });
+
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Transfer-Encoding', 'chunked');
+    ttsResponse.data.pipe(res);
+
+  } catch (error) {
+    console.error('❌ [TTS] Error:', error.response?.status, error.message);
+    if (!res.headersSent) {
+      return res.status(500).json({ error: 'TTS failed' });
+    }
   }
 });
 

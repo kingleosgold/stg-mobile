@@ -11,7 +11,7 @@ module.exports = {
   // Widget accent color (gold)
   colors: {
     $accent: { color: "#fbbf24", darkColor: "#fbbf24" },
-    WidgetBackground: { color: "#1a1a2e", darkColor: "#1a1a2e" },
+    WidgetBackground: { color: "#0A0A0E", darkColor: "#0A0A0E" },
   },
 
   // Frameworks required for the widget

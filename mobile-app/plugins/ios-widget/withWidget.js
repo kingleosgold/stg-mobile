@@ -203,7 +203,7 @@ const withWidgetExtension = (config) => {
             {
               color: {
                 'color-space': 'srgb',
-                components: { red: '0.102', green: '0.102', blue: '0.180', alpha: '1.000' }
+                components: { red: '0.039', green: '0.039', blue: '0.055', alpha: '1.000' }
               },
               idiom: 'universal'
             }
@@ -228,7 +228,28 @@ const withWidgetExtension = (config) => {
             info: { author: 'xcode', version: 1 }
           }, null, 2)
         );
-        console.log('Copied app icon to widget Assets.xcassets');
+        console.log('Copied app icon to widget Assets.xcassets as AppIcon');
+      }
+
+      // Also copy as TroyIcon imageset (used by TroyActionWidget)
+      const troyIconDir = path.join(assetsDir, 'TroyIcon.imageset');
+      if (!fs.existsSync(troyIconDir)) {
+        fs.mkdirSync(troyIconDir, { recursive: true });
+      }
+      if (fs.existsSync(appIconSrc)) {
+        fs.copyFileSync(appIconSrc, path.join(troyIconDir, 'troy-icon.png'));
+        fs.writeFileSync(
+          path.join(troyIconDir, 'Contents.json'),
+          JSON.stringify({
+            images: [
+              { filename: 'troy-icon.png', idiom: 'universal', scale: '1x' },
+              { filename: 'troy-icon.png', idiom: 'universal', scale: '2x' },
+              { filename: 'troy-icon.png', idiom: 'universal', scale: '3x' }
+            ],
+            info: { author: 'xcode', version: 1 }
+          }, null, 2)
+        );
+        console.log('Copied app icon to widget Assets.xcassets as TroyIcon');
       }
 
       console.log('Widget extension files created');
