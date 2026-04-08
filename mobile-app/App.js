@@ -4576,9 +4576,12 @@ function AppContent() {
     try { await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true, staysActiveInBackground: true, interruptionModeIOS: 1, shouldDuckAndroid: true, interruptionModeAndroid: 1, playThroughEarpieceAndroid: false }); } catch {}
   };
 
+  // Voice recording state label: 'idle' | 'recording' | 'transcribing'
+  const [voiceState, setVoiceState] = useState('idle');
+
   const startVoiceRecording = async () => {
     try {
-      if (__DEV__) console.log('[Voice] Starting recording...');
+      console.log('[Voice] START: Beginning');
       const permission = await Audio.requestPermissionsAsync();
       if (!permission.granted) {
         Alert.alert('Permission needed', 'Allow microphone access to talk to Troy.');
@@ -4605,74 +4608,73 @@ function AppContent() {
       await recording.startAsync();
 
       setIsRecording(true);
+      setVoiceState('recording');
       currentRecordingRef.current = recording;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-      // Silence detection — poll metering every 300ms
+      // Silence detection — best-effort, metering may not work on all devices
       silenceStartRef.current = null;
       silenceTimerRef.current = setInterval(async () => {
+        if (!currentRecordingRef.current) { cleanupRecordingTimers(); return; }
         try {
-          const status = await recording.getStatusAsync();
-          console.log('[Voice] Silence check - metering:', status.metering, 'isRecording:', status.isRecording);
+          const status = await currentRecordingRef.current.getStatusAsync();
           if (!status.isRecording) { cleanupRecordingTimers(); return; }
-          if (status.metering !== undefined) {
-            if (status.metering < -40) {
-              if (!silenceStartRef.current) {
-                silenceStartRef.current = Date.now();
-              } else if (Date.now() - silenceStartRef.current > 2000) {
-                console.log('[Voice] AUTO-STOP: Silence threshold met, calling stopVoiceRecording');
-                cleanupRecordingTimers();
-                stopVoiceRecording();
-              }
-            } else {
-              silenceStartRef.current = null;
+          if (status.metering !== undefined && status.metering < -40) {
+            if (!silenceStartRef.current) {
+              silenceStartRef.current = Date.now();
+            } else if (Date.now() - silenceStartRef.current > 2000) {
+              console.log('[Voice] AUTO-STOP: Silence detected');
+              cleanupRecordingTimers();
+              stopVoiceRecording();
             }
+          } else {
+            silenceStartRef.current = null;
           }
-        } catch (e) { console.log('[Voice] Silence check error:', e.message); }
+        } catch {}
       }, 300);
 
-      // Max recording duration — 30 seconds
+      // Max recording duration — 15 seconds safety net
       maxRecordTimerRef.current = setTimeout(() => {
-        if (__DEV__) console.log('[Voice] Max duration reached, auto-stopping');
+        console.log('[Voice] AUTO-STOP: Max duration (15s)');
         cleanupRecordingTimers();
         stopVoiceRecording();
-      }, 30000);
+      }, 15000);
 
     } catch (error) {
-      console.error('[Voice] Recording error:', error);
+      console.error('[Voice] START error:', error);
       await resetAudioMode();
+      setVoiceState('idle');
       Alert.alert('Error', 'Could not start recording.');
     }
   };
 
   const stopVoiceRecording = async () => {
-    console.log('[Voice] STOP: Function entered');
+    console.log('[Voice] STOP: Entered');
     cleanupRecordingTimers();
 
-    // Grab and null the ref atomically to prevent race conditions (silence timer can fire twice)
+    // Grab and null atomically — prevents double-fire from timer
     const recording = currentRecordingRef.current;
     currentRecordingRef.current = null;
 
     if (!recording) {
-      console.log('[Voice] STOP: No recording to stop');
+      console.log('[Voice] STOP: No recording (already stopped)');
       setIsRecording(false);
+      setVoiceState('idle');
       await resetAudioMode();
       return;
     }
 
-    // Update UI immediately to prevent black flash
+    // Keep recording UI visible but change label to "Transcribing..."
     setIsRecording(false);
+    setVoiceState('transcribing');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
       console.log('[Voice] STOP: URI:', uri);
 
       await resetAudioMode();
-
-      setTroyLoading(true);
 
       const formData = new FormData();
       formData.append('audio', { uri, type: 'audio/m4a', name: 'recording.m4a' });
@@ -4687,21 +4689,21 @@ function AppContent() {
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
+        setVoiceState('idle');
         if (response.status === 429) {
           Alert.alert('Voice Limit', error.message || 'Daily voice limit reached. Upgrade to Gold for more.');
-          setTroyLoading(false);
           return;
         }
         throw new Error(error.error || 'Transcription failed');
       }
 
       const { text } = await response.json();
-      console.log('[Voice] Transcribed text:', text);
+      console.log('[Voice] STOP: Transcribed:', text);
 
-      setTroyLoading(false);
+      // Transition from transcribing → chat with message
+      setVoiceState('idle');
 
       if (text && text.trim()) {
-        console.log('[Voice] Sending to Troy:', text.trim());
         // Show transcribed text in input briefly so user sees what was heard
         setTroyInputText(text.trim());
         setTimeout(() => {
@@ -4713,11 +4715,11 @@ function AppContent() {
         Alert.alert('Could not hear you', 'Try speaking again, closer to the mic.');
       }
     } catch (error) {
-      console.error('[Voice] stopVoiceRecording error:', error.message, error.stack);
+      console.error('[Voice] STOP error:', error.message);
       await resetAudioMode();
       setIsRecording(false);
+      setVoiceState('idle');
       currentRecordingRef.current = null;
-      setTroyLoading(false);
       Alert.alert('Error', 'Voice transcription failed. Try again.');
     }
   };
@@ -8389,7 +8391,7 @@ function AppContent() {
                       <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#EF4444', marginLeft: 6 }} />
                     )}
                   </View>
-                  <Text style={{ color: '#999', fontSize: 12 }}>{isRecording ? 'Listening...' : 'Your Stack Analyst'}</Text>
+                  <Text style={{ color: voiceState === 'transcribing' ? '#DAA520' : '#999', fontSize: 12 }}>{voiceState === 'recording' ? 'Listening...' : voiceState === 'transcribing' ? 'Transcribing...' : 'Your Stack Analyst'}</Text>
                 </View>
               </View>
             </>
@@ -11547,20 +11549,22 @@ function AppContent() {
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
-                  onPress={isRecording ? stopVoiceRecording : startVoiceRecording}
-                  disabled={troyLoading}
+                  onPress={isRecording ? stopVoiceRecording : voiceState === 'transcribing' ? undefined : startVoiceRecording}
+                  disabled={troyLoading || voiceState === 'transcribing'}
                   style={{
                     marginLeft: 8,
                     width: 36,
                     height: 36,
                     borderRadius: 18,
-                    backgroundColor: isRecording ? '#EF4444' : 'rgba(255,255,255,0.1)',
+                    backgroundColor: isRecording ? '#EF4444' : voiceState === 'transcribing' ? '#DAA520' : 'rgba(255,255,255,0.1)',
                     justifyContent: 'center',
                     alignItems: 'center',
                   }}
                 >
                   {isRecording ? (
                     <View style={{ width: 14, height: 14, borderRadius: 2, backgroundColor: '#fff' }} />
+                  ) : voiceState === 'transcribing' ? (
+                    <ActivityIndicator size="small" color="#000" />
                   ) : (
                     <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
                       <Path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" stroke="rgba(255,255,255,0.5)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />

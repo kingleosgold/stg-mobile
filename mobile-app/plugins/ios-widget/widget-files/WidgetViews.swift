@@ -409,56 +409,51 @@ struct MetalStocksRow: View {
 struct TroyActionWidgetView: View {
     var body: some View {
         VStack(spacing: 0) {
-            // Top: Troy icon + "Ask Troy" — opens chat
+            // Center: Troy icon + "Ask Troy" — opens chat
             Link(destination: URL(string: "troystack://chat")!) {
-                HStack(spacing: 8) {
+                VStack(spacing: 6) {
+                    Spacer()
                     Image("TroyIcon")
                         .resizable()
                         .aspectRatio(contentMode: .fill)
-                        .frame(width: 24, height: 24)
+                        .frame(width: 48, height: 48)
                         .clipShape(Circle())
                     Text("Ask Troy")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(.white)
-                    Spacer()
+                    Spacer(minLength: 8)
                 }
-                .padding(.horizontal, 14)
-                .padding(.top, 16)
-                .padding(.bottom, 8)
+                .frame(maxWidth: .infinity)
             }
-
-            Spacer()
 
             // Bottom: two action buttons
             HStack(spacing: 8) {
-                // Scan button
                 Link(destination: URL(string: "troystack://scan")!) {
-                    VStack(spacing: 4) {
+                    VStack(spacing: 3) {
                         Image(systemName: "camera.fill")
-                            .font(.system(size: 16))
+                            .font(.system(size: 14))
                             .foregroundColor(.white)
                         Text("Scan")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: 10, weight: .medium))
                             .foregroundColor(.white.opacity(0.7))
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
+                    .padding(.vertical, 8)
                     .background(Color.white.opacity(0.08))
                     .cornerRadius(10)
                 }
 
-                // Voice button
                 Link(destination: URL(string: "troystack://voice")!) {
-                    VStack(spacing: 4) {
+                    VStack(spacing: 3) {
                         Image(systemName: "mic.fill")
-                            .font(.system(size: 16))
+                            .font(.system(size: 14))
                             .foregroundColor(.white)
                         Text("Voice")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: 10, weight: .medium))
                             .foregroundColor(.white.opacity(0.7))
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
+                    .padding(.vertical, 8)
                     .background(Color.white.opacity(0.08))
                     .cornerRadius(10)
                 }
