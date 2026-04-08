@@ -2315,6 +2315,7 @@ function AppContent() {
   const [troyInputText, setTroyInputText] = useState('');
   const [advisorQuestionsToday, setAdvisorQuestionsToday] = useState(0);
   const [playingMessageId, setPlayingMessageId] = useState(null);
+  const [isPaused, setIsPaused] = useState(false);
   const [trackPlayerReady, setTrackPlayerReady] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const currentRecordingRef = useRef(null);
@@ -3747,6 +3748,7 @@ function AppContent() {
     const subs = [
       TrackPlayer.addEventListener(Event.PlaybackQueueEnded, () => {
         setPlayingMessageId(null);
+        setIsPaused(false);
         TrackPlayer.reset().catch(() => {});
       }),
       TrackPlayer.addEventListener(Event.RemotePause, () => { TrackPlayer.pause(); }),
@@ -3755,6 +3757,7 @@ function AppContent() {
         TrackPlayer.stop();
         TrackPlayer.reset().catch(() => {});
         setPlayingMessageId(null);
+        setIsPaused(false);
       }),
     ];
 
@@ -4618,6 +4621,7 @@ function AppContent() {
       await TrackPlayer.reset();
     } catch {}
     setPlayingMessageId(null);
+    setIsPaused(false);
   };
 
   // Voice recording state: 'idle' | 'recording' | 'transcribing'
@@ -11468,14 +11472,24 @@ function AppContent() {
                       <Text style={{ color: '#DAA520', fontSize: 14, marginLeft: 6 }}>→</Text>
                     </TouchableOpacity>
                   )}
-                  {/* Troy Voice — play button on assistant messages (caps enforced server-side) */}
+                  {/* Troy Voice — pause/resume/listen per message */}
                   {item.role === 'assistant' && (
                     <TouchableOpacity
-                      onPress={() => playTroyVoice(item.content, item.id)}
+                      onPress={() => {
+                        if (playingMessageId === item.id && !isPaused) {
+                          TrackPlayer.pause(); setIsPaused(true);
+                        } else if (playingMessageId === item.id && isPaused) {
+                          TrackPlayer.play(); setIsPaused(false);
+                        } else {
+                          setIsPaused(false); playTroyVoice(item.content, item.id);
+                        }
+                      }}
                       style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, paddingVertical: 4, paddingHorizontal: 8 }}
                     >
-                      {playingMessageId === item.id ? (
-                        <Text style={{ color: '#DAA520', fontSize: 13 }}>■ Stop</Text>
+                      {playingMessageId === item.id && !isPaused ? (
+                        <Text style={{ color: '#DAA520', fontSize: 13 }}>❚❚ Pause</Text>
+                      ) : playingMessageId === item.id && isPaused ? (
+                        <Text style={{ color: '#DAA520', fontSize: 13 }}>▶ Resume</Text>
                       ) : (
                         <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: 13 }}>▶ Listen</Text>
                       )}
