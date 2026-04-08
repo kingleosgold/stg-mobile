@@ -23,6 +23,7 @@ import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Haptics from 'expo-haptics';
 import { Audio } from 'expo-av';
+import TrackPlayer, { Capability, Event } from 'react-native-track-player';
 import Purchases from 'react-native-purchases';
 import * as XLSX from 'xlsx';
 import * as Notifications from 'expo-notifications';
@@ -2314,7 +2315,7 @@ function AppContent() {
   const [troyInputText, setTroyInputText] = useState('');
   const [advisorQuestionsToday, setAdvisorQuestionsToday] = useState(0);
   const [playingMessageId, setPlayingMessageId] = useState(null);
-  const currentAudioRef = useRef(null);
+  const [trackPlayerReady, setTrackPlayerReady] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const currentRecordingRef = useRef(null);
   const autoPlayNextResponseRef = useRef(false);
@@ -3724,6 +3725,33 @@ function AppContent() {
 
   useEffect(() => { authenticate(); }, []);
 
+  // Initialize TrackPlayer for TTS playback (lock screen + Dynamic Island)
+  useEffect(() => {
+    (async () => {
+      try {
+        await TrackPlayer.setupPlayer();
+        await TrackPlayer.updateOptions({
+          capabilities: [Capability.Play, Capability.Pause, Capability.Stop],
+          compactCapabilities: [Capability.Play, Capability.Pause],
+        });
+        setTrackPlayerReady(true);
+        console.log('[Audio] TrackPlayer initialized');
+      } catch (e) {
+        // Already initialized from a previous render
+        setTrackPlayerReady(true);
+        console.log('[Audio] TrackPlayer already set up');
+      }
+    })();
+
+    // Listen for playback completion
+    const sub = TrackPlayer.addEventListener(Event.PlaybackQueueEnded, () => {
+      setPlayingMessageId(null);
+      TrackPlayer.reset().catch(() => {});
+    });
+
+    return () => sub.remove();
+  }, []);
+
   // Register for push notifications (for price alerts)
   const registerForPushNotifications = async () => {
     if (__DEV__) console.log('📱 [Push] registerForPushNotifications() called');
@@ -4571,18 +4599,15 @@ function AppContent() {
   };
 
   const resetAudioMode = async () => {
-    try { await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true, staysActiveInBackground: true, interruptionModeIOS: 1, shouldDuckAndroid: true, interruptionModeAndroid: 1, playThroughEarpieceAndroid: false }); } catch {}
+    try { await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true, staysActiveInBackground: true }); } catch {}
   };
 
   // Stop Troy's TTS playback
   const stopTroyAudio = async () => {
-    if (currentAudioRef.current) {
-      try {
-        await currentAudioRef.current.stopAsync();
-        await currentAudioRef.current.unloadAsync();
-      } catch {}
-      currentAudioRef.current = null;
-    }
+    try {
+      await TrackPlayer.stop();
+      await TrackPlayer.reset();
+    } catch {}
     setPlayingMessageId(null);
   };
 
@@ -4772,44 +4797,22 @@ function AppContent() {
   const playTroyVoice = async (text, messageId) => {
     // Stop if already playing this message
     if (playingMessageId === messageId) {
-      if (currentAudioRef.current) {
-        await currentAudioRef.current.stopAsync();
-        await currentAudioRef.current.unloadAsync();
-      }
-      setPlayingMessageId(null);
-      currentAudioRef.current = null;
+      await stopTroyAudio();
       return;
     }
 
     try {
-      // Stop any current playback first
-      if (currentAudioRef.current) {
-        await currentAudioRef.current.stopAsync();
-        await currentAudioRef.current.unloadAsync();
-        currentAudioRef.current = null;
-      }
-
+      // Stop any current playback
+      await TrackPlayer.reset();
       setPlayingMessageId(messageId);
 
-      // Set audio mode for playback (background + silent mode + lock screen)
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: true,
-        interruptionModeIOS: 1, // DoNotMix — keeps audio session active for lock screen controls
-        shouldDuckAndroid: true,
-        interruptionModeAndroid: 1,
-        playThroughEarpieceAndroid: false,
-      });
-
       const truncatedText = text.substring(0, 2000);
-      console.log('🔊 Fetching audio...');
+      console.log('[Audio] Fetching TTS...');
       const response = await fetch(`${API_BASE_URL}/v1/troy/speak`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: truncatedText, userId: supabaseUser?.id || 'anonymous' }),
       });
-      console.log('🔊 Fetch status:', response.status, 'content-type:', response.headers.get('content-type'));
 
       if (response.status === 429) {
         const err = await response.json().catch(() => ({}));
@@ -4819,59 +4822,34 @@ function AppContent() {
       }
       if (!response.ok) throw new Error(`TTS fetch failed: ${response.status}`);
 
-      // Read response as arrayBuffer, convert to base64, write to file
       const arrayBuffer = await response.arrayBuffer();
       const bytes = new Uint8Array(arrayBuffer);
-      console.log('🔊 Received', bytes.length, 'bytes');
+      console.log('[Audio] Received', bytes.length, 'bytes');
 
-      if (bytes.length < 100) {
-        throw new Error(`Audio too small (${bytes.length} bytes) — likely an error response`);
-      }
+      if (bytes.length < 100) throw new Error(`Audio too small (${bytes.length} bytes)`);
 
-      // Convert Uint8Array to base64 in chunks (avoid call stack overflow on large arrays)
+      // Convert to base64 and write to cache file
       let binary = '';
       const chunkSize = 8192;
       for (let i = 0; i < bytes.length; i += chunkSize) {
-        const chunk = bytes.subarray(i, i + chunkSize);
-        binary += String.fromCharCode.apply(null, chunk);
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
       }
-      const base64 = btoa(binary);
-
       const fileUri = FileSystem.cacheDirectory + `troy-voice-${messageId}.mp3`;
-      await FileSystem.writeAsStringAsync(fileUri, base64, { encoding: FileSystem.EncodingType.Base64 });
+      await FileSystem.writeAsStringAsync(fileUri, btoa(binary), { encoding: FileSystem.EncodingType.Base64 });
 
-      // Verify file was written
-      const fileInfo = await FileSystem.getInfoAsync(fileUri);
-      console.log('🔊 Audio file created:', fileUri, 'size:', fileInfo.size);
-
-      if (!fileInfo.exists || fileInfo.size < 100) {
-        throw new Error(`File write failed or empty: exists=${fileInfo.exists}, size=${fileInfo.size}`);
-      }
-
-      const { sound } = await Audio.Sound.createAsync({ uri: fileUri });
-      console.log('🔊 Sound created');
-      currentAudioRef.current = sound;
-
-      sound.setOnPlaybackStatusUpdate((status) => {
-        console.log('🔊 Status:', status.isLoaded ? `playing=${status.isPlaying} finished=${status.didJustFinish} pos=${status.positionMillis}` : `error=${status.error}`);
-        if (status.didJustFinish) {
-          setPlayingMessageId(null);
-          currentAudioRef.current = null;
-          sound.unloadAsync();
-        }
-        if (status.error) {
-          console.log('🔊 Playback error:', status.error);
-          setPlayingMessageId(null);
-          currentAudioRef.current = null;
-        }
+      // Play via TrackPlayer (enables lock screen controls + Dynamic Island)
+      await TrackPlayer.add({
+        id: messageId,
+        url: fileUri,
+        title: 'Troy',
+        artist: 'TroyStack',
       });
+      await TrackPlayer.play();
+      console.log('[Audio] Playing via TrackPlayer');
 
-      await sound.playAsync();
-      console.log('🔊 Playing');
     } catch (error) {
-      console.log('🔊 Error:', error.message, error.stack);
+      console.log('[Audio] TTS error:', error.message);
       setPlayingMessageId(null);
-      currentAudioRef.current = null;
     }
   };
 
