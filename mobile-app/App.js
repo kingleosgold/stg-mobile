@@ -2320,6 +2320,8 @@ function AppContent() {
   const autoPlayNextResponseRef = useRef(false);
   const maxRecordTimerRef = useRef(null);
   const recordingStartTimeRef = useRef(null);
+  const silenceTimerRef = useRef(null);
+  const silenceStartRef = useRef(null);
   const troyAbortRef = useRef(null);
   const messageAnimsRef = useRef(new Map());
   const troyFlatListRef = useRef(null);
@@ -4629,15 +4631,38 @@ function AppContent() {
           bitRate: 128000,
         },
         web: {},
+        isMeteringEnabled: true,
       });
       await recording.startAsync();
 
       currentRecordingRef.current = recording;
       recordingStartTimeRef.current = Date.now();
+      silenceStartRef.current = null;
       setIsRecording(true);
       setVoiceStateLog('recording');
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       console.log('[Voice] START: Recording active');
+
+      // Silence detection — auto-stop after 2s of silence (skip first 500ms)
+      silenceTimerRef.current = setInterval(async () => {
+        if (!currentRecordingRef.current) { clearInterval(silenceTimerRef.current); silenceTimerRef.current = null; return; }
+        // Skip first 500ms — user hasn't started speaking yet
+        if (Date.now() - recordingStartTimeRef.current < 500) return;
+        try {
+          const status = await currentRecordingRef.current.getStatusAsync();
+          if (!status.isRecording) { clearInterval(silenceTimerRef.current); silenceTimerRef.current = null; return; }
+          if (status.metering !== undefined && status.metering < -40) {
+            if (!silenceStartRef.current) {
+              silenceStartRef.current = Date.now();
+            } else if (Date.now() - silenceStartRef.current > 2000) {
+              console.log('[Voice] AUTO-STOP: Silence detected');
+              stopVoiceRecording();
+            }
+          } else {
+            silenceStartRef.current = null;
+          }
+        } catch {}
+      }, 300);
 
       // 15-second max safety net
       maxRecordTimerRef.current = setTimeout(() => {
@@ -4658,6 +4683,9 @@ function AppContent() {
   const stopVoiceRecording = async () => {
     console.log('[Voice] STOP: Entered');
 
+    // Clean up all timers first
+    if (silenceTimerRef.current) { clearInterval(silenceTimerRef.current); silenceTimerRef.current = null; }
+    silenceStartRef.current = null;
     if (maxRecordTimerRef.current) { clearTimeout(maxRecordTimerRef.current); maxRecordTimerRef.current = null; }
 
     const recording = currentRecordingRef.current;
