@@ -3755,15 +3755,17 @@ function AppContent() {
       TrackPlayer.addEventListener(Event.PlaybackQueueEnded, async () => {
         setPlayingMessageId(null);
         setIsPaused(false);
+        await TrackPlayer.stop().catch(() => {});
         await TrackPlayer.reset().catch(() => {});
-        // Pre-release audio session so mic is ready immediately
+        await new Promise(r => setTimeout(r, 500));
         await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true, staysActiveInBackground: true }).catch(() => {});
+        console.log('[Audio] Session released after playback ended');
       }),
       TrackPlayer.addEventListener(Event.RemotePause, () => { TrackPlayer.pause(); }),
       TrackPlayer.addEventListener(Event.RemotePlay, () => { TrackPlayer.play(); }),
-      TrackPlayer.addEventListener(Event.RemoteStop, () => {
-        TrackPlayer.stop();
-        TrackPlayer.reset().catch(() => {});
+      TrackPlayer.addEventListener(Event.RemoteStop, async () => {
+        await TrackPlayer.stop().catch(() => {});
+        await TrackPlayer.reset().catch(() => {});
         setPlayingMessageId(null);
         setIsPaused(false);
       }),
@@ -4655,7 +4657,7 @@ function AppContent() {
       await TrackPlayer.reset().catch(() => {});
       setPlayingMessageId(null);
       setIsPaused(false);
-      await new Promise(r => setTimeout(r, 300));
+      await new Promise(r => setTimeout(r, 500));
 
       console.log('[Voice] START: Setting audio mode to recording');
       await Audio.setAudioModeAsync({
@@ -4721,6 +4723,7 @@ function AppContent() {
 
     } catch (error) {
       console.log('[Voice] START ERROR:', error.message, error.stack);
+      Alert.alert('Recording Error', error.message || 'Could not start recording');
       await resetAudioMode();
       setIsRecording(false);
       setVoiceStateLog('idle');
