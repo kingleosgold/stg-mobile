@@ -4573,7 +4573,7 @@ function AppContent() {
   };
 
   const resetAudioMode = async () => {
-    try { await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true, staysActiveInBackground: true, shouldDuckAndroid: true }); } catch {}
+    try { await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true, staysActiveInBackground: true, interruptionModeIOS: 1, shouldDuckAndroid: true, interruptionModeAndroid: 1, playThroughEarpieceAndroid: false }); } catch {}
   };
 
   const startVoiceRecording = async () => {
@@ -4620,7 +4620,7 @@ function AppContent() {
               if (!silenceStartRef.current) {
                 silenceStartRef.current = Date.now();
               } else if (Date.now() - silenceStartRef.current > 2000) {
-                console.log('[Voice] Silence detected, auto-stopping');
+                console.log('[Voice] AUTO-STOP: Silence threshold met, calling stopVoiceRecording');
                 cleanupRecordingTimers();
                 stopVoiceRecording();
               }
@@ -4646,40 +4646,44 @@ function AppContent() {
   };
 
   const stopVoiceRecording = async () => {
-    console.log('[Voice] stopVoiceRecording called');
+    console.log('[Voice] STOP: Function entered');
     cleanupRecordingTimers();
 
+    // Grab and null the ref atomically to prevent race conditions (silence timer can fire twice)
     const recording = currentRecordingRef.current;
+    currentRecordingRef.current = null;
+
     if (!recording) {
-      console.log('[Voice] No recording ref, aborting');
+      console.log('[Voice] STOP: No recording to stop');
       setIsRecording(false);
       await resetAudioMode();
       return;
     }
+
+    // Update UI immediately to prevent black flash
+    setIsRecording(false);
 
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
-      console.log('[Voice] Recording stopped, URI:', uri);
+      console.log('[Voice] STOP: URI:', uri);
 
       await resetAudioMode();
-      setIsRecording(false);
-      currentRecordingRef.current = null;
 
       setTroyLoading(true);
 
       const formData = new FormData();
       formData.append('audio', { uri, type: 'audio/m4a', name: 'recording.m4a' });
       formData.append('userId', supabaseUser?.id || 'anonymous');
-      console.log('[Voice] Sending to transcribe...');
+      console.log('[Voice] STOP: Sending to transcribe');
 
       const response = await fetch(`${API_BASE_URL}/v1/troy/transcribe`, {
         method: 'POST',
         body: formData,
       });
-      console.log('[Voice] Transcribe response status:', response.status);
+      console.log('[Voice] STOP: Transcribe status:', response.status);
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
@@ -4740,8 +4744,16 @@ function AppContent() {
 
       setPlayingMessageId(messageId);
 
-      // Set audio mode for playback (background + silent mode)
-      await Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: true, shouldDuckAndroid: true });
+      // Set audio mode for playback (background + silent mode + lock screen)
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        interruptionModeIOS: 1, // DoNotMix — keeps audio session active for lock screen controls
+        shouldDuckAndroid: true,
+        interruptionModeAndroid: 1,
+        playThroughEarpieceAndroid: false,
+      });
 
       const truncatedText = text.substring(0, 2000);
       console.log('🔊 Fetching audio...');
