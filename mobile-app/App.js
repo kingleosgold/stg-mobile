@@ -3749,7 +3749,7 @@ function AppContent() {
       setPlayingMessageId(null);
       setIsPaused(false);
       await TrackPlayer.stop().catch(() => {});
-      await TrackPlayer.destroy().catch(() => {});
+      await TrackPlayer.reset().catch(() => {});
       await new Promise(r => setTimeout(r, 500));
       await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true, staysActiveInBackground: true }).catch(() => {});
       console.log('[Audio] Session released (destroy + setAudioMode)');
@@ -3758,7 +3758,7 @@ function AppContent() {
     TrackPlayer.addEventListener(Event.RemotePlay, () => { TrackPlayer.play(); });
     TrackPlayer.addEventListener(Event.RemoteStop, async () => {
       await TrackPlayer.stop().catch(() => {});
-      await TrackPlayer.destroy().catch(() => {});
+      await TrackPlayer.reset().catch(() => {});
       setPlayingMessageId(null);
       setIsPaused(false);
     });
@@ -4624,7 +4624,7 @@ function AppContent() {
   const stopTroyAudio = async () => {
     try {
       await TrackPlayer.stop();
-      await TrackPlayer.destroy();
+      await TrackPlayer.reset();
     } catch {}
     setPlayingMessageId(null);
     setIsPaused(false);
@@ -4650,7 +4650,7 @@ function AppContent() {
       // Release TrackPlayer if still active, then set recording mode
       console.log('[Voice] START: Releasing audio session');
       await TrackPlayer.stop().catch(() => {});
-      await TrackPlayer.destroy().catch(() => {});
+      await TrackPlayer.reset().catch(() => {});
       setPlayingMessageId(null);
       setIsPaused(false);
       await new Promise(r => setTimeout(r, 300));
