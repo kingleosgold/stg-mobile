@@ -3971,7 +3971,7 @@ function AppContent() {
 
       return __DEV__ || isGold || isSilver || isLifetime;
     } catch (error) {
-      if (__DEV__) console.log('❌ Error checking entitlements:', error);
+      console.log('[Entitlements] Error checking:', error?.message);
       return __DEV__ || false;
     }
   };
@@ -4887,7 +4887,10 @@ function AppContent() {
     }
 
     // Daily limit check — Free gets 3/day, Gold/Lifetime unlimited
-    if (!hasGoldAccess && advisorQuestionsToday >= TROY_FREE_LIMIT) {
+    // Check both RevenueCat state (hasGoldAccess) and Supabase tier (userTier) as backup
+    const isPaidUser = hasGoldAccess || userTier === 'gold' || userTier === 'lifetime' || hasLifetimeAccess;
+    console.log('[Troy] Tier check:', { hasGold, hasLifetimeAccess, hasGoldAccess, userTier, isPaidUser, questions: advisorQuestionsToday });
+    if (!isPaidUser && advisorQuestionsToday >= TROY_FREE_LIMIT) {
       setShowPaywallModal(true);
       return;
     }
