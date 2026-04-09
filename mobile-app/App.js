@@ -3732,7 +3732,7 @@ function AppContent() {
     try {
       await TrackPlayer.setupPlayer({
         autoHandleInterruptions: true,
-        iosCategory: 'playback',
+        iosCategory: 'playAndRecord',
         iosCategoryMode: 'spokenAudio',
         iosCategoryOptions: ['allowBluetooth', 'defaultToSpeaker'],
       });
@@ -3750,9 +3750,7 @@ function AppContent() {
       setIsPaused(false);
       await TrackPlayer.stop().catch(() => {});
       await TrackPlayer.reset().catch(() => {});
-      await new Promise(r => setTimeout(r, 500));
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true, staysActiveInBackground: true }).catch(() => {});
-      console.log('[Audio] Session released (destroy + setAudioMode)');
+      console.log('[Audio] Playback ended, player reset');
     });
     TrackPlayer.addEventListener(Event.RemotePause, () => { TrackPlayer.pause(); });
     TrackPlayer.addEventListener(Event.RemotePlay, () => { TrackPlayer.play(); });
@@ -3767,6 +3765,8 @@ function AppContent() {
   };
 
   useEffect(() => {
+    // Set audio mode ONCE — playAndRecord handles both, never toggle again
+    Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true, staysActiveInBackground: true }).catch(() => {});
     initTrackPlayer().then(() => setTrackPlayerReady(true));
   }, []);
 
@@ -4616,9 +4616,7 @@ function AppContent() {
     }
   };
 
-  const resetAudioMode = async () => {
-    try { await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true, staysActiveInBackground: true }); } catch {}
-  };
+  // resetAudioMode removed — playAndRecord category handles both, no toggling needed
 
   // Stop Troy's TTS playback
   const stopTroyAudio = async () => {
@@ -4647,20 +4645,12 @@ function AppContent() {
         return;
       }
 
-      // Release TrackPlayer if still active, then set recording mode
-      console.log('[Voice] START: Releasing audio session');
+      // Stop any active playback before recording
+      console.log('[Voice] START: Stopping playback');
       await TrackPlayer.stop().catch(() => {});
       await TrackPlayer.reset().catch(() => {});
       setPlayingMessageId(null);
       setIsPaused(false);
-      await new Promise(r => setTimeout(r, 300));
-
-      console.log('[Voice] START: Setting audio mode to recording');
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: true,
-      });
 
       console.log('[Voice] START: Creating recording');
       const recording = new Audio.Recording();
@@ -4720,7 +4710,6 @@ function AppContent() {
     } catch (error) {
       console.log('[Voice] START ERROR:', error.message, error.stack);
       Alert.alert('Recording Error', error.message || 'Could not start recording');
-      await resetAudioMode();
       setIsRecording(false);
       setVoiceStateLog('idle');
       currentRecordingRef.current = null;
@@ -4755,7 +4744,6 @@ function AppContent() {
       try { await recording.stopAndUnloadAsync(); } catch {}
       setIsRecording(false);
       setVoiceStateLog('idle');
-      await resetAudioMode();
       return;
     }
 
@@ -4768,10 +4756,6 @@ function AppContent() {
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
       console.log('[Voice] STOP: URI:', uri);
-
-      // Reset audio session from recording → playback and let iOS settle
-      await resetAudioMode();
-      await new Promise(r => setTimeout(r, 300));
 
       const formData = new FormData();
       formData.append('audio', { uri, type: 'audio/m4a', name: 'recording.m4a' });
@@ -4811,7 +4795,6 @@ function AppContent() {
       }
     } catch (error) {
       console.log('[Voice] STOP ERROR:', error.message, error.stack);
-      await resetAudioMode();
       setIsRecording(false);
       setVoiceStateLog('idle');
       currentRecordingRef.current = null;
