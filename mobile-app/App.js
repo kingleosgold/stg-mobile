@@ -3727,51 +3727,47 @@ function AppContent() {
   useEffect(() => { authenticate(); }, []);
 
   // Initialize TrackPlayer for TTS playback (lock screen + Dynamic Island)
+  // Initialize/re-initialize TrackPlayer with listeners (called on startup + before each play)
+  const initTrackPlayer = async () => {
+    try {
+      await TrackPlayer.setupPlayer({
+        autoHandleInterruptions: true,
+        iosCategory: 'playback',
+        iosCategoryMode: 'spokenAudio',
+        iosCategoryOptions: ['allowBluetooth', 'defaultToSpeaker'],
+      });
+    } catch (e) {
+      // Already initialized — that's fine
+    }
+    await TrackPlayer.updateOptions({
+      capabilities: [Capability.Play, Capability.Pause, Capability.Stop],
+      compactCapabilities: [Capability.Play, Capability.Pause],
+      android: { appKilledPlaybackBehavior: 'StopPlaybackAndRemoveNotification' },
+    });
+    // Register remote event handlers (re-registered after every destroy/re-init)
+    TrackPlayer.addEventListener(Event.PlaybackQueueEnded, async () => {
+      setPlayingMessageId(null);
+      setIsPaused(false);
+      await TrackPlayer.stop().catch(() => {});
+      await TrackPlayer.destroy().catch(() => {});
+      await new Promise(r => setTimeout(r, 500));
+      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true, staysActiveInBackground: true }).catch(() => {});
+      console.log('[Audio] Session released (destroy + setAudioMode)');
+    });
+    TrackPlayer.addEventListener(Event.RemotePause, () => { TrackPlayer.pause(); });
+    TrackPlayer.addEventListener(Event.RemotePlay, () => { TrackPlayer.play(); });
+    TrackPlayer.addEventListener(Event.RemoteStop, async () => {
+      await TrackPlayer.stop().catch(() => {});
+      await TrackPlayer.destroy().catch(() => {});
+      setPlayingMessageId(null);
+      setIsPaused(false);
+    });
+    await TrackPlayer.setVolume(1.0);
+    console.log('[Audio] TrackPlayer ready');
+  };
+
   useEffect(() => {
-    (async () => {
-      try {
-        await TrackPlayer.setupPlayer({
-          autoHandleInterruptions: true,
-          iosCategory: 'playback',
-          iosCategoryMode: 'spokenAudio',
-          iosCategoryOptions: ['allowBluetooth', 'defaultToSpeaker'],
-        });
-        await TrackPlayer.updateOptions({
-          capabilities: [Capability.Play, Capability.Pause, Capability.Stop],
-          compactCapabilities: [Capability.Play, Capability.Pause],
-          android: { appKilledPlaybackBehavior: 'StopPlaybackAndRemoveNotification' },
-        });
-        await TrackPlayer.setVolume(1.0);
-        setTrackPlayerReady(true);
-        console.log('[Audio] TrackPlayer initialized');
-      } catch (e) {
-        setTrackPlayerReady(true);
-        console.log('[Audio] TrackPlayer already set up');
-      }
-    })();
-
-    // Remote control event handlers (lock screen + Dynamic Island)
-    const subs = [
-      TrackPlayer.addEventListener(Event.PlaybackQueueEnded, async () => {
-        setPlayingMessageId(null);
-        setIsPaused(false);
-        await TrackPlayer.stop().catch(() => {});
-        await TrackPlayer.reset().catch(() => {});
-        await new Promise(r => setTimeout(r, 500));
-        await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true, staysActiveInBackground: true }).catch(() => {});
-        console.log('[Audio] Session released after playback ended');
-      }),
-      TrackPlayer.addEventListener(Event.RemotePause, () => { TrackPlayer.pause(); }),
-      TrackPlayer.addEventListener(Event.RemotePlay, () => { TrackPlayer.play(); }),
-      TrackPlayer.addEventListener(Event.RemoteStop, async () => {
-        await TrackPlayer.stop().catch(() => {});
-        await TrackPlayer.reset().catch(() => {});
-        setPlayingMessageId(null);
-        setIsPaused(false);
-      }),
-    ];
-
-    return () => subs.forEach(s => s.remove());
+    initTrackPlayer().then(() => setTrackPlayerReady(true));
   }, []);
 
   // Register for push notifications (for price alerts)
@@ -4628,7 +4624,7 @@ function AppContent() {
   const stopTroyAudio = async () => {
     try {
       await TrackPlayer.stop();
-      await TrackPlayer.reset();
+      await TrackPlayer.destroy();
     } catch {}
     setPlayingMessageId(null);
     setIsPaused(false);
@@ -4651,13 +4647,13 @@ function AppContent() {
         return;
       }
 
-      // Always release TrackPlayer's audio session before recording
-      console.log('[Voice] START: Releasing TrackPlayer session');
+      // Release TrackPlayer if still active, then set recording mode
+      console.log('[Voice] START: Releasing audio session');
       await TrackPlayer.stop().catch(() => {});
-      await TrackPlayer.reset().catch(() => {});
+      await TrackPlayer.destroy().catch(() => {});
       setPlayingMessageId(null);
       setIsPaused(false);
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise(r => setTimeout(r, 300));
 
       console.log('[Voice] START: Setting audio mode to recording');
       await Audio.setAudioModeAsync({
@@ -4831,7 +4827,8 @@ function AppContent() {
     }
 
     try {
-      // Stop any current playback
+      // Re-initialize TrackPlayer (may have been destroyed after previous playback)
+      await initTrackPlayer();
       await TrackPlayer.reset();
       setPlayingMessageId(messageId);
 
@@ -4874,6 +4871,7 @@ function AppContent() {
         artist: 'TroyStack',
         artwork: Image.resolveAssetSource(require('./assets/icon.png')).uri,
       });
+      await TrackPlayer.setVolume(1.0);
       await TrackPlayer.play();
       console.log('[Audio] Playing via TrackPlayer');
 
