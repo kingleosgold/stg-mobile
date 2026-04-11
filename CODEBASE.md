@@ -368,7 +368,24 @@ App Launch → Supabase session check → Biometric auth (optional)
 | Troy text messages | 3/day | Unlimited (200 soft cap log) |
 | Voice exchanges (TTS+STT combined) | 1/day | 20/day |
 | Receipt scans | Limited | Unlimited |
+| Encrypted PDF Ledger Export | — | ✓ Gold-only |
 | Enforcement: `handleAddPurchase()` checks `!hasGoldAccess && totalItems >= 25` |
+
+### Encrypted Ledger Export (Gold/Lifetime)
+- **Trigger:** Settings → "Export Encrypted Ledger" row (with lock icon + GOLD badge)
+- **Function:** `requestLedgerExport()` → `generateEncryptedLedger(pin)` in App.js
+- **Library:** `pdf-lib` (pure JS, lazy-loaded via `require()` only when used)
+- **Flow:**
+  1. Gold check → if free, show paywall
+  2. PIN modal with 4 auto-advancing input boxes
+  3. Generate PDF with header, summary box (total value/cost/P&L), holdings table
+  4. Save to `FileSystem.documentDirectory/TroyStack_Ledger_YYYY-MM-DD.pdf`
+  5. Open share sheet via `Sharing.shareAsync`
+- **PIN handling:** PIN is written to PDF metadata (Subject + Keywords) as a tag.
+  Note: `pdf-lib` does NOT support true PDF encryption on save. The PDF is
+  PIN-tagged but not password-locked. For real encryption, requires native
+  module or future server-side flow.
+- **State:** `showLedgerPinModal`, `ledgerPinDigits`, `ledgerPinRefs`, `ledgerGenerating`
 
 ---
 

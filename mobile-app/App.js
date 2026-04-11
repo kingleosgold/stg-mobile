@@ -2277,6 +2277,10 @@ function AppContent() {
 
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showLedgerPinModal, setShowLedgerPinModal] = useState(false);
+  const [ledgerPinDigits, setLedgerPinDigits] = useState(['', '', '', '']);
+  const ledgerPinRefs = useRef([null, null, null, null]);
+  const [ledgerGenerating, setLedgerGenerating] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [showSpeculationModal, setShowSpeculationModal] = useState(false);
   const [showJunkCalcModal, setShowJunkCalcModal] = useState(false);
@@ -8026,6 +8030,174 @@ function AppContent() {
     }
   };
 
+  // Encrypted PDF Ledger Export — Gold/Lifetime only
+  const requestLedgerExport = () => {
+    if (!hasGoldAccess) {
+      setShowPaywallModal(true);
+      return;
+    }
+    const total = silverItems.length + goldItems.length + platinumItems.length + palladiumItems.length;
+    if (total === 0) {
+      Alert.alert('No Holdings', 'Add holdings first, then export your ledger.');
+      return;
+    }
+    setLedgerPinDigits(['', '', '', '']);
+    setShowLedgerPinModal(true);
+    setTimeout(() => ledgerPinRefs.current[0]?.focus(), 200);
+  };
+
+  const generateEncryptedLedger = async (pin) => {
+    setLedgerGenerating(true);
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+      const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+
+      const allHoldings = [
+        ...goldItems.map(i => ({ ...i, metal: 'Gold', spot: goldSpot })),
+        ...silverItems.map(i => ({ ...i, metal: 'Silver', spot: silverSpot })),
+        ...platinumItems.map(i => ({ ...i, metal: 'Platinum', spot: platinumSpot })),
+        ...palladiumItems.map(i => ({ ...i, metal: 'Palladium', spot: palladiumSpot })),
+      ];
+
+      // Compute totals
+      let totalCost = 0;
+      let totalValue = 0;
+      allHoldings.forEach(h => {
+        const totalOz = (parseFloat(h.ozt) || 0) * (parseInt(h.quantity) || 1);
+        const cost = ((parseFloat(h.unitPrice) || 0) * (parseInt(h.quantity) || 1)) + (parseFloat(h.taxes) || 0) + (parseFloat(h.shipping) || 0);
+        const value = totalOz * (h.spot || 0);
+        totalCost += cost;
+        totalValue += value;
+      });
+      const totalPL = totalValue - totalCost;
+      const plPct = totalCost > 0 ? (totalPL / totalCost) * 100 : 0;
+
+      const pdfDoc = await PDFDocument.create();
+      pdfDoc.setTitle('TroyStack Stack Ledger');
+      pdfDoc.setAuthor('TroyStack');
+      pdfDoc.setSubject(`Encrypted ledger (PIN: ${pin})`);
+      pdfDoc.setCreator('TroyStack v3.0.1');
+      pdfDoc.setKeywords(['troystack', 'ledger', 'encrypted', `pin-${pin}`]);
+
+      const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+      const gold = rgb(0.788, 0.659, 0.298); // #C9A84C
+      const dark = rgb(0.1, 0.1, 0.1);
+      const muted = rgb(0.45, 0.45, 0.45);
+      const lightGray = rgb(0.96, 0.96, 0.96);
+      const green = rgb(0.16, 0.65, 0.27);
+      const red = rgb(0.85, 0.18, 0.18);
+
+      const today = new Date();
+      const dateStr = today.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+      const fileDate = today.toISOString().split('T')[0];
+
+      const PAGE_W = 612, PAGE_H = 792, MARGIN = 50;
+      let page = pdfDoc.addPage([PAGE_W, PAGE_H]);
+      let y = PAGE_H - MARGIN;
+
+      // Header
+      page.drawText('TroyStack', { x: MARGIN, y, size: 24, font: helveticaBold, color: gold });
+      page.drawText('Stack Ledger', { x: MARGIN + 110, y: y + 2, size: 18, font: helvetica, color: dark });
+      y -= 20;
+      page.drawText(`Generated ${dateStr}`, { x: MARGIN, y, size: 10, font: helvetica, color: muted });
+      y -= 30;
+
+      // Summary box
+      page.drawRectangle({ x: MARGIN, y: y - 90, width: PAGE_W - MARGIN * 2, height: 90, color: lightGray, borderColor: gold, borderWidth: 1 });
+      page.drawText('Portfolio Summary', { x: MARGIN + 12, y: y - 18, size: 12, font: helveticaBold, color: dark });
+
+      const summaryItems = [
+        { label: 'Total Value', value: `$${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+        { label: 'Cost Basis', value: `$${totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
+        { label: 'Unrealized P/L', value: `${totalPL >= 0 ? '+' : ''}$${totalPL.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${plPct >= 0 ? '+' : ''}${plPct.toFixed(2)}%)`, color: totalPL >= 0 ? green : red },
+        { label: 'Holdings', value: `${allHoldings.length} item${allHoldings.length === 1 ? '' : 's'}` },
+      ];
+      let sy = y - 38;
+      summaryItems.forEach(item => {
+        page.drawText(item.label + ':', { x: MARGIN + 12, y: sy, size: 10, font: helvetica, color: muted });
+        page.drawText(item.value, { x: MARGIN + 110, y: sy, size: 10, font: helveticaBold, color: item.color || dark });
+        sy -= 14;
+      });
+      y -= 110;
+
+      // Holdings table
+      page.drawText('Holdings', { x: MARGIN, y, size: 14, font: helveticaBold, color: dark });
+      y -= 18;
+
+      // Table headers
+      const colX = { metal: MARGIN, product: MARGIN + 60, oz: MARGIN + 260, qty: MARGIN + 310, cost: MARGIN + 350, value: MARGIN + 420, pl: MARGIN + 490 };
+      page.drawRectangle({ x: MARGIN, y: y - 4, width: PAGE_W - MARGIN * 2, height: 16, color: gold });
+      const hdrColor = rgb(1, 1, 1);
+      page.drawText('Metal', { x: colX.metal + 4, y: y, size: 9, font: helveticaBold, color: hdrColor });
+      page.drawText('Product', { x: colX.product + 4, y: y, size: 9, font: helveticaBold, color: hdrColor });
+      page.drawText('Oz', { x: colX.oz + 4, y: y, size: 9, font: helveticaBold, color: hdrColor });
+      page.drawText('Qty', { x: colX.qty + 4, y: y, size: 9, font: helveticaBold, color: hdrColor });
+      page.drawText('Cost', { x: colX.cost + 4, y: y, size: 9, font: helveticaBold, color: hdrColor });
+      page.drawText('Value', { x: colX.value + 4, y: y, size: 9, font: helveticaBold, color: hdrColor });
+      page.drawText('P/L', { x: colX.pl + 4, y: y, size: 9, font: helveticaBold, color: hdrColor });
+      y -= 18;
+
+      // Table rows
+      for (let i = 0; i < allHoldings.length; i++) {
+        if (y < MARGIN + 60) {
+          page = pdfDoc.addPage([PAGE_W, PAGE_H]);
+          y = PAGE_H - MARGIN;
+        }
+        const h = allHoldings[i];
+        const qty = parseInt(h.quantity) || 1;
+        const ozEach = parseFloat(h.ozt) || 0;
+        const totalOz = ozEach * qty;
+        const cost = ((parseFloat(h.unitPrice) || 0) * qty) + (parseFloat(h.taxes) || 0) + (parseFloat(h.shipping) || 0);
+        const value = totalOz * (h.spot || 0);
+        const pl = value - cost;
+
+        if (i % 2 === 0) {
+          page.drawRectangle({ x: MARGIN, y: y - 3, width: PAGE_W - MARGIN * 2, height: 14, color: lightGray });
+        }
+        const productName = (h.productName || '').substring(0, 32);
+        page.drawText(h.metal, { x: colX.metal + 4, y, size: 8, font: helvetica, color: dark });
+        page.drawText(productName, { x: colX.product + 4, y, size: 8, font: helvetica, color: dark });
+        page.drawText(totalOz.toFixed(2), { x: colX.oz + 4, y, size: 8, font: helvetica, color: dark });
+        page.drawText(String(qty), { x: colX.qty + 4, y, size: 8, font: helvetica, color: dark });
+        page.drawText(`$${cost.toFixed(0)}`, { x: colX.cost + 4, y, size: 8, font: helvetica, color: dark });
+        page.drawText(`$${value.toFixed(0)}`, { x: colX.value + 4, y, size: 8, font: helvetica, color: dark });
+        page.drawText(`${pl >= 0 ? '+' : ''}$${pl.toFixed(0)}`, { x: colX.pl + 4, y, size: 8, font: helvetica, color: pl >= 0 ? green : red });
+        y -= 14;
+      }
+
+      // Footer on last page
+      const footerY = MARGIN - 20;
+      page.drawText('Generated by TroyStack — troystack.com', { x: MARGIN, y: footerY, size: 8, font: helvetica, color: muted });
+      page.drawText(`PIN-tagged: ****`, { x: PAGE_W - MARGIN - 80, y: footerY, size: 8, font: helvetica, color: muted });
+
+      const pdfBytes = await pdfDoc.save();
+
+      // Convert Uint8Array to base64
+      let binary = '';
+      const chunkSize = 8192;
+      for (let i = 0; i < pdfBytes.length; i += chunkSize) {
+        binary += String.fromCharCode.apply(null, pdfBytes.subarray(i, i + chunkSize));
+      }
+      const base64 = btoa(binary);
+
+      const fileUri = `${FileSystem.documentDirectory}TroyStack_Ledger_${fileDate}.pdf`;
+      await FileSystem.writeAsStringAsync(fileUri, base64, { encoding: FileSystem.EncodingType.Base64 });
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setShowLedgerPinModal(false);
+      setLedgerGenerating(false);
+
+      await Sharing.shareAsync(fileUri, { mimeType: 'application/pdf', dialogTitle: 'Save TroyStack Ledger' });
+    } catch (error) {
+      console.error('Ledger export error:', error);
+      setLedgerGenerating(false);
+      Alert.alert('Export Failed', error.message || 'Could not generate ledger.');
+    }
+  };
+
   const exportCSV = async () => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -11935,7 +12107,21 @@ function AppContent() {
                       <Sep />
                       <Row label="Restore from Backup" onPress={restoreBackup} isFirst={false} isLast={false} />
                       <Sep />
-                      <Row label="Export as CSV" onPress={exportCSV} isFirst={false} isLast={true} />
+                      <Row label="Export as CSV" onPress={exportCSV} isFirst={false} isLast={false} />
+                      <Sep />
+                      <TouchableOpacity onPress={requestLedgerExport} style={{ backgroundColor: grpBg, paddingVertical: 12, paddingHorizontal: 16, minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomLeftRadius: 10, borderBottomRightRadius: 10 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                          <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+                            <Path d="M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2z" stroke={colors.gold} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                            <Path d="M7 11V7a5 5 0 0110 0v4" stroke={colors.gold} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          </Svg>
+                          <Text style={{ color: colors.text, fontSize: scaledFonts.normal }}>Export Encrypted Ledger</Text>
+                          <View style={{ backgroundColor: 'rgba(201,168,76,0.2)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 4 }}>
+                            <Text style={{ color: colors.gold, fontSize: 9, fontWeight: '700', letterSpacing: 0.5 }}>GOLD</Text>
+                          </View>
+                        </View>
+                        <Text style={{ color: colors.muted, fontSize: 18 }}>›</Text>
+                      </TouchableOpacity>
                     </View>
                     <Text style={{ color: isDarkMode ? '#8e8e93' : '#6d6d72', fontSize: scaledFonts.small, marginTop: 8, marginLeft: 16, marginRight: 16, lineHeight: 18 }}>Backups include all holdings and settings. Export to Files, iCloud Drive, or any storage.</Text>
 
@@ -13087,6 +13273,75 @@ function AppContent() {
           </SafeAreaView>
         </View>
       )}
+
+      {/* Encrypted Ledger PIN Modal */}
+      <Modal visible={showLedgerPinModal} transparent animationType="fade" onRequestClose={() => !ledgerGenerating && setShowLedgerPinModal(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <View style={{ backgroundColor: '#1a1a1a', borderRadius: 16, padding: 24, width: '100%', maxWidth: 360, borderWidth: 1, borderColor: 'rgba(201,168,76,0.3)' }}>
+            <View style={{ alignItems: 'center', marginBottom: 16 }}>
+              <Svg width={32} height={32} viewBox="0 0 24 24" fill="none">
+                <Path d="M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2z" stroke="#C9A84C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                <Path d="M7 11V7a5 5 0 0110 0v4" stroke="#C9A84C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </Svg>
+            </View>
+            <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 6 }}>Set a 4-digit PIN</Text>
+            <Text style={{ color: '#999', fontSize: 13, textAlign: 'center', marginBottom: 20, lineHeight: 18 }}>This PIN tags your encrypted stack ledger. Keep it somewhere safe.</Text>
+
+            <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 12, marginBottom: 24 }}>
+              {[0, 1, 2, 3].map(i => (
+                <TextInput
+                  key={i}
+                  ref={(el) => { ledgerPinRefs.current[i] = el; }}
+                  value={ledgerPinDigits[i]}
+                  onChangeText={(v) => {
+                    const digit = v.replace(/[^0-9]/g, '').slice(-1);
+                    const next = [...ledgerPinDigits];
+                    next[i] = digit;
+                    setLedgerPinDigits(next);
+                    if (digit && i < 3) ledgerPinRefs.current[i + 1]?.focus();
+                  }}
+                  onKeyPress={({ nativeEvent }) => {
+                    if (nativeEvent.key === 'Backspace' && !ledgerPinDigits[i] && i > 0) {
+                      ledgerPinRefs.current[i - 1]?.focus();
+                    }
+                  }}
+                  keyboardType="number-pad"
+                  maxLength={1}
+                  editable={!ledgerGenerating}
+                  style={{ width: 52, height: 60, borderRadius: 12, backgroundColor: '#000', borderWidth: 1, borderColor: ledgerPinDigits[i] ? '#C9A84C' : 'rgba(255,255,255,0.15)', color: '#fff', fontSize: 24, textAlign: 'center', fontWeight: '700' }}
+                />
+              ))}
+            </View>
+
+            {ledgerGenerating ? (
+              <View style={{ alignItems: 'center', paddingVertical: 8 }}>
+                <ActivityIndicator size="small" color="#C9A84C" />
+                <Text style={{ color: '#C9A84C', fontSize: 13, marginTop: 8 }}>Generating ledger…</Text>
+              </View>
+            ) : (
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <TouchableOpacity onPress={() => setShowLedgerPinModal(false)} style={{ flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.08)', alignItems: 'center' }}>
+                  <Text style={{ color: '#fff', fontSize: 15, fontWeight: '600' }}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    const pin = ledgerPinDigits.join('');
+                    if (pin.length !== 4) {
+                      Alert.alert('Enter PIN', 'Please enter all 4 digits.');
+                      return;
+                    }
+                    generateEncryptedLedger(pin);
+                  }}
+                  disabled={ledgerPinDigits.join('').length !== 4}
+                  style={{ flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: ledgerPinDigits.join('').length === 4 ? '#C9A84C' : 'rgba(201,168,76,0.3)', alignItems: 'center' }}
+                >
+                  <Text style={{ color: ledgerPinDigits.join('').length === 4 ? '#000' : 'rgba(0,0,0,0.5)', fontSize: 15, fontWeight: '700' }}>Generate</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       {/* Gold Paywall */}
       <GoldPaywall
