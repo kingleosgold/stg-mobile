@@ -2192,6 +2192,7 @@ function AppContent() {
   const [isPaused, setIsPaused] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const currentRecordingRef = useRef(null);
+  const recordingStartInFlightRef = useRef(false);
   const currentSoundRef = useRef(null);
   const autoPlayNextResponseRef = useRef(false);
   const maxRecordTimerRef = useRef(null);
@@ -3595,8 +3596,8 @@ function AppContent() {
   useEffect(() => { authenticate(); }, []);
 
   useEffect(() => {
-    // Set audio mode ONCE at mount — interruptionModeIOS pauses other audio during Troy playback. Never toggle again.
-    Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true, staysActiveInBackground: true, interruptionModeIOS: InterruptionModeIOS.DoNotMix, shouldDuckAndroid: true, playThroughEarpieceAndroid: false }).catch(() => {});
+    // Set audio mode at mount: pure playback (allowsRecordingIOS: false) so audio routes to speaker, not earpiece. Recording flips allowsRecordingIOS true/false around start/stop boundaries.
+    Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true, staysActiveInBackground: true, interruptionModeIOS: InterruptionModeIOS.DoNotMix, shouldDuckAndroid: true, playThroughEarpieceAndroid: false }).catch(() => {});
   }, []);
 
   // Register for push notifications (for price alerts)
@@ -4448,6 +4449,16 @@ function AppContent() {
   };
 
   const startVoiceRecording = async () => {
+    // In-flight start lock: prevent concurrent starts from a fast double-tap.
+    // Without this, a second tap can throw on Audio.Recording creation while
+    // the first recording is still active, and the catch block would flip
+    // allowsRecordingIOS back to false mid-recording — truncating the capture.
+    if (recordingStartInFlightRef.current) {
+      console.log('[Voice] START: ignored — start already in flight');
+      return;
+    }
+    recordingStartInFlightRef.current = true;
+    try {
     if (voiceState !== 'idle') return;
     try {
       console.log('[Voice] START: Requesting permission');
@@ -4468,6 +4479,16 @@ function AppContent() {
       }
       setPlayingMessageId(null);
       setIsPaused(false);
+
+      // Flip session into recording mode. allowsRecordingIOS true is REQUIRED for Audio.Recording to capture input.
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      }).catch((e) => { console.log('[Voice] setAudioModeAsync (record) failed:', e?.message); });
 
       console.log('[Voice] START: Creating recording');
       const recording = new Audio.Recording();
@@ -4525,12 +4546,31 @@ function AppContent() {
       }, 15000);
 
     } catch (error) {
+      // Only restore playback mode if there's no active recording. With the
+      // start lock above, this is defense-in-depth — covers any future code
+      // path that could throw mid-recording without going through stopVoiceRecording.
+      if (!currentRecordingRef.current) {
+        // Flip session back to pure playback mode. Restores speaker routing.
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true,
+          staysActiveInBackground: true,
+          interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+          shouldDuckAndroid: true,
+          playThroughEarpieceAndroid: false,
+        }).catch((e) => { console.log('[Voice] setAudioModeAsync (playback restore) failed:', e?.message); });
+      } else {
+        console.log('[Voice] START ERROR but recording is active — leaving session in record mode');
+      }
       console.log('[Voice] START ERROR:', error.message, error.stack);
       Alert.alert('Recording Error', error.message || 'Could not start recording');
       setIsRecording(false);
       setVoiceStateLog('idle');
       currentRecordingRef.current = null;
       recordingStartTimeRef.current = null;
+    }
+    } finally {
+      recordingStartInFlightRef.current = false;
     }
   };
 
@@ -4559,6 +4599,15 @@ function AppContent() {
     if (holdDuration < 500) {
       console.log('[Voice] STOP: Too short (' + holdDuration + 'ms), discarding');
       try { await recording.stopAndUnloadAsync(); } catch {}
+      // Flip session back to pure playback mode. Restores speaker routing.
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      }).catch((e) => { console.log('[Voice] setAudioModeAsync (playback restore) failed:', e?.message); });
       setIsRecording(false);
       setVoiceStateLog('idle');
       return;
@@ -4571,6 +4620,15 @@ function AppContent() {
 
     try {
       await recording.stopAndUnloadAsync();
+      // Flip session back to pure playback mode. Restores speaker routing.
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      }).catch((e) => { console.log('[Voice] setAudioModeAsync (playback restore) failed:', e?.message); });
       const uri = recording.getURI();
       console.log('[Voice] STOP: URI:', uri);
 
@@ -4611,6 +4669,15 @@ function AppContent() {
         Alert.alert('Could not hear you', 'Try speaking again, closer to the mic.');
       }
     } catch (error) {
+      // Flip session back to pure playback mode. Restores speaker routing.
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      }).catch((e) => { console.log('[Voice] setAudioModeAsync (playback restore) failed:', e?.message); });
       console.log('[Voice] STOP ERROR:', error.message, error.stack);
       setIsRecording(false);
       setVoiceStateLog('idle');
