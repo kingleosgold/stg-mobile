@@ -11554,7 +11554,7 @@ function AppContent() {
                     <Text style={{ color: '#007AFF', fontSize: scaledFonts.normal }}>Privacy Policy</Text>
                   </TouchableOpacity>
                   <Text style={{ color: colors.muted, fontSize: scaledFonts.normal, marginHorizontal: 8 }}>{'\u00B7'}</Text>
-                  <TouchableOpacity onPress={() => Linking.openURL('https://api.stacktrackergold.com/terms')}>
+                  <TouchableOpacity onPress={() => Linking.openURL('https://troystack.com/terms')}>
                     <Text style={{ color: '#007AFF', fontSize: scaledFonts.normal }}>Terms of Use</Text>
                   </TouchableOpacity>
                 </View>
