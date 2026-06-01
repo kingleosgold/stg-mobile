@@ -25,6 +25,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as Haptics from 'expo-haptics';
 import { Audio, InterruptionModeIOS } from 'expo-av';
 import { setAudioModeAsync as setAudioModeAsyncV2 } from 'expo-audio';
+import TrackPlayer, { Capability, Event } from 'react-native-track-player';
 import Purchases from 'react-native-purchases';
 import * as XLSX from 'xlsx';
 import * as Notifications from 'expo-notifications';
@@ -2490,8 +2491,12 @@ function AppContent() {
   const [isRecording, setIsRecording] = useState(false);
   const currentRecordingRef = useRef(null);
   const recordingStartInFlightRef = useRef(false);
-  const currentSoundRef = useRef(null);
+  // Local cache-file URI of the Troy-voice clip TrackPlayer is currently playing,
+  // tracked so we can delete it on teardown / queue-end and avoid disk bloat.
   const currentSoundFileRef = useRef(null);
+  // True once TrackPlayer's remote-command listeners have been registered, so we
+  // register them exactly once even though initTrackPlayer() re-runs before each play.
+  const trackPlayerHandlersRegisteredRef = useRef(false);
   const autoPlayNextResponseRef = useRef(false);
   const maxRecordTimerRef = useRef(null);
   const recordingStartTimeRef = useRef(null);
@@ -3952,16 +3957,21 @@ function AppContent() {
   useEffect(() => { authenticate(); }, []);
 
   useEffect(() => {
-    // Set audio mode at mount via expo-audio (eager iOS category control).
-    // expo-av's setAudioModeAsync was unable to set iosCategory at all;
-    // expo-audio applies setCategory directly to AVAudioSession on this call.
-    // Recording boundaries still toggle expo-av's allowsRecordingIOS for now —
-    // those will migrate to expo-audio in a follow-up PR.
+    // Set audio mode at mount via expo-audio (session properties for the
+    // expo-av subsystem: silent-mode playback, background audio, no ducking).
+    //
+    // allowsRecording is now `true` (was `false`). With Troy-voice playback
+    // moved to react-native-track-player (which owns the iOS AVAudioSession
+    // category as playAndRecord — see initTrackPlayer), a `false` here set a
+    // playback-ONLY category at launch that would fight RNTP's playAndRecord.
+    // `true` is record-compatible and agrees with RNTP, mirroring the
+    // ef740da mount config (allowsRecordingIOS: true). RNTP remains the single
+    // category owner; this call only carries the silent-mode / background flags.
     // Keys map: allowsRecordingIOS→allowsRecording, playsInSilentModeIOS→playsInSilentMode,
     // staysActiveInBackground→shouldPlayInBackground, interruptionModeIOS→interruptionMode (string union),
     // playThroughEarpieceAndroid→shouldRouteThroughEarpiece. shouldDuckAndroid folds into interruptionMode.
     setAudioModeAsyncV2({
-      allowsRecording: false,
+      allowsRecording: true,
       playsInSilentMode: true,
       shouldPlayInBackground: true,
       interruptionMode: 'doNotMix',
@@ -3969,6 +3979,67 @@ function AppContent() {
     }).catch((e) => {
       console.log('[Audio] setAudioModeAsync (expo-audio) failed:', e?.message);
     });
+  }, []);
+
+  // Initialize TrackPlayer for Troy-voice TTS playback (lock screen + Control
+  // Center + Dynamic Island). Restored from ef740da, which shipped in v3.0.x and
+  // was deleted by the ae91c18 expo-av migration. TrackPlayer is the single iOS
+  // AVAudioSession CATEGORY owner: playAndRecord + spokenAudio + allowBluetooth +
+  // defaultToSpeaker (defaultToSpeaker is what routes Troy out the speaker, not
+  // the earpiece — so we no longer depend on a playback-only category for that).
+  // Called once at mount and re-entered at the top of playTroyVoice before each
+  // play, matching ef740da. setupPlayer is a no-op (throws) after the first call;
+  // remote handlers are registered exactly once via the guard ref.
+  const initTrackPlayer = async () => {
+    try {
+      await TrackPlayer.setupPlayer({
+        autoHandleInterruptions: true,
+        iosCategory: 'playAndRecord',
+        iosCategoryMode: 'spokenAudio',
+        iosCategoryOptions: ['allowBluetooth', 'defaultToSpeaker'],
+      });
+    } catch (e) {
+      // Already initialized (e.g. re-entry before a later play, or hot reload) — fine.
+    }
+    await TrackPlayer.updateOptions({
+      capabilities: [Capability.Play, Capability.Pause, Capability.Stop],
+      compactCapabilities: [Capability.Play, Capability.Pause],
+      android: { appKilledPlaybackBehavior: 'StopPlaybackAndRemoveNotification' },
+    });
+    // Register remote (lock-screen / Control Center) command handlers exactly once.
+    // ef740da re-registered these on every init; we guard so re-entry before each
+    // play does not stack duplicate listeners. Behavior is otherwise identical.
+    if (!trackPlayerHandlersRegisteredRef.current) {
+      trackPlayerHandlersRegisteredRef.current = true;
+      TrackPlayer.addEventListener(Event.PlaybackQueueEnded, async () => {
+        setPlayingMessageId(null);
+        setIsPaused(false);
+        await TrackPlayer.stop().catch(() => {});
+        await TrackPlayer.reset().catch(() => {});
+        // Clean up the finished clip's cache file to avoid disk bloat.
+        const f = currentSoundFileRef.current;
+        currentSoundFileRef.current = null;
+        if (f) FileSystem.deleteAsync(f, { idempotent: true }).catch(() => {});
+        console.log('[Audio] Playback ended, player reset');
+      });
+      TrackPlayer.addEventListener(Event.RemotePause, () => { TrackPlayer.pause(); setIsPaused(true); });
+      TrackPlayer.addEventListener(Event.RemotePlay, () => { TrackPlayer.play(); setIsPaused(false); });
+      TrackPlayer.addEventListener(Event.RemoteStop, async () => {
+        await TrackPlayer.stop().catch(() => {});
+        await TrackPlayer.reset().catch(() => {});
+        setPlayingMessageId(null);
+        setIsPaused(false);
+        const f = currentSoundFileRef.current;
+        currentSoundFileRef.current = null;
+        if (f) FileSystem.deleteAsync(f, { idempotent: true }).catch(() => {});
+      });
+    }
+    await TrackPlayer.setVolume(1.0);
+    console.log('[Audio] TrackPlayer ready');
+  };
+
+  useEffect(() => {
+    initTrackPlayer().catch((e) => console.log('[Audio] initTrackPlayer (mount) failed:', e?.message));
   }, []);
 
   // Warm up the iOS AVAudioSession at mount by loading (and immediately
@@ -4790,21 +4861,18 @@ function AppContent() {
 
   // resetAudioMode removed — playAndRecord category handles both, no toggling needed
 
-  // Tear down the currently-loaded Troy sound and clean its cache file.
-  // Called from playTroyVoice (when starting a new playback), from
+  // Tear down the current Troy-voice playback (TrackPlayer) and clean its cache
+  // file. Called from playTroyVoice (when starting a new playback), from
   // stopTroyAudio (when user explicitly stops), and from startVoiceRecording
-  // (which unloads the sound before recording).
+  // (which stops playback before recording). Function name kept stable to avoid
+  // churn at its call sites — including the untouched recording path.
   const unloadCurrentTroySound = async () => {
-    const sound = currentSoundRef.current;
     const fileUri = currentSoundFileRef.current;
-    currentSoundRef.current = null;
     currentSoundFileRef.current = null;
-    if (sound) {
-      try {
-        await sound.stopAsync();
-        await sound.unloadAsync();
-      } catch {}
-    }
+    try {
+      await TrackPlayer.stop();
+      await TrackPlayer.reset();
+    } catch {}
     if (fileUri) {
       FileSystem.deleteAsync(fileUri, { idempotent: true }).catch(() => {});
     }
@@ -4920,15 +4988,19 @@ function AppContent() {
       // start lock above, this is defense-in-depth — covers any future code
       // path that could throw mid-recording without going through stopVoiceRecording.
       if (!currentRecordingRef.current) {
-        // Flip session back to pure playback mode. Restores speaker routing.
+        // Settle the session back to playAndRecord (allowsRecordingIOS: true) so it
+        // AGREES with TrackPlayer's category and never thrashes to a playback-only
+        // category. Speaker routing now comes from RNTP's defaultToSpeaker, not from
+        // this call. (Was allowsRecordingIOS: false, needed only by the retired
+        // expo-av Audio.Sound playback path.)
         await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
+          allowsRecordingIOS: true,
           playsInSilentModeIOS: true,
           staysActiveInBackground: true,
           interruptionModeIOS: InterruptionModeIOS.DoNotMix,
           shouldDuckAndroid: true,
           playThroughEarpieceAndroid: false,
-        }).catch((e) => { console.log('[Voice] setAudioModeAsync (playback restore) failed:', e?.message); });
+        }).catch((e) => { console.log('[Voice] setAudioModeAsync (session settle) failed:', e?.message); });
       } else {
         console.log('[Voice] START ERROR but recording is active — leaving session in record mode');
       }
@@ -4969,15 +5041,19 @@ function AppContent() {
     if (holdDuration < 500) {
       console.log('[Voice] STOP: Too short (' + holdDuration + 'ms), discarding');
       try { await recording.stopAndUnloadAsync(); } catch {}
-      // Flip session back to pure playback mode. Restores speaker routing.
+      // Settle the session back to playAndRecord (allowsRecordingIOS: true) so it
+      // AGREES with TrackPlayer's category and never thrashes to a playback-only
+      // category. Speaker routing now comes from RNTP's defaultToSpeaker, not from
+      // this call. (Was allowsRecordingIOS: false, needed only by the retired
+      // expo-av Audio.Sound playback path.)
       await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
+        allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
         staysActiveInBackground: true,
         interruptionModeIOS: InterruptionModeIOS.DoNotMix,
         shouldDuckAndroid: true,
         playThroughEarpieceAndroid: false,
-      }).catch((e) => { console.log('[Voice] setAudioModeAsync (playback restore) failed:', e?.message); });
+      }).catch((e) => { console.log('[Voice] setAudioModeAsync (session settle) failed:', e?.message); });
       setIsRecording(false);
       setVoiceStateLog('idle');
       return;
@@ -4990,15 +5066,19 @@ function AppContent() {
 
     try {
       await recording.stopAndUnloadAsync();
-      // Flip session back to pure playback mode. Restores speaker routing.
+      // Settle the session back to playAndRecord (allowsRecordingIOS: true) so it
+      // AGREES with TrackPlayer's category and never thrashes to a playback-only
+      // category. Speaker routing now comes from RNTP's defaultToSpeaker, not from
+      // this call. (Was allowsRecordingIOS: false, needed only by the retired
+      // expo-av Audio.Sound playback path.)
       await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
+        allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
         staysActiveInBackground: true,
         interruptionModeIOS: InterruptionModeIOS.DoNotMix,
         shouldDuckAndroid: true,
         playThroughEarpieceAndroid: false,
-      }).catch((e) => { console.log('[Voice] setAudioModeAsync (playback restore) failed:', e?.message); });
+      }).catch((e) => { console.log('[Voice] setAudioModeAsync (session settle) failed:', e?.message); });
       const uri = recording.getURI();
       console.log('[Voice] STOP: URI:', uri);
 
@@ -5039,15 +5119,19 @@ function AppContent() {
         Alert.alert('Could not hear you', 'Try speaking again, closer to the mic.');
       }
     } catch (error) {
-      // Flip session back to pure playback mode. Restores speaker routing.
+      // Settle the session back to playAndRecord (allowsRecordingIOS: true) so it
+      // AGREES with TrackPlayer's category and never thrashes to a playback-only
+      // category. Speaker routing now comes from RNTP's defaultToSpeaker, not from
+      // this call. (Was allowsRecordingIOS: false, needed only by the retired
+      // expo-av Audio.Sound playback path.)
       await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
+        allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
         staysActiveInBackground: true,
         interruptionModeIOS: InterruptionModeIOS.DoNotMix,
         shouldDuckAndroid: true,
         playThroughEarpieceAndroid: false,
-      }).catch((e) => { console.log('[Voice] setAudioModeAsync (playback restore) failed:', e?.message); });
+      }).catch((e) => { console.log('[Voice] setAudioModeAsync (session settle) failed:', e?.message); });
       console.log('[Voice] STOP ERROR:', error.message, error.stack);
       setIsRecording(false);
       setVoiceStateLog('idle');
@@ -5123,31 +5207,29 @@ function AppContent() {
       currentSoundFileRef.current = invocationFileUri;
       tWrite = Date.now();
 
-      console.log('[Audio] Loading local file:', invocationFileUri);
+      console.log('[Audio] Loading local file via TrackPlayer:', invocationFileUri);
 
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: invocationFileUri },
-        { shouldPlay: true, progressUpdateIntervalMillis: 500 }
-      );
-      currentSoundRef.current = sound;
-      tCreateAsync = Date.now();
-
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (status.didJustFinish) {
-          sound.unloadAsync().catch(() => {});
-          if (currentSoundRef.current === sound) currentSoundRef.current = null;
-          // Only clear the global file ref if it still points at OUR file —
-          // a newer overlapping playback may have already taken over the ref.
-          if (currentSoundFileRef.current === invocationFileUri) currentSoundFileRef.current = null;
-          setPlayingMessageId(null);
-          setIsPaused(false);
-          // Clean up THIS invocation's cached file (safe to do unconditionally —
-          // even if another playback has taken over the ref, we still want to
-          // delete the file that belonged to this completed playback).
-          FileSystem.deleteAsync(invocationFileUri, { idempotent: true }).catch(() => {});
-        }
+      // Play the LOCAL file via TrackPlayer (enables lock-screen / Control Center
+      // / Dynamic Island controls + Now Playing metadata). HARD RULE: TrackPlayer
+      // is given the local fileUri, NEVER the remote /v1/troy/speak URL — a remote
+      // URL puts iOS on the AVPlayer streaming path, which reproduces the PR #17
+      // "timer ticks, didJustFinish fires, but no audio" silence bug. The local
+      // file uses AVAudioPlayer, which renders reliably.
+      await initTrackPlayer();          // re-assert RNTP session/options before play (matches ef740da)
+      await TrackPlayer.reset();
+      await TrackPlayer.add({
+        id: String(messageId),
+        url: invocationFileUri,
+        title: 'Troy',
+        artist: 'TroyStack',
+        artwork: Image.resolveAssetSource(require('./assets/icon.png')).uri,
       });
-      console.log('[Audio] Playing local file via Audio.Sound');
+      await TrackPlayer.setVolume(1.0);
+      await TrackPlayer.play();
+      tCreateAsync = Date.now();
+      // End-of-playback cleanup (clear playing state + delete the cache file) is
+      // handled by the Event.PlaybackQueueEnded listener registered in initTrackPlayer.
+      console.log('[Audio] Playing local file via TrackPlayer');
 
       // [voice] diagnostic timing summary — remove after the bottleneck is identified.
       const successTimings = {
@@ -5191,9 +5273,8 @@ function AppContent() {
       console.log('[Audio] TTS error for message', messageId, ':', msg);
       setPlayingMessageId(null);
       setIsPaused(false);
-      // Note: we deliberately do NOT unconditionally clear currentSoundRef.current
-      // here — same race risk as the file ref. The next playTroyVoice or
-      // stopTroyAudio call will clean up correctly via unloadCurrentTroySound.
+      // The next playTroyVoice or stopTroyAudio call resets TrackPlayer and clears
+      // any lingering file ref via unloadCurrentTroySound, so we don't force it here.
       const isNetwork = /network|fetch|connection|timeout|unreachable|load/i.test(msg);
       if (isNetwork) {
         Alert.alert('Voice Unavailable', 'Could not reach the voice service. Check your connection and try again.');
@@ -12074,14 +12155,10 @@ function AppContent() {
                     <TouchableOpacity
                       onPress={async () => {
                         if (playingMessageId === item.id && !isPaused) {
-                          if (currentSoundRef.current) {
-                            try { await currentSoundRef.current.pauseAsync(); } catch {}
-                          }
+                          try { await TrackPlayer.pause(); } catch {}
                           setIsPaused(true);
                         } else if (playingMessageId === item.id && isPaused) {
-                          if (currentSoundRef.current) {
-                            try { await currentSoundRef.current.playAsync(); } catch {}
-                          }
+                          try { await TrackPlayer.play(); } catch {}
                           setIsPaused(false);
                         } else {
                           await stopTroyAudio();
