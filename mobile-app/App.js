@@ -2494,6 +2494,10 @@ function AppContent() {
   // Local cache-file URI of the Troy-voice clip TrackPlayer is currently playing,
   // tracked so we can delete it on teardown / queue-end and avoid disk bloat.
   const currentSoundFileRef = useRef(null);
+  // False from the moment a new Troy clip begins setup until its TrackPlayer.play()
+  // resolves. PlaybackQueueEnded bails while false, so a stale end event for a
+  // previous clip cannot run cleanup during the new clip's reset()/add()/play() window.
+  const livePlaybackStartedRef = useRef(false);
   // True once TrackPlayer's remote-command listeners have been registered, so we
   // register them exactly once even though initTrackPlayer() re-runs before each play.
   const trackPlayerHandlersRegisteredRef = useRef(false);
@@ -4020,9 +4024,10 @@ function AppContent() {
         // Index off the event payload is unreliable post-reset, so we use state.
         // Biased toward NOT destroying — a mis-bail just leaves a file for the
         // next play to clean up, far cheaper than killing live playback.
+        if (!livePlaybackStartedRef.current) return;   // newer clip mid-startup; this end is stale
         const playback = await TrackPlayer.getPlaybackState().catch(() => null);
         const s = playback?.state;
-        if (s === State.Playing || s === State.Buffering || s === State.Loading || s === State.Ready) {
+        if (s === State.Playing || s === State.Buffering || s === State.Loading || s === State.Ready || s === State.Paused) {
           return;
         }
         setPlayingMessageId(null);
@@ -5218,6 +5223,7 @@ function AppContent() {
       file.write(new Uint8Array(arrayBuffer));
       invocationFileUri = file.uri;
       currentSoundFileRef.current = invocationFileUri;
+      livePlaybackStartedRef.current = false;
       tWrite = Date.now();
 
       console.log('[Audio] Loading local file via TrackPlayer:', invocationFileUri);
@@ -5239,6 +5245,7 @@ function AppContent() {
       });
       await TrackPlayer.setVolume(1.0);
       await TrackPlayer.play();
+      livePlaybackStartedRef.current = true;
       tCreateAsync = Date.now();
       // End-of-playback cleanup (clear playing state + delete the cache file) is
       // handled by the Event.PlaybackQueueEnded listener registered in initTrackPlayer.
