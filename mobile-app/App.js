@@ -25,7 +25,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as Haptics from 'expo-haptics';
 import { Audio, InterruptionModeIOS } from 'expo-av';
 import { setAudioModeAsync as setAudioModeAsyncV2 } from 'expo-audio';
-import TrackPlayer, { Capability, Event } from 'react-native-track-player';
+import TrackPlayer, { Capability, Event, State } from 'react-native-track-player';
 import Purchases from 'react-native-purchases';
 import * as XLSX from 'xlsx';
 import * as Notifications from 'expo-notifications';
@@ -4012,6 +4012,19 @@ function AppContent() {
     if (!trackPlayerHandlersRegisteredRef.current) {
       trackPlayerHandlersRegisteredRef.current = true;
       TrackPlayer.addEventListener(Event.PlaybackQueueEnded, async () => {
+        // A stale end event for a finishing clip can arrive AFTER a newer clip
+        // has already started (which performs its own TrackPlayer.reset()). If
+        // we ran cleanup here it would kill the live clip and delete its file.
+        // Gate on current playback state: if the player is in any active/loading
+        // state, a newer clip has taken over and this end event is superseded.
+        // Index off the event payload is unreliable post-reset, so we use state.
+        // Biased toward NOT destroying — a mis-bail just leaves a file for the
+        // next play to clean up, far cheaper than killing live playback.
+        const playback = await TrackPlayer.getPlaybackState().catch(() => null);
+        const s = playback?.state;
+        if (s === State.Playing || s === State.Buffering || s === State.Loading || s === State.Ready) {
+          return;
+        }
         setPlayingMessageId(null);
         setIsPaused(false);
         await TrackPlayer.stop().catch(() => {});
