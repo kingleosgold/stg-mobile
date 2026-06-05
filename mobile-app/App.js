@@ -13578,7 +13578,7 @@ function AppContent() {
         </View>
         <TouchableOpacity
           style={{ alignItems: 'center', paddingVertical: 16 }}
-          onPress={() => Linking.openURL('https://api.stacktrackergold.com/privacy')}
+          onPress={() => Linking.openURL('https://troystack.com/privacy')}
         >
           <Text style={{ color: '#007AFF', fontSize: scaledFonts.normal }}>View Complete Privacy Policy</Text>
         </TouchableOpacity>
