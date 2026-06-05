@@ -2445,6 +2445,15 @@ function AppContent() {
   const [showJunkCalcModal, setShowJunkCalcModal] = useState(false);
   const [showPremiumAnalysisModal, setShowPremiumAnalysisModal] = useState(false);
   const [showPaywallModal, setShowPaywallModal] = useState(false);
+  // AI consent — one-time gate shown the first time the user initiates a Troy interaction
+  // (sending a text message OR starting a voice recording, whichever happens first).
+  const [showAiConsentModal, setShowAiConsentModal] = useState(false);
+  const [aiConsentGiven, setAiConsentGiven] = useState(false);
+  // Authoritative gate value for the handler guards. A ref avoids the stale-closure trap
+  // when we replay the stashed action synchronously right after accepting consent.
+  const aiConsentGivenRef = useRef(false);
+  // The Troy action the user intended before consent was required, replayed on accept.
+  const pendingTroyActionRef = useRef(null);
   const [showDealerPrices, setShowDealerPrices] = useState(false);
   const [dealerMetal, setDealerMetal] = useState('silver');
   const [dealerData, setDealerData] = useState(null);
@@ -3379,7 +3388,7 @@ function AppContent() {
       // Safe to run repeatedly; can be removed in a future build once all clients have launched at least once.
       AsyncStorage.removeItem('stack_midnight_snapshot').catch(() => {});
 
-      const [silver, gold, platinum, palladium, silverS, goldS, platinumS, palladiumS, timestamp, hasSeenTutorial, storedTheme, storedChangeDisplayMode, storedLargeText, storedSilverMilestone, storedGoldMilestone, storedLastSilverReached, storedLastGoldReached, storedGuestMode, storedHideWidgetValues, storedAdvisorCount] = await Promise.all([
+      const [silver, gold, platinum, palladium, silverS, goldS, platinumS, palladiumS, timestamp, hasSeenTutorial, storedTheme, storedChangeDisplayMode, storedLargeText, storedSilverMilestone, storedGoldMilestone, storedLastSilverReached, storedLastGoldReached, storedGuestMode, storedHideWidgetValues, storedAdvisorCount, storedAiConsent] = await Promise.all([
         AsyncStorage.getItem('stack_silver'),
         AsyncStorage.getItem('stack_gold'),
         AsyncStorage.getItem('stack_platinum'),
@@ -3400,6 +3409,7 @@ function AppContent() {
         AsyncStorage.getItem('stack_guest_mode'),
         AsyncStorage.getItem('stack_hide_widget_values'),
         AsyncStorage.getItem('stack_advisor_count'),
+        AsyncStorage.getItem('ai_consent'),
       ]);
 
       // Safely parse JSON data with fallbacks
@@ -3456,6 +3466,17 @@ function AppContent() {
       // Load hide widget values preference
       if (storedHideWidgetValues === 'true') {
         setHideWidgetValues(true);
+      }
+
+      // Load AI consent — treat as given only if the value exists AND version >= 1.
+      if (storedAiConsent) {
+        try {
+          const consent = JSON.parse(storedAiConsent);
+          if (consent && typeof consent.version === 'number' && consent.version >= 1) {
+            aiConsentGivenRef.current = true;
+            setAiConsentGiven(true);
+          }
+        } catch (e) { if (__DEV__) console.error('Failed to parse ai_consent'); }
       }
 
       // Show tutorial if user hasn't seen it
@@ -4825,6 +4846,13 @@ function AppContent() {
   };
 
   const startVoiceRecording = async () => {
+    // AI consent gate — first time the user initiates a Troy interaction. Stash the intended
+    // recording start and open the blocking consent modal instead of recording.
+    if (!aiConsentGivenRef.current) {
+      pendingTroyActionRef.current = () => startVoiceRecording();
+      setShowAiConsentModal(true);
+      return;
+    }
     // In-flight start lock: prevent concurrent starts from a fast double-tap.
     // Without this, a second tap can throw on Audio.Recording creation while
     // the first recording is still active, and the catch block would flip
@@ -5210,11 +5238,41 @@ function AppContent() {
     console.log('[Troy] Generation stopped by user');
   };
 
+  // Persist AI consent, update gate, close the modal, then replay the stashed action
+  // exactly as the user originally intended (send the typed/chip text, or start recording).
+  const acceptAiConsent = async () => {
+    const consent = { version: 1, acceptedAt: new Date().toISOString() };
+    try {
+      await AsyncStorage.setItem('ai_consent', JSON.stringify(consent));
+    } catch (e) {
+      if (__DEV__) console.error('Failed to persist ai_consent:', e?.message || e);
+    }
+    // Update the ref synchronously so the replayed handler's guard sees consent as given
+    // (state updates are async and the replayed closure would otherwise read the old value).
+    aiConsentGivenRef.current = true;
+    setAiConsentGiven(true);
+    setShowAiConsentModal(false);
+    const pending = pendingTroyActionRef.current;
+    pendingTroyActionRef.current = null;
+    if (pending) {
+      try { pending(); } catch (e) { if (__DEV__) console.error('Pending Troy action failed:', e?.message || e); }
+    }
+  };
+
   const sendTroyMessage = async (messageText) => {
     if (__DEV__) console.log('💬 [Troy] sendTroyMessage called, messageText:', messageText ? messageText.substring(0, 50) : '(from input)', 'troyLoading:', troyLoading, 'activeConversationId:', activeConversationId);
     const text = (messageText || troyInputText).trim();
     if (!text || troyLoading) {
       if (__DEV__) console.log('💬 [Troy] Early exit: text empty?', !text, 'troyLoading?', troyLoading);
+      return;
+    }
+
+    // AI consent gate — first time the user initiates a Troy interaction. Stash the intended
+    // send (preserving the original argument so input-clearing behavior is identical on replay)
+    // and open the blocking consent modal instead of sending.
+    if (!aiConsentGivenRef.current) {
+      pendingTroyActionRef.current = () => sendTroyMessage(messageText);
+      setShowAiConsentModal(true);
       return;
     }
 
@@ -13750,6 +13808,51 @@ function AppContent() {
         onPurchaseSuccess={checkEntitlements}
         userTier={userTier}
       />
+
+      {/* AI Consent — blocking, dismissable ONLY via "I Understand — Continue".
+          onRequestClose is a no-op so the Android back button cannot dismiss it,
+          and there is no backdrop/close affordance. */}
+      <Modal
+        visible={showAiConsentModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {}}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', padding: 24 }}>
+          <View style={{ backgroundColor: '#18181b', borderRadius: 16, borderWidth: 1, borderColor: '#C9A84C', overflow: 'hidden' }}>
+            <ScrollView contentContainerStyle={{ padding: 24 }}>
+              <Text style={{ color: '#C9A84C', fontSize: scaledFonts.large, fontWeight: '700', marginBottom: 16 }}>
+                Before you talk to Troy
+              </Text>
+              <Text style={{ color: '#e4e4e7', fontSize: scaledFonts.normal, lineHeight: 22, marginBottom: 14 }}>
+                Troy is an AI analyst. His responses are AI-generated opinions and analysis, not financial advice. Troy is not a licensed financial advisor — verify anything important before acting on it.
+              </Text>
+              <Text style={{ color: '#e4e4e7', fontSize: scaledFonts.normal, lineHeight: 22, marginBottom: 14 }}>
+                To answer you, your messages and portfolio context are sent to third-party AI providers. Voice messages you record are transcribed by a third-party speech service.
+              </Text>
+              <Text style={{ color: '#e4e4e7', fontSize: scaledFonts.normal, lineHeight: 22, marginBottom: 16 }}>
+                AI can make mistakes. Don't rely on Troy as your only source.
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginBottom: 24 }}>
+                <TouchableOpacity onPress={() => Linking.openURL('https://troystack.com/privacy')}>
+                  <Text style={{ color: '#C9A84C', fontSize: scaledFonts.normal, fontWeight: '600' }}>Privacy Policy</Text>
+                </TouchableOpacity>
+                <Text style={{ color: '#71717a', fontSize: scaledFonts.normal, marginHorizontal: 8 }}>{'·'}</Text>
+                <TouchableOpacity onPress={() => Linking.openURL('https://troystack.com/terms')}>
+                  <Text style={{ color: '#C9A84C', fontSize: scaledFonts.normal, fontWeight: '600' }}>Terms</Text>
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity
+                onPress={acceptAiConsent}
+                style={{ backgroundColor: '#C9A84C', borderRadius: 10, paddingVertical: 14, alignItems: 'center' }}
+                accessibilityRole="button"
+              >
+                <Text style={{ color: '#09090b', fontSize: scaledFonts.medium, fontWeight: '700' }}>I Understand — Continue</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {/* PRICE ALERTS */}
       {showAddAlertModal && (
