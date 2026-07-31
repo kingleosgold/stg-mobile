@@ -5218,11 +5218,11 @@ function AppContent() {
     let tCreateAsync = null;
 
     try {
-      const truncatedText = text.substring(0, 2000);
+      const truncatedText = text.substring(0, 4000);
       const userId = supabaseUser?.id || 'anonymous';
       const speakUrl = `${API_BASE_URL}/v1/troy/speak?text=${encodeURIComponent(truncatedText)}&userId=${encodeURIComponent(userId)}`;
 
-      console.log('[Audio] Fetching TTS bytes...');
+      console.log(`[Audio] Fetching TTS bytes... (text length: ${truncatedText.length})`);
       setPlayingMessageId(messageId);
       setIsPaused(false);
 
