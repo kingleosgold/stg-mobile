@@ -5218,7 +5218,13 @@ function AppContent() {
     let tCreateAsync = null;
 
     try {
-      const truncatedText = text.substring(0, 4000);
+      let truncatedText = text.substring(0, 4000);
+      // If the slice split a surrogate pair, drop the unpaired high surrogate —
+      // encodeURIComponent throws URIError on lone surrogates.
+      const lastCode = truncatedText.charCodeAt(truncatedText.length - 1);
+      if (lastCode >= 0xD800 && lastCode <= 0xDBFF) {
+        truncatedText = truncatedText.substring(0, truncatedText.length - 1);
+      }
       const userId = supabaseUser?.id || 'anonymous';
       const speakUrl = `${API_BASE_URL}/v1/troy/speak?text=${encodeURIComponent(truncatedText)}&userId=${encodeURIComponent(userId)}`;
 
