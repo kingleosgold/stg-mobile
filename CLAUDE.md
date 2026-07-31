@@ -3,9 +3,9 @@
 ## BUILD RULES — READ BEFORE EVERY BUILD
 1. NEVER manually set buildNumber. Always INCREMENT from the current value.
 2. Before any build, run: cat app.json | grep buildNumber — confirm it's HIGHER than the last submitted build.
-3. The current highest build number Apple has received is 65. Next build must be 66 or higher.
+3. The current highest build number Apple has received is 106. Next build must be 107 or higher.
 4. If a build FAILS, the buildNumber may still have been auto-incremented by EAS. Always check app.json after a failed build.
-5. After every successful submission, update this number: LAST SUBMITTED BUILD: 69
+5. After every successful submission, update this number: LAST SUBMITTED BUILD: 106 (v3.0.7, submitted to App Review 7/31/26)
 - EAS auto-increments buildNumber on every build. Do NOT manually set buildNumber unless it needs to jump past a number Apple already received.
 - Before building, just VERIFY the current buildNumber is higher than LAST SUBMITTED BUILD. If it is, don't touch it — EAS will increment it.
 - After each build, update LAST SUBMITTED BUILD to whatever EAS set it to.
