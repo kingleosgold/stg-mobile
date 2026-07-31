@@ -5226,7 +5226,6 @@ function AppContent() {
         truncatedText = truncatedText.substring(0, truncatedText.length - 1);
       }
       const userId = supabaseUser?.id || 'anonymous';
-      const speakUrl = `${API_BASE_URL}/v1/troy/speak?text=${encodeURIComponent(truncatedText)}&userId=${encodeURIComponent(userId)}`;
 
       console.log(`[Audio] Fetching TTS bytes... (text length: ${truncatedText.length})`);
       setPlayingMessageId(messageId);
@@ -5238,7 +5237,11 @@ function AppContent() {
       // fires, no audio heard. AVAudioPlayer (iOS's local-file backend)
       // does not have this failure mode. v3.0.0 used this pattern; the
       // Audio.Sound migration switched to streaming and broke voice.
-      const response = await fetch(speakUrl);
+      const response = await fetch(`${API_BASE_URL}/v1/troy/speak`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: truncatedText, userId }),
+      });
       tFetch = Date.now();
       if (!response.ok) {
         throw new Error(`TTS fetch failed: ${response.status}`);
